@@ -6,16 +6,17 @@ import matplotlib.pyplot as plt
 import h5py
 import numpy as np
 
-from generate_step_data import get_step_data, MAX_LENGTH
+from generate_step_data import get_step_data
 
-subject_data_dict = get_step_data('../whole_data.h5')
+subject_data_dict = get_step_data('/media/dianxin/Software/whole_data_160.h5')
+
 subject_data = list(subject_data_dict.values())
 train_data = np.concatenate(subject_data[1:], axis=0)
 test_data = np.concatenate(subject_data[:1], axis=0)
 np.random.shuffle(train_data)
 np.random.shuffle(test_data)
-[X_train, Y_train, X_test, Y_test] = [train_data[:, :, 0:-1], train_data[:, :, -1][:, :, np.newaxis],
-                                      test_data[:, :, 0:-1], test_data[:, :, -1][:, :, np.newaxis]]
+[X_train, Y_train, X_test, Y_test] = [train_data[:, :, 0:-1], train_data[:, :, -1:],
+                                      test_data[:, :, 0:-1], test_data[:, :, -1:]]
 SHAPE = X_train.shape[1:]
 
 
