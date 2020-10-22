@@ -5,7 +5,7 @@ import os
 from tsfresh import extract_features
 import matplotlib.pyplot as plt
 
-DATA_PATH = "../"
+from config import DATA_PATH
 SENSOR_LIST = ['L_FOOT', 'R_FOOT', 'R_SHANK', 'R_THIGH', 'WAIST', 'CHEST', 'L_SHANK', 'L_THIGH']  # this should consistent with Sage script
 
 SEGMENT_DEFITIONS = {
