@@ -5,9 +5,10 @@ from keras.callbacks import Callback
 import matplotlib.pyplot as plt
 import h5py
 import numpy as np
-
+from base_kam_model import BaseModel
 from generate_step_data import get_step_data
 
+'''
 subject_data_dict = get_step_data('/media/dianxin/Software/whole_data_160.h5')
 
 subject_data = list(subject_data_dict.values())
@@ -18,6 +19,25 @@ np.random.shuffle(test_data)
 [X_train, Y_train, X_test, Y_test] = [train_data[:, :, 0:-1], train_data[:, :, -1:],
                                       test_data[:, :, 0:-1], test_data[:, :, -1:]]
 SHAPE = X_train.shape[1:]
+'''
+class DianxinKamModel(BaseModel):
+    @staticmethod
+    def preprocessing(train_data, test_data):
+        return train_data, test_data
+
+    @staticmethod
+    def train_model(X_train, Y_train, X_test, Y_test):
+        SHAPE = X_train.shape[1:]
+        model = gru_model(SHAPE)
+
+        model.fit(X_train, Y_train, batch_size=10, epochs=20, verbose=1, callbacks=[ErrorVisualization(X_test, Y_test)])
+        return model
+
+
+    @staticmethod
+    def predict(model, X_test):
+        scores = model.evaluate(X_test, Y_test, verbose=1)
+
 
 
 # pad the sequences with zeros
@@ -38,7 +58,7 @@ class ErrorVisualization(Callback):
                              alpha=0.2)
 
     def on_train_begin(self, logs={}):
-        Y_predict = self.model.predict(X_test)
+        Y_predict = self.model.predict(self.X_test)
         Y_predict_mean = Y_predict.mean(axis=0).reshape((-1))
         Y_predict_std = Y_predict.std(axis=0).reshape((-1))
         self.y_predict_mean_line = self.ax.plot(self.axis_x, Y_predict_mean, 'y-', label='Predict_Value')
@@ -47,7 +67,7 @@ class ErrorVisualization(Callback):
         self.fig.canvas.draw()
 
     def on_epoch_end(self, epoch, logs={}):
-        Y_predict = self.model.predict(X_test)
+        Y_predict = self.model.predict(self.X_test)
         Y_predict_mean = Y_predict.mean(axis=0).reshape((-1))
         Y_predict_std = Y_predict.std(axis=0).reshape((-1))
 
@@ -61,7 +81,7 @@ class ErrorVisualization(Callback):
         self.fig.canvas.draw()
 
 
-def gru_model():
+def gru_model(SHAPE):
     model = Sequential()
     model.add(Masking(mask_value=0, input_shape=SHAPE))
     model.add(GRU(20, dropout=0.2, recurrent_dropout=0.2, return_sequences=True))
@@ -71,9 +91,6 @@ def gru_model():
     model.compile(loss='mean_squared_error', optimizer='adam', metrics=['mae'])
     return model
 
-
-model = gru_model()
-
-model.fit(X_train, Y_train, batch_size=10, epochs=20, verbose=1, callbacks=[ErrorVisualization(X_test, Y_test)])
-
-scores = model.evaluate(X_test, Y_test, verbose=1)
+if __name__ == "__main__":
+    dx_model = DianxinKamModel()
+    dx_model.param_tuning([0, 1, 2])
