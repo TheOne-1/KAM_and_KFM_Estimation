@@ -2,11 +2,11 @@ import wearable_toolkit
 import pandas as pd
 import numpy as np
 import os
-from tsfresh import extract_features
-import matplotlib.pyplot as plt
 
 from config import DATA_PATH
-SENSOR_LIST = ['L_FOOT', 'R_FOOT', 'R_SHANK', 'R_THIGH', 'WAIST', 'CHEST', 'L_SHANK', 'L_THIGH']  # this should consistent with Sage script
+
+SENSOR_LIST = ['L_FOOT', 'R_FOOT', 'R_SHANK', 'R_THIGH', 'WAIST', 'CHEST', 'L_SHANK',
+               'L_THIGH']  # this should consistent with Sage script
 
 SEGMENT_DEFITIONS = {
     'L_FOOT': ['LFCC', 'LFM5', 'LFM2'],
@@ -19,9 +19,12 @@ SEGMENT_DEFITIONS = {
     'TRUNK': ['MAI', 'SXS', 'SJN', 'CV7', 'LAC', 'RAC']
 }
 
-subjects = ['s001_tantian', 's002_wangdianxin', 's003_linyuan', 's004_ouyangjue', 's005_tangansheng', 's006_xusen', 's007_zuogangao',
-            's008_liyu', 's009_sunyubo', 's010_handai', 's011_wuxingze', 's012_likaixiang', 's013_zhangxiaohan', 's014_maqichao',
+subjects = ['s001_tantian', 's002_wangdianxin', 's003_linyuan', 's004_ouyangjue', 's005_tangansheng', 's006_xusen',
+            's007_zuogangao',
+            's008_liyu', 's009_sunyubo', 's010_handai', 's011_wuxingze', 's012_likaixiang', 's013_zhangxiaohan',
+            's014_maqichao',
             's015_weihuan', 's016_houjikang']
+
 
 def sync_and_crop_data_frame(vicon_data_path, imu_data_path, v3d_data_path, video_90_data_path, video_180_data_path,
                              middle_data_path, vicon_calibrate_data_path):
@@ -76,16 +79,18 @@ def sync_and_crop_data_frame(vicon_data_path, imu_data_path, v3d_data_path, vide
     video_180_data.crop(video_180_delay)
 
     # rename video_columns
-    video_90_data.data_frame.columns = [col+'_90' for col in video_90_data.data_frame.columns]
-    video_180_data.data_frame.columns = [col+'_180' for col in video_180_data.data_frame.columns]
+    video_90_data.data_frame.columns = [col + '_90' for col in video_90_data.data_frame.columns]
+    video_180_data.data_frame.columns = [col + '_180' for col in video_180_data.data_frame.columns]
     min_length = min([x.data_frame.shape[0] for x in [imu_data, video_90_data, video_180_data, V3d_data, vicon_data]])
     middle_data = pd.concat(
-        [imu_data.data_frame, video_90_data.data_frame, video_180_data.data_frame, V3d_data.data_frame, vicon_data.data_frame], axis=1)
+        [imu_data.data_frame, video_90_data.data_frame, video_180_data.data_frame, V3d_data.data_frame,
+         vicon_data.data_frame], axis=1)
     middle_data = middle_data.loc[:min_length]
 
     # drop missing IMU data steps
     middle_data_tmp = pd.concat([imu_data.data_frame, V3d_data.data_frame], axis=1)
-    dropped_steps = (middle_data_tmp[(middle_data_tmp.isnull()).any(axis=1)]['Event'].dropna().drop_duplicates()).tolist()
+    dropped_steps = (
+        middle_data_tmp[(middle_data_tmp.isnull()).any(axis=1)]['Event'].dropna().drop_duplicates()).tolist()
     print("containing corrupted steps: {}".format(dropped_steps))
     for step in dropped_steps:
         middle_data.loc[middle_data['Event'] == step, 'Event'] = -step
@@ -106,6 +111,7 @@ def get_combined_data():
             middle_data_path = os.path.join(DATA_PATH, subject, 'combined', trial + '.csv')
             sync_and_crop_data_frame(vicon_data_path, imu_data_path, v3d_data_path, video_data_path_90,
                                      video_data_path_180, middle_data_path, vicon_calibrate_data_path)
+
 
 def get_static_combined_data():
     trials = ['static_back', 'static_side']
@@ -129,6 +135,7 @@ def get_static_combined_data():
                 [imu_data.data_frame.loc[:450], video_90_data.data_frame.loc[:450], video_180_data.data_frame.loc[:450],
                  vicon_data.data_frame.loc[:450]], axis=1)
             middle_data.to_csv(middle_data_path)
+
 
 if __name__ == "__main__":
     get_static_combined_data()

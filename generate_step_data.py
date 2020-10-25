@@ -2,11 +2,11 @@ import os
 import pandas as pd
 import numpy as np
 import h5py
-from const import TRIALS, SUBJECTS, IMU_DATA_FIELDS, IMU_FIELDS, VIDEO_LIST, VIDEO_DATA_FIELDS, TARGETS_LIST, MAX_LENGTH
+from const import TRIALS, SUBJECTS, IMU_DATA_FIELDS, IMU_FIELDS, VIDEO_LIST, VIDEO_DATA_FIELDS, TARGETS_LIST
 from config import DATA_PATH
 
 
-def create_RNN_data(middle_data, max_len):
+def filter_and_clip_data(middle_data, max_len):
     # remove data before the first event and the last event
     begin_index = middle_data[~middle_data['Event'].isnull()].index.min()
     end_index = middle_data[~middle_data['Event'].isnull()].index.max()
@@ -26,34 +26,34 @@ def create_RNN_data(middle_data, max_len):
     # count the maximum time steps for each gati step
     def form_array_list(array, column):
         for _id in array[column].drop_duplicates():
-            a = array[array[column] == _id]
-            if a.shape[0] > max_len:
-                print("dropping step {} with size {} as it exceeds the limit {}".format(_id, a.shape[0], max_len))
+            b = array[array[column] == _id]
+            if b.shape[0] > max_len:
+                print("dropping step {} with size {} as it exceeds the limit {}".format(_id, b.shape[0], max_len))
                 continue
-            a.index = range(a.shape[0])
-            a = a.reindex(range(max_len))
-            a.fillna(0)
-            yield a
+            b.index = range(b.shape[0])
+            b = b.reindex(range(max_len))
+            yield b
 
     a = list(form_array_list(middle_data, 'Event'))
     return a
 
 
-def generate_subject_data(max_length):
+def generate_subject_data():
     # create training data and test data
     all_data_dict = {subject + " " + trial: pd.read_csv(os.path.join(DATA_PATH, subject, "combined", trial + ".csv"))
                      for subject in SUBJECTS for trial in TRIALS}
-
-    all_data_dict = {subject_trial: create_RNN_data(data, max_length) for subject_trial, data in all_data_dict.items()}
-    subject_dict = {subject: [data for trial in TRIALS for data in all_data_dict[subject + " " + trial]] for subject in
-                    SUBJECTS}
+    max_step_length = max([trial_data['Event'].value_counts().max() for trial_data in all_data_dict.values()])
+    all_data_dict = {subject_trial: filter_and_clip_data(data, max_step_length)
+                     for subject_trial, data in all_data_dict.items()}
+    subject_dict = {subject: [data for trial in TRIALS for data in all_data_dict[subject + " " + trial]]
+                    for subject in SUBJECTS}
     return subject_dict
 
 
 def generate_step_data(export_path):
-    import h5py
-    subject_data_dict = generate_subject_data(MAX_LENGTH)
+    subject_data_dict = generate_subject_data()
 
+    # TODO: move this to preprocess data section
     # normalize video data
     for subject, data_collections in subject_data_dict.items():
         for data in data_collections:
