@@ -15,7 +15,6 @@ VIDEO_DATA_FIELDS = [VIDEO + "_" + position + "_" + angle for VIDEO in VIDEO_LIS
                      angle in ["90", "180"]]
 
 TARGETS_LIST = ["RIGHT_KNEE_ADDUCTION_MOMENT"]
-MAX_LENGTH = 160
 # all the fields of combined data
 FIELDs = ["Event", "AccelX_L_FOOT", "AccelY_L_FOOT", "AccelZ_L_FOOT", "GyroX_L_FOOT", "GyroY_L_FOOT",
           "GyroZ_L_FOOT", "MagX_L_FOOT", "MagY_L_FOOT", "MagZ_L_FOOT", "Quat1_L_FOOT", "Quat2_L_FOOT",

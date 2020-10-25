@@ -2,7 +2,7 @@ import os
 import pandas as pd
 import numpy as np
 import h5py
-from const import TRIALS, SUBJECTS, IMU_DATA_FIELDS, IMU_FIELDS, VIDEO_LIST, VIDEO_DATA_FIELDS, TARGETS_LIST, MAX_LENGTH
+from const import TRIALS, SUBJECTS, IMU_DATA_FIELDS, IMU_FIELDS, VIDEO_LIST, VIDEO_DATA_FIELDS, TARGETS_LIST
 from config import DATA_PATH
 
 
