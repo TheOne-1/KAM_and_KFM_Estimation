@@ -16,6 +16,11 @@ class BaseModel:
         return data[:, :, 0:-1], data[:, :, -1:]
 
     def param_tuning(self, train_sub_ids, validate_sub_ids, test_sub_ids):
+        """
+        train_sub_ids: a list of subject id for model training
+        validate_sub_ids: a list of subject id for model validation
+        test_sub_ids: a list of subject id for model testing
+        """
         train_sub_names = [sub_name for sub_index, sub_name in enumerate(SUBJECTS) if sub_index in train_sub_ids]
         train_data_list = [self._data_all_sub[sub_name] for sub_name in train_sub_names]
 
@@ -50,7 +55,7 @@ class BaseModel:
         raise RuntimeError('Method not implemented')
 
     @staticmethod
-    def train_model(x_train, y_train, x_test, y_test):
+    def train_model(x_train, y_train, x_validation, y_validation):
         raise RuntimeError('Method not implemented')
 
     @staticmethod
