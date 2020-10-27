@@ -8,9 +8,12 @@ import matplotlib.pyplot as plt
 class TianModel(BaseModel):
     @staticmethod
     def preprocessing(train_data_list, validate_data_list, test_data_list):
-        train_data_list = [np.nan_to_num(data) for data in train_data_list]
-        validate_data_list = [np.nan_to_num(data) for data in validate_data_list]
-        test_data_list = [np.nan_to_num(data) for data in test_data_list]
+        # train_data_list = [np.nan_to_num(data[:, :60, :]) for data in train_data_list]
+        # validate_data_list = [np.nan_to_num(data[:, :60, :]) for data in validate_data_list]
+        # test_data_list = [np.nan_to_num(data[:, :60, :]) for data in test_data_list]
+        train_data_list = [np.nan_to_num(data[:, 30:80, :]) for data in train_data_list]
+        validate_data_list = [np.nan_to_num(data[:, 30:80, :]) for data in validate_data_list]
+        test_data_list = [np.nan_to_num(data[:, 30:80, :]) for data in test_data_list]
 
         return train_data_list, validate_data_list, test_data_list
 
@@ -21,57 +24,68 @@ class TianModel(BaseModel):
         # x_train = x_train.reshape([-1, x_train.shape[2]])
         # y_train = y_train.reshape([-1, 1])
 
-        scalar = MinMaxScaler()
-        x_train = scalar.fit_transform(x_train)
+        x_scalar = MinMaxScaler()
+        x_train = x_scalar.fit_transform(x_train)
+        # y_scalar = MinMaxScaler(feature_range=(0, 1))
+        # y_train = y_scalar.fit_transform(y_train)
+        y_train = y_train
 
         N, D_in, H, D_out = x_train.shape[0], x_train.shape[1], 10, y_train.shape[1]
-        learning_rate = 1e-9
+        learning_rate = 1e-1
+        dtype = torch.float
 
-        w1 = np.random.randn(D_in, H)
-        w2 = np.random.randn(H, D_out) * 1e-3
-        for epoch in range(5):
-            h = x_train.dot(w1)
-            h_relu = np.maximum(h, 0)
-            y_pred = h_relu.dot(w2)
-            loss = np.square(y_pred - y_train).sum()
-            print(epoch, loss)
+        x_train = torch.from_numpy(x_train)
+        y_train = torch.from_numpy(y_train)
 
-            grad_y_pred = 2 * (y_pred - y_train)
-            grad_w2 = h_relu.T.dot(grad_y_pred)
-            grad_h_relu = grad_y_pred.dot(w2.T)
-            grad_h = grad_h_relu.copy()
-            grad_h[h < 0] = 0
-            grad_w1 = x_train.T.dot(grad_h)
-
-            plt.figure()
-            plt.plot(y_train[1000:1003].ravel())
-            plt.plot(y_pred[1000:1003].ravel())
+        w1 = torch.randn(D_in, H, requires_grad=True, dtype=dtype)
+        w2 = torch.randn(H, D_out, requires_grad=True, dtype=dtype)
+        for epoch in range(50):
+            y_pred = x_train.mm(w1).clamp(min=0).mm(w2 * 1e-5)      # NO idea why w2 needs * 1e-2
+            loss = (y_pred - y_train).pow(2).sum()
+            print(epoch, loss.item())
+            loss.backward()
 
             # Update weights
-            w1 -= learning_rate * grad_w1
-            w2 -= learning_rate * grad_w2
-        model = [w1, w2, scalar]
+            with torch.no_grad():
+                if epoch % 10 == 0:
+                    plt.figure()
+                    # plt.plot(w1.grad)
+                    plt.plot(y_train[2000, :])
+                    y_pred_np = y_pred.detach().numpy()
+                    plt.plot(y_pred_np[2000, :])
+
+                w1 -= learning_rate * w1.grad
+                w2 -= learning_rate * w2.grad
+                w1.grad.zero_()
+                w2.grad.zero_()
+        model = [w1, w2, x_scalar, None]
+        # model = [w1, w2, x_scalar, y_scalar]
         return model
 
     @staticmethod
     def predict(model, x_test):
-        w1, w2, scalar = model
+        w1, w2, x_scalar, y_scalar = model
 
         x_test = x_test.reshape(-1, x_test.shape[1] * x_test.shape[2])
-        # x_test = x_test.reshape([-1, x_test.shape[2]])
-        x_test = scalar.transform(x_test)
+        x_test = x_scalar.transform(x_test)
 
-        h = x_test.dot(w1)
-        h_relu = np.maximum(h, 0)
-        y_pred = h_relu.dot(w2)
-        # y_pred = y_pred.reshape([-1, 160, 1])
+        x_test = torch.from_numpy(x_test)
 
+        y_pred = x_test.mm(w1).clamp(min=0).mm(w2 * 1e-5)
+        y_pred = y_pred.detach().numpy()
         return y_pred
 
-
+    @staticmethod
+    def representative_profile_curves(y_test, y_pred, metrics):
+        plt.figure()
+        # plt.plot(w1.grad)
+        plt.plot(y_test[:, :, :].ravel())
+        plt.plot(y_pred[:, :].ravel())
+        pass
 
 if __name__ == "__main__":
     model = TianModel()
+    # plt.ion()
     model.param_tuning(range(12), range(12, 13), range(13, 16))
     plt.show()
 

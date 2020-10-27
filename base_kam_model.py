@@ -36,6 +36,7 @@ class BaseModel:
         train_data = np.concatenate(train_data_list, axis=0)
         validation_data = np.concatenate(validate_data_list, axis=0)
 
+        np.random.seed(0)
         np.random.shuffle(train_data)
 
         x_train, y_train = self._depart_input_and_output(train_data)
