@@ -1,2 +1,2 @@
-DATA_PATH = '/media/dianxin/Software/'
+DATA_PATH = '../'
 

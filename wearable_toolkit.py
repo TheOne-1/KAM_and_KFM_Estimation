@@ -437,13 +437,13 @@ def sync_via_correlation(data1, data2, verbose=False):
 def translate_step_event_to_step_id(events_dict, step_type):
     ## FILTER EVENTS
     r_steps = []
-    if step_type == 'stance+swing':
+    if step_type == 'swing+stance':
         for i in range(4, len(events_dict['ROFF'])):
             if (events_dict['ROFF'][i] - events_dict['ROFF'][i - 1]) > 1.5 * (
                     events_dict['ROFF'][i - 1] - events_dict['ROFF'][i - 2]):
                 continue
             r_steps.append([events_dict['ROFF'][i - 1], events_dict['ROFF'][i]])
-    elif step_type == 'swing+stance':
+    elif step_type == 'stance+swing':
         for i in range(4, len(events_dict['RON'])):
             if (events_dict['RON'][i] - events_dict['RON'][i - 1]) > 1.5 * (
                     events_dict['RON'][i - 1] - events_dict['RON'][i - 2]):
