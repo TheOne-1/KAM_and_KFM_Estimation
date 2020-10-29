@@ -40,8 +40,8 @@ def sync_and_crop_data_frame(vicon_data_path, imu_data_path, v3d_data_path, vide
     video_180_data.fill_low_probability_data()
 
     # create step events
-    V3d_data.create_step_id('swing+stance')
-    imu_data.create_step_id('swing+stance', False)
+    V3d_data.create_step_id('stance+swing')
+    imu_data.create_step_id('stance+swing', False)
 
     # Synchronize Vicon and IMU data
     vicon_sync_data = vicon_data.get_angular_velocity_theta('R_SHANK')[0:1000]

@@ -1,21 +1,24 @@
-import numpy as np
-from config import DATA_PATH
+import json
 import h5py
+import numpy as np
 from const import SUBJECTS
 from sklearn.metrics import r2_score, mean_squared_error
+from typing import List
 
 
 class BaseModel:
-    def __init__(self):
-        self._data_path = DATA_PATH + 'whole_data_160.h5'
+    def __init__(self, data_path):
+        self._data_path = data_path
         with h5py.File(self._data_path, 'r') as hf:
             self._data_all_sub = {subject: hf[subject][:] for subject in SUBJECTS}
+            self.data_columns = json.loads(hf.attrs['columns'])
+            print(self.data_columns)
 
     @staticmethod
     def _depart_input_and_output(data):
         return data[:, :, 0:-1], data[:, :, -1:]
 
-    def param_tuning(self, train_sub_ids: list[int], validate_sub_ids: list[int], test_sub_ids: list[int]):
+    def param_tuning(self, train_sub_ids: List[int], validate_sub_ids: List[int], test_sub_ids: List[int]):
         """
         train_sub_ids: a list of subject id for model training
         validate_sub_ids: a list of subject id for model validation
