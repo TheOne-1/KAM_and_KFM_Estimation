@@ -15,7 +15,7 @@ class BaseModel:
     def _depart_input_and_output(data):
         return data[:, :, 0:-1], data[:, :, -1:]
 
-    def param_tuning(self, train_sub_ids, validate_sub_ids, test_sub_ids):
+    def param_tuning(self, train_sub_ids: list[int], validate_sub_ids: list[int], test_sub_ids: list[int]):
         """
         train_sub_ids: a list of subject id for model training
         validate_sub_ids: a list of subject id for model validation
