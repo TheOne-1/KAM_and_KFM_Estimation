@@ -15,7 +15,12 @@ class BaseModel:
     def _depart_input_and_output(data):
         return data[:, :, 0:-1], data[:, :, -1:]
 
-    def param_tuning(self, train_sub_ids, validate_sub_ids, test_sub_ids):
+    def param_tuning(self, train_sub_ids: list[int], validate_sub_ids: list[int], test_sub_ids: list[int]):
+        """
+        train_sub_ids: a list of subject id for model training
+        validate_sub_ids: a list of subject id for model validation
+        test_sub_ids: a list of subject id for model testing
+        """
         train_sub_names = [sub_name for sub_index, sub_name in enumerate(SUBJECTS) if sub_index in train_sub_ids]
         train_data_list = [self._data_all_sub[sub_name] for sub_name in train_sub_names]
 
@@ -31,6 +36,7 @@ class BaseModel:
         train_data = np.concatenate(train_data_list, axis=0)
         validation_data = np.concatenate(validate_data_list, axis=0)
 
+        np.random.seed(0)
         np.random.shuffle(train_data)
 
         x_train, y_train = self._depart_input_and_output(train_data)
@@ -50,7 +56,7 @@ class BaseModel:
         raise RuntimeError('Method not implemented')
 
     @staticmethod
-    def train_model(x_train, y_train, x_test, y_test):
+    def train_model(x_train, y_train, x_validation, y_validation):
         raise RuntimeError('Method not implemented')
 
     @staticmethod

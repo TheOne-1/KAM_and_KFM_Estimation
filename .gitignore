@@ -1,4 +1,5 @@
 config.py
+runs/
 .idea/
 
 # Byte-compiled / optimized / DLL files
