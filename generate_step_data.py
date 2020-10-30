@@ -4,14 +4,19 @@ import numpy as np
 import h5py
 import json
 from const import TRIALS, SUBJECTS, ALL_FIELDS
-from const import SAMPLES_BEFORE_STEP
-from config import DATA_PATH
+from const import SAMPLES_BEFORE_STEP, DATA_PATH
 
 
 def filter_and_clip_data(middle_data, max_len):
     # count the maximum time steps for each gati step
     def form_array_list(array, column):
-        for _id in array[column].drop_duplicates().dropna():
+        target_ids = array[column].drop_duplicates().dropna()
+        skip_list = list(target_ids[target_ids < 0])
+        if skip_list:
+            print('Containing corrupted data in steps: {}. These will be dropped out'.format(skip_list))
+        for _id in target_ids:
+            if -abs(_id) in skip_list:
+                continue
             # fetch data before a step
             c = array[array[column] == _id].index
             b_min = c.min() - SAMPLES_BEFORE_STEP

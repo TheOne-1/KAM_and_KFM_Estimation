@@ -3,27 +3,7 @@ import pandas as pd
 import numpy as np
 import os
 
-from config import DATA_PATH
-
-SENSOR_LIST = ['L_FOOT', 'R_FOOT', 'R_SHANK', 'R_THIGH', 'WAIST', 'CHEST', 'L_SHANK',
-               'L_THIGH']  # this should consistent with Sage script
-
-SEGMENT_DEFITIONS = {
-    'L_FOOT': ['LFCC', 'LFM5', 'LFM2'],
-    'R_FOOT': ['RFCC', 'RFM5', 'RFM2'],
-    'L_SHANK': ['LTAM', 'LFAL', 'LSK', 'LTT'],
-    'R_SHANK': ['RTAM', 'RFAL', 'RSK', 'RTT'],
-    'L_THIGH': ['LFME', 'LFLE', 'LTH', 'LFT'],
-    'R_THIGH': ['RFME', 'RFLE', 'RTH', 'RFT'],
-    'PELVIS': ['LIPS', 'RIPS', 'LIAS', 'RIAS'],
-    'TRUNK': ['MAI', 'SXS', 'SJN', 'CV7', 'LAC', 'RAC']
-}
-
-subjects = ['s001_tantian', 's002_wangdianxin', 's003_linyuan', 's004_ouyangjue', 's005_tangansheng', 's006_xusen',
-            's007_zuogangao',
-            's008_liyu', 's009_sunyubo', 's010_handai', 's011_wuxingze', 's012_likaixiang', 's013_zhangxiaohan',
-            's014_maqichao',
-            's015_weihuan', 's016_houjikang']
+from const import SEGMENT_DEFITIONS, SUBJECTS, STATIC_TRIALS, TRIALS, DATA_PATH
 
 
 def sync_and_crop_data_frame(vicon_data_path, imu_data_path, v3d_data_path, video_90_data_path, video_180_data_path,
@@ -40,8 +20,7 @@ def sync_and_crop_data_frame(vicon_data_path, imu_data_path, v3d_data_path, vide
     video_180_data.fill_low_probability_data()
 
     # create step events
-    V3d_data.create_step_id('stance+swing')
-    imu_data.create_step_id('stance+swing', False)
+    imu_data.create_step_id('stance+swing', True)
 
     # Synchronize Vicon and IMU data
     vicon_sync_data = vicon_data.get_angular_velocity_theta('R_SHANK')[0:1000]
@@ -87,20 +66,12 @@ def sync_and_crop_data_frame(vicon_data_path, imu_data_path, v3d_data_path, vide
          vicon_data.data_frame], axis=1)
     middle_data = middle_data.loc[:min_length]
 
-    # drop missing IMU data steps
-    middle_data_tmp = pd.concat([imu_data.data_frame, V3d_data.data_frame], axis=1)
-    dropped_steps = (
-        middle_data_tmp[(middle_data_tmp.isnull()).any(axis=1)]['Event'].dropna().drop_duplicates()).tolist()
-    print("containing corrupted steps: {}".format(dropped_steps))
-    for step in dropped_steps:
-        middle_data.loc[middle_data['Event'] == step, 'Event'] = -step
     middle_data.to_csv(middle_data_path)
 
 
 def get_combined_data():
-    trials = ['baseline', 'fpa', 'step_width', 'trunk_sway']
-    for subject in subjects:
-        for trial in trials:
+    for subject in SUBJECTS:
+        for trial in TRIALS:
             print("Subject {}, Trial {}".format(subject, trial))
             vicon_data_path = os.path.join(DATA_PATH, subject, 'vicon', trial + '.csv')
             vicon_calibrate_data_path = os.path.join(DATA_PATH, subject, 'vicon', 'calibrate' + '.csv')
@@ -114,9 +85,8 @@ def get_combined_data():
 
 
 def get_static_combined_data():
-    trials = ['static_back', 'static_side']
-    for subject in subjects:
-        for trial in trials:
+    for subject in SUBJECTS:
+        for trial in STATIC_TRIALS:
             vicon_data_path = os.path.join(DATA_PATH, subject, 'vicon', trial + '.csv')
             calibrate_vicon_data_path = os.path.join(DATA_PATH, subject, 'vicon', 'calibrate' + '.csv')
             video_data_path_90 = os.path.join(DATA_PATH, subject, 'video_output', trial + '_90.csv')
