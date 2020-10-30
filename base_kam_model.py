@@ -62,21 +62,10 @@ class BaseModel:
             self.representative_profile_curves(test_sub_y, pred_sub_y, test_results)
 
     def preprocess_train_data(self, x_train, y_train):
-        import copy
-        x_ori = copy.deepcopy(x_train)
-
         original_shape = x_train.shape
         x_train = x_train.reshape([-1, x_train.shape[2]])
         x_train = self.scalar.fit_transform(x_train)
         x_train = x_train.reshape(original_shape)
-
-        import matplotlib.pyplot as plt
-        for axis in range(3, 6):
-            plt.figure()
-            plt.plot(x_ori[:, :, axis].ravel())
-            plt.plot(x_train[:, :, axis].ravel())
-        plt.show()
-
         return x_train, y_train
 
     def preprocess_validation_test_data(self, x, y):
