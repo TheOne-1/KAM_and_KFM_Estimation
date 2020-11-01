@@ -1,22 +1,30 @@
 import os
-import matplotlib.pyplot as plt
+import tensorflow as tf
 from keras.layers import GRU, LSTM, Activation, Dense, Masking, Conv1D
 from keras.preprocessing.sequence import pad_sequences
 from keras.models import Sequential
 from keras.callbacks import Callback
+
 from base_kam_model import BaseModel
 from const import DATA_PATH
 
+gpus = tf.config.experimental.list_physical_devices('GPU')
+for gpu in gpus:
+    tf.config.experimental.set_memory_growth(gpu, True)
 
 class DXKamModel(BaseModel):
     def __init__(self):
-        BaseModel.__init__(self, os.path.join(DATA_PATH, '40samples+stance_swing.h5'))
+        BaseModel.__init__(self, os.path.join(DATA_PATH, '40samples+stance_swing+padding_nan.h5'))
 
     def train_model(self, x_train, y_train, x_validation, y_validation):
+        # TODO: feed IMU data fields and Video data fields into two separated network at the beginning.
         shape = x_train.shape[1:]
         model = gru_model(shape)
 
-        model.fit(x_train, y_train, batch_size=10000, epochs=1, verbose=1,
+        # You might see this WARNING:
+        # Allocation of 1823325480 exceeds 10% of free system memory.
+        # This is because you batch size is so large. Try to use 20 or similar.
+        model.fit(x_train, y_train, batch_size=20, epochs=20, verbose=1,
                   callbacks=[ErrorVisualization(x_validation, y_validation)])
         return model
 
@@ -30,34 +38,35 @@ class ErrorVisualization(Callback):
         self.X_test = x_test
         self.Y_test = y_test
 
-    def plot_std_result(self):
-        y_predict = self.model.predict(self.X_test)
-        y_predict_mean = y_predict.mean(axis=0).reshape((-1))
-        y_predict_std = y_predict.std(axis=0).reshape((-1))
-
-        y_test_mean = self.Y_test.mean(axis=0).reshape((-1))
-        y_test_std = self.Y_test.std(axis=0).reshape((-1))
-        axis_x = range(y_test_mean.shape[0])
-        plt.plot(axis_x, y_test_mean, 'g-', label='Real_Value')
-        plt.fill_between(axis_x, y_test_mean - y_test_std, y_test_mean + y_test_std, facecolor='green',
-                         alpha=0.2)
-        plt.plot(axis_x, y_predict_mean, 'y-', label='Predict_Value')
-        plt.fill_between(axis_x, y_predict_mean - y_predict_std, y_predict_mean + y_predict_std,
-                         facecolor='yellow', alpha=0.2)
-        plt.show(block=False)
-
     def on_train_begin(self, logs=None):
-        self.plot_std_result()
+        y_test = self.Y_test
+        y_pred = self.model.predict(self.X_test)
+        BaseModel.representative_profile_curves(y_test, y_pred, {})
 
     def on_epoch_end(self, epoch, logs=None):
-        self.plot_std_result()
+        y_test = self.Y_test
+        y_pred = self.model.predict(self.X_test)
+        BaseModel.representative_profile_curves(y_test, y_pred, {})
 
 
 def gru_model(input_shape):
     model = Sequential()
     model.add(Masking(mask_value=0, input_shape=input_shape))
+    # You might see this WARNING:
+    # tensorflow:Layer gru will not use cuDNN kernel since it doesn't meet the cuDNN kernel criteria.
+    # It will use generic GPU kernel as fallback when running on GPU
+    # There is requirement for GRU layer:
+    # 1. activation == tanh
+    # 2. recurrent_activation == sigmoid
+    # 3. recurrent_dropout == 0
+    # 4. unroll is False
+    # 5. use_bias is True
+    # 6. reset_after is True
+    # 7. Inputs, if use masking, are strictly right_padded
+    # 8. Eager execution is enabled in the outer most context
     model.add(GRU(20, dropout=0.2, recurrent_dropout=0.2, return_sequences=True))
     model.add(GRU(30, dropout=0.2, return_sequences=True))
+    model.add(Dense(5))
     model.add(Dense(1))
 
     model.compile(loss='mean_squared_error', optimizer='adam', metrics=['mae'])

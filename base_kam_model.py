@@ -1,15 +1,19 @@
 import json
 import h5py
 import numpy as np
+import logging
 from const import SUBJECTS, VIDEO_DATA_FIELDS, IMU_DATA_FIELDS, TARGETS_LIST
 from sklearn.metrics import r2_score, mean_squared_error
 from typing import List
+import matplotlib.pyplot as plt
 from sklearn.preprocessing import MinMaxScaler, StandardScaler
 
 
 class BaseModel:
-    def __init__(self, data_path, x_fields=IMU_DATA_FIELDS+VIDEO_DATA_FIELDS, y_fields=TARGETS_LIST,
+    def __init__(self, data_path, x_fields=IMU_DATA_FIELDS + VIDEO_DATA_FIELDS, y_fields=TARGETS_LIST,
                  scalar=MinMaxScaler):
+        logging.info("Create Model from h5 file {}".format(data_path))
+        logging.info("Create Model with input fields {}, output ields {}".format(x_fields, y_fields))
         self._data_path = data_path
         self._x_fields = x_fields
         self._y_fields = y_fields
@@ -17,7 +21,6 @@ class BaseModel:
         with h5py.File(self._data_path, 'r') as hf:
             self._data_all_sub = {subject: hf[subject][:] for subject in SUBJECTS}
             self.data_columns = json.loads(hf.attrs['columns'])
-            print(self.data_columns)
 
     def _depart_input_and_output(self, data):
         x_field_col_loc = [self.data_columns.index(field_name) for field_name in self._x_fields]
@@ -39,7 +42,9 @@ class BaseModel:
         test_sub_names = [sub_name for sub_index, sub_name in enumerate(SUBJECTS) if sub_index in test_sub_ids]
         test_data_list = [self._data_all_sub[sub_name] for sub_name in test_sub_names]
 
-        print('Test the model with subjects: ' + str(test_sub_names)[1:-1])
+        logging.info('Train the model with subjects: {}'.format(train_sub_names))
+        logging.info('Validate the model with subjects: {}'.format(validate_sub_names))
+        logging.info('Test the model with subjects: {}'.format(test_sub_names))
         train_data = np.concatenate(train_data_list, axis=0)
         validation_data = np.concatenate(validation_data_list, axis=0)
 
@@ -66,6 +71,8 @@ class BaseModel:
         x_train = x_train.reshape([-1, x_train.shape[2]])
         x_train = self.scalar.fit_transform(x_train)
         x_train = x_train.reshape(original_shape)
+        x_train[np.isnan(x_train)] = 0
+        y_train[np.isnan(y_train)] = 0
         return x_train, y_train
 
     def preprocess_validation_test_data(self, x, y):
@@ -73,6 +80,8 @@ class BaseModel:
         x = x.reshape([-1, x.shape[2]])
         x = self.scalar.transform(x)
         x = x.reshape(original_shape)
+        x[np.isnan(x)] = 0
+        y[np.isnan(y)] = 0
         return x, y
 
     @staticmethod
@@ -95,4 +104,40 @@ class BaseModel:
 
     @staticmethod
     def representative_profile_curves(y_test, y_pred, metrics):
-        pass
+        y_pred = y_pred[:, :, 0]
+        y_test = y_test[:, :, 0]
+        axis_x = range(y_test.shape[1])
+        diff = y_pred - y_test
+        mean_error = np.mean(diff, axis=1)
+        rmse = np.mean(diff ** 2, axis=1) ** 0.5
+        r2 = np.array([r2_score(y_pred[i, :], y_test[i, :]) for i in range(y_pred.shape[0])])
+        absolute_mean_error = np.mean(abs(diff), axis=1)
+
+        # print r2 worst, median, best result
+        r2_best_index = r2.argmax()
+        r2_worst_index = r2.argmin()
+        r2_mid_index = np.argsort(r2)[len(r2) // 2]
+        fig, axs = plt.subplots(2, 2)
+        for sub_index, [sub_title, step_index] in enumerate(
+                [['r2_worst', r2_worst_index], ['r2_mid', r2_mid_index], ['r2_best', r2_best_index]]):
+            axs[sub_index // 2, sub_index % 2].plot(axis_x, y_test[step_index, :], 'g-', label='Real_Value')
+            axs[sub_index // 2, sub_index % 2].plot(axis_x, y_pred[step_index, :], 'y-', label='Predict_Value')
+            axs[sub_index // 2, sub_index % 2].legend(loc='upper right', fontsize=8)
+            axs[sub_index // 2, sub_index % 2].set_title(sub_title)
+
+        # plot the general prediction status result
+        y_predict_mean = y_pred.mean(axis=0).reshape((-1))
+        y_predict_std = y_pred.std(axis=0).reshape((-1))
+        y_test_mean = y_test.mean(axis=0)
+        y_test_std = y_test.std(axis=0)
+        axis_x = range(y_test_mean.shape[0])
+        axs[1, 1].plot(axis_x, y_test_mean, 'g-', label='Real_Value')
+        axs[1, 1].fill_between(axis_x, y_test_mean - y_test_std, y_test_mean + y_test_std, facecolor='green',
+                               alpha=0.2)
+        axs[1, 1].plot(axis_x, y_predict_mean, 'y-', label='Predict_Value')
+        axs[1, 1].fill_between(axis_x, y_predict_mean - y_predict_std, y_predict_mean + y_predict_std,
+                               facecolor='yellow', alpha=0.2)
+        axs[1, 1].legend(loc='upper right', fontsize=8)
+        axs[1, 1].set_title("General Predicting status")
+
+        plt.show()
