@@ -27,6 +27,8 @@ VIDEO_DATA_FIELDS = [VIDEO + "_" + position + "_" + angle for VIDEO in VIDEO_LIS
                      for position in ["x", "y", "probability"] for angle in ["90", "180"]]
 
 SAMPLES_BEFORE_STEP = 40
+PADDING_MODES = [PADDING_NAN, PADDING_NEXT_STEP] = range(2)
+PADDING_MODE = PADDING_NAN
 DATA_PATH = os.environ.get('KAM_DATA_PATH')
 TARGETS_LIST = ["RIGHT_KNEE_ADDUCTION_MOMENT"]
 

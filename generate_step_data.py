@@ -4,7 +4,7 @@ import numpy as np
 import h5py
 import json
 from const import TRIALS, SUBJECTS, ALL_FIELDS
-from const import SAMPLES_BEFORE_STEP, DATA_PATH
+from const import SAMPLES_BEFORE_STEP, DATA_PATH, PADDING_MODE, PADDING_NAN, PADDING_NEXT_STEP
 
 
 def filter_and_clip_data(middle_data, max_len):
@@ -20,13 +20,15 @@ def filter_and_clip_data(middle_data, max_len):
             # fetch data before a step
             c = array[array[column] == _id].index
             b_min = c.min() - SAMPLES_BEFORE_STEP
-            b_max = c.max()
+            if PADDING_MODE == PADDING_NAN:
+                b_max = c.max()
+            elif PADDING_MODE == PADDING_NEXT_STEP:
+                b_max = c.min() + max_len
+            else:
+                raise RuntimeError("PADDING_MODE is not appropriate.")
             if b_min < array.index.min():
                 continue
             b = array.loc[b_min:b_max, :]
-            if b.shape[0] > max_len + SAMPLES_BEFORE_STEP:
-                print("dropping step {} with size {} as it exceeds the limit {}".format(_id, b.shape[0], max_len))
-                continue
             if (b[column] < 0).any():
                 continue
             b.index = range(b.shape[0])
@@ -50,6 +52,7 @@ def generate_subject_data():
 
 
 def generate_step_data(export_path):
+    export_path = os.path.join(DATA_PATH, export_path)
     subject_data_dict = generate_subject_data()
     with h5py.File(export_path, 'w') as hf:
         for subject, data_collections in subject_data_dict.items():
@@ -60,11 +63,8 @@ def generate_step_data(export_path):
         hf.attrs['columns'] = json.dumps(ALL_FIELDS)
 
 
-def get_step_data(import_path):
-    with h5py.File(import_path, 'r') as hf:
-        subject_data = {subject: hf[subject][:] for subject in SUBJECTS}
-    return subject_data
-
-
 if __name__ == "__main__":
-    generate_step_data(DATA_PATH + '40samples+stance_swing.h5')
+    PADDING_MODE = PADDING_NAN
+    generate_step_data('40samples+stance_swing+padding_nan.h5')
+    PADDING_MODE = PADDING_NEXT_STEP
+    generate_step_data('40samples+stance_swing+padding_next_step.h5')
