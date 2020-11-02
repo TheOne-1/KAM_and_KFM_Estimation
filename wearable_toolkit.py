@@ -12,9 +12,10 @@ import csv
 import numpy as np
 import math
 import pandas as pd
-from scipy.signal import find_peaks
+from scipy.signal import find_peaks, butter, filtfilt
 import matplotlib.pyplot as plt
 from scipy import linalg
+from const import SENSOR_LIST, IMU_FIELDS
 import wearable_math
 
 
@@ -70,12 +71,6 @@ class Visual3dCsvReader:
             for i in range(len(frames) - 1, -1, -1):
                 if abs(frames[i] - frames[i - 1]) < 10:
                     frames.pop(i)
-        foot_events = translate_step_event_to_step_id(events_dict, step_type)
-
-        self.data_frame.insert(0, 'True_Event', np.nan)
-        for _, event in foot_events.iterrows():
-            self.data_frame.loc[event[0]:event[1], 'True_Event'] = Visual3dCsvReader.TRUE_EVENT_INDEX
-            Visual3dCsvReader.TRUE_EVENT_INDEX += + 1
 
     def crop(self, start_index):
         # keep index after start_index
@@ -254,9 +249,7 @@ class ViconCsvReader:
             missing_points = np.argwhere(np.isnan(marker_matrix[:, 0])).reshape(-1)
             if len(missing_points) == 0:  # All the marker exist
                 continue
-            if len(coordinate_points) < 3:
-                print("segment {} fail to filling missing marker with rigid body interpolation. Will use linear interpolation instead".format(motion_markers.index))
-            else:
+            if len(coordinate_points) >= 3:
                 origin, x, y, z = wearable_math.generat_coordinate(calibrate_makers[coordinate_points, :])
                 origin_m, x_m, y_m, z_m = wearable_math.generat_coordinate(marker_matrix[coordinate_points, :])
                 for missing_point in missing_points.tolist():
@@ -270,37 +263,35 @@ class ViconCsvReader:
             motion_marker.interpolate(method='linear', axis=0, inplace=True)
 
 
-
-IMU_DATA_FIELDS = ['AccelX', 'AccelY', 'AccelZ', 'GyroX', 'GyroY', 'GyroZ', 'MagX', 'MagY', 'MagZ', 'Quat1', 'Quat2', 'Quat3', 'Quat4'] # We don't use these fields as they are noisy and position dependent.
-
 class SageCsvReader:
     '''
     Read the csv file exported from sage systems
     '''
     GUESSED_EVENT_INDEX = 0
-    sensor_list = ['L_FOOT', 'R_FOOT', 'R_SHANK', 'R_THIGH', 'WAIST', 'CHEST', 'L_SHANK', 'L_THIGH']
 
     def __init__(self, file_path):
         self.data = pd.read_csv(file_path)
+        self.sample_rate = 100
         self.data_frame = self.data[
-            [field + '_' + str(index) for index, label in enumerate(self.sensor_list) for field in
-             IMU_DATA_FIELDS]].copy()
+            [field + '_' + str(index) for index, label in enumerate(SENSOR_LIST) for field in
+             IMU_FIELDS]].copy()
         index = self.data['Package_0']
         for i in range(1, len(self.data['Package_0'])):
             if self.data['Package_0'].loc[i] < self.data['Package_0'].loc[i - 1]:
-                print("Warning sage imu data package index cross boundary from {} to {}".format(
-                    self.data['Package_0'].loc[i],
-                    self.data['Package_0'].loc[i - 1]))
                 self.data.loc[i:, 'Package_0'] += 65536
         index = index - self.data['Package_0'].loc[0]
         # fill dropout data with nan
+        if index.size - 1 != index.iloc[-1]:
+            print("Inconsistent shape")
         self.data_frame.index = index
-        self.data_frame.reindex(range(0, int(index.iloc[-1] + 1)))
-        self.data_frame.columns = ["_".join([col.split('_')[0], self.sensor_list[int(col.split('_')[1])]]) for col in
+        self.data_frame = self.data_frame.reindex(range(0, int(index.iloc[-1] + 1)))
+        self.data_frame.columns = ["_".join([col.split('_')[0], SENSOR_LIST[int(col.split('_')[1])]]) for col in
                                    self.data_frame.columns]
+        self.missing_data_index = self.data_frame.isnull().any(axis=1)
+        self.data_frame = self.data_frame.interpolate(method='linear', axis=0)
 
     def get_norm(self, sensor, field, is_plot=False):
-        assert sensor in self.sensor_list
+        assert sensor in SENSOR_LIST
         assert field in ['Accel', 'Gyro']
         norm_array = np.linalg.norm(self.data_frame[[field + direct + '_' + sensor for direct in ['X', 'Y', 'Z']]],
                                     axis=1)
@@ -317,11 +308,11 @@ class SageCsvReader:
         return None
 
     def get_field_data(self, sensor, field):
-        if sensor not in self.sensor_list:
+        if sensor not in SENSOR_LIST:
             raise RuntimeError("No such a sensor")
         if field not in ['Accel', 'Gyro']:
             raise RuntimeError("{field} not in ['Accel', 'Gyro']")
-        index = str(self.sensor_list.index(sensor))
+        index = str(SENSOR_LIST.index(sensor))
         data = self.data_frame[[field + direct + '_' + str(index) for direct in ['X', 'Y', 'Z']]]
         data.columns = ['X', 'Y', 'Z']
         return data
@@ -332,45 +323,149 @@ class SageCsvReader:
         self.data_frame = self.data_frame.loc[start_index:]
         self.data_frame.index = self.data_frame.index - self.data_frame.index[0]
 
+    def get_walking_strike_off(self, strike_delay, off_delay, max_step_length, cut_off_fre_strike_off=None,
+                               verbose=False):
+        """ Reliable algorithm used in TNSRE first submission"""
+        gyr_thd = np.rad2deg(1.7)
+        acc_thd = 0.8
+        max_distance = self.sample_rate * 2  # distance from stationary phase should be smaller than 2 seconds
+
+        acc_data = np.array(
+            self.data_frame[['_'.join([direct, 'R_FOOT']) for direct in ['AccelX', 'AccelY', 'AccelZ']]])
+        gyr_data = np.array(self.data_frame[['_'.join([direct, 'R_FOOT']) for direct in ['GyroX', 'GyroY', 'GyroZ']]])
+
+        if cut_off_fre_strike_off is not None:
+            acc_data = self.data_filt(acc_data, cut_off_fre_strike_off, self.sample_rate, filter_order=2)
+            gyr_data = self.data_filt(gyr_data, cut_off_fre_strike_off, self.sample_rate, filter_order=2)
+
+        gyr_x = gyr_data[:, 0]
+        data_len = gyr_data.shape[0]
+
+        acc_magnitude = np.linalg.norm(acc_data, axis=1)
+        gyr_magnitude = np.linalg.norm(gyr_data, axis=1)
+        acc_magnitude = acc_magnitude - 9.81
+
+        stationary_flag = self.__find_stationary_phase(
+            gyr_magnitude, acc_magnitude, acc_thd, gyr_thd)
+
+        strike_list, off_list = [], []
+        i_sample = 0
+
+        while i_sample < data_len:
+            # step 0, go to the next stationary phase
+            if not stationary_flag[i_sample]:
+                i_sample += 1
+            else:
+                front_crossing, back_crossing = self.__find_zero_crossing(gyr_x, gyr_thd, i_sample)
+
+                if not back_crossing:  # if back zero crossing not found
+                    break
+                if not front_crossing:  # if front zero crossing not found
+                    i_sample = back_crossing
+                    continue
+
+                the_strike = self.find_peak_max(gyr_x[front_crossing:i_sample], height=0)
+                the_off = self.find_peak_max(gyr_x[i_sample:back_crossing], height=0)
+
+                if the_strike is not None and i_sample - (the_strike + front_crossing) < max_distance:
+                    strike_list.append(the_strike + front_crossing + strike_delay)
+                if the_off is not None and the_off < max_distance:
+                    off_list.append(the_off + i_sample + off_delay)
+                i_sample = back_crossing
+        # check if these two lists are in cross order
+        event_list = sorted(
+            [[i, event_type] for event_type, event in enumerate([strike_list, off_list]) for i in event],
+            key=lambda x: x[0])
+        for i in range(1, len(event_list)):
+            if event_list[i - 1][1] == event_list[i][1]:
+                print("Likely got bad foot event here at sample {}".format(event_list[i][0]))
+        if verbose:
+            plt.figure()
+            plt.plot(stationary_flag * 400)
+            plt.plot(gyr_x)
+            plt.plot(strike_list, gyr_x[strike_list], 'g*')
+            plt.plot(off_list, gyr_x[off_list], 'r*')
+
+        return strike_list, off_list
+
+    @staticmethod
+    def __find_stationary_phase(gyr_magnitude, acc_magnitude, foot_stationary_acc_thd, foot_stationary_gyr_thd):
+        """ Old function, require 10 continuous setps """
+        data_len = gyr_magnitude.shape[0]
+        stationary_flag, stationary_flag_temp = np.zeros(gyr_magnitude.shape), np.zeros(gyr_magnitude.shape)
+        stationary_flag_temp[
+            (acc_magnitude < foot_stationary_acc_thd) & (abs(gyr_magnitude) < foot_stationary_gyr_thd)] = 1
+        for i_sample in range(data_len):
+            if stationary_flag_temp[i_sample - 5:i_sample + 5].all():
+                stationary_flag[i_sample] = 1
+        return stationary_flag
+
+    @staticmethod
+    def __find_stationary_phase_2(gyr_magnitude, acc_magnitude, foot_stationary_acc_thd, foot_stationary_gyr_thd):
+        """ New function, removed 10 sample requirement """
+        stationary_flag = np.zeros(gyr_magnitude.shape)
+        stationary_flag[(acc_magnitude < foot_stationary_acc_thd) & (gyr_magnitude < foot_stationary_gyr_thd)] = 1
+        return stationary_flag
+
+    def __find_zero_crossing(self, gyr_x, foot_stationary_gyr_thd, i_sample):
+        """
+        Detected as a zero crossing if the value is lower than negative threshold.
+        :return:
+        """
+        max_search_range = self.sample_rate * 3  # search 3 second front data at most
+        front_crossing, back_crossing = False, False
+        for j_sample in range(i_sample, max(0, i_sample - max_search_range), -1):
+            if gyr_x[j_sample] < - foot_stationary_gyr_thd:
+                front_crossing = j_sample
+                break
+        for j_sample in range(i_sample, gyr_x.shape[0]):
+            if gyr_x[j_sample] < - foot_stationary_gyr_thd:
+                back_crossing = j_sample
+                break
+        return front_crossing, back_crossing
+
+    @staticmethod
+    def data_filt(data, cut_off_fre, sampling_fre, filter_order=4):
+        fre = cut_off_fre / (sampling_fre / 2)
+        b, a = butter(filter_order, fre, 'lowpass')
+        if len(data.shape) == 1:
+            data_filt = filtfilt(b, a, data)
+        else:
+            data_filt = filtfilt(b, a, data, axis=0)
+        return data_filt
+
+    @staticmethod
+    def find_peak_max(data_clip, height, width=None, prominence=None):
+        """
+        find the maximum peak
+        :return:
+        """
+        peaks, properties = find_peaks(data_clip, width=width, height=height, prominence=prominence)
+        if len(peaks) == 0:
+            return None
+        peak_heights = properties['peak_heights']
+        max_index = np.argmax(peak_heights)
+        return peaks[max_index]
+
     def create_step_id(self, step_type, verbose=False):
-        # These highly impact the result
-        flat_height_MAX_threshold = 100
-        peaks_height = 100  # Optional Configuration 100
-        peaks_distance = 30  # Optional Configuration 140
-
-        [ROFF, RON, LOFF, LON] = [[] for _ in range(4)]
-        l_foot_gyroX = self.data_frame['GyroX_L_FOOT']
-        r_foot_gyroX = self.data_frame['GyroX_R_FOOT']
-
-        for [foot_gyroX, ON, OFF] in [[l_foot_gyroX, LON, LOFF], [r_foot_gyroX, RON, ROFF]]:
-            # detect strike and of
-            peaks, _ = find_peaks(foot_gyroX, prominence=[10, None], height=peaks_height, distance=peaks_distance)
-            # detect foot_flat
-            is_last_foot_flat = True
-            for i in range(1, len(peaks)):
-                left = peaks[i - 1] + int(0.3 * (peaks[i] - peaks[i - 1]))
-                right = peaks[i] - int(0.3 * (peaks[i] - peaks[i - 1]))
-                is_foot_flat = abs(foot_gyroX[left:right].min()) < flat_height_MAX_threshold
-                if not is_last_foot_flat and is_foot_flat:
-                    OFF.append(peaks[i - 1])
-                    ON.append(peaks[i])
-                # used for debugging. Visualize the unexpected result. Then we can configure the parameters to gain better results.
-                if i > 5 and is_last_foot_flat == is_foot_flat:
-                    if verbose:
-                        plt.figure()
-                        plt.plot(range(peaks[i - 4], peaks[i]), foot_gyroX[peaks[i - 4]:peaks[i]])
-                        plt.plot(peaks[i - 4:i], foot_gyroX[peaks[i - 4:i]], 'ro')
-                        plt.show()
-
-                    print('Warning: {} Foot Event.'.format('right' if ON == RON else 'left'))
-                is_last_foot_flat = is_foot_flat
-
-        events_dict = {'ROFF': ROFF, 'RON': RON, 'LOFF': LOFF, 'LON': LON}
-        foot_events = translate_step_event_to_step_id(events_dict, step_type)
+        max_step_length = self.sample_rate * 2
+        [RON, ROFF] = self.get_walking_strike_off(0, 0, max_step_length, 10, verbose)
+        events_dict = {'ROFF': ROFF, 'RON': RON}
+        foot_events = translate_step_event_to_step_id(events_dict, step_type, max_step_length)
         self.data_frame.insert(0, 'Event', np.nan)
+        if verbose:
+            plt.figure()
         for _, event in foot_events.iterrows():
             self.data_frame.loc[event[0]:event[1], 'Event'] = SageCsvReader.GUESSED_EVENT_INDEX
             SageCsvReader.GUESSED_EVENT_INDEX += 1
+            if verbose:
+                plt.plot(self.data_frame.loc[event[0]:event[1], 'GyroX_R_FOOT'].values)
+        if self.missing_data_index.any(axis=0):
+            print("Steps containing corrupted data: {}. They are marked as minus".format(
+                self.data_frame[self.missing_data_index]['Event'].dropna().drop_duplicates().tolist()))
+            self.data_frame.loc[self.missing_data_index, 'Event'] *= -1  # mark the missing IMU data as minus event
+        if verbose:
+            plt.show()
 
 
 def rotationMatrixToEulerAngles(R):
@@ -434,24 +529,28 @@ def sync_via_correlation(data1, data2, verbose=False):
     return delay
 
 
-def translate_step_event_to_step_id(events_dict, step_type):
-    ## FILTER EVENTS
+def translate_step_event_to_step_id(events_dict, step_type, max_step_length):
+    # FILTER EVENTS
     r_steps = []
-    if step_type == 'swing+stance':
-        for i in range(4, len(events_dict['ROFF'])):
-            if (events_dict['ROFF'][i] - events_dict['ROFF'][i - 1]) > 1.5 * (
-                    events_dict['ROFF'][i - 1] - events_dict['ROFF'][i - 2]):
-                continue
-            r_steps.append([events_dict['ROFF'][i - 1], events_dict['ROFF'][i]])
-    elif step_type == 'stance+swing':
-        for i in range(4, len(events_dict['RON'])):
-            if (events_dict['RON'][i] - events_dict['RON'][i - 1]) > 1.5 * (
-                    events_dict['RON'][i - 1] - events_dict['RON'][i - 2]):
-                continue
-            r_steps.append([events_dict['RON'][i - 1], events_dict['RON'][i]])
-
-    else:
-        raise RuntimeError("no such step_type")
+    event_list = sorted(
+        [[i, event_type] for event_type in ['RON', 'ROFF'] for i in events_dict[event_type]],
+        key=lambda x: x[0])
+    event_index_dict = {i: event_type for i, event_type in event_list}
+    event_list = [i[0] for i in event_list]
+    step_type_to_event = {'swing+stance': 'ROFF', 'stance+swing': 'RON'}
+    target_event = events_dict[step_type_to_event[step_type]]
+    for i in range(10, len(target_event) - 1):
+        event_index = event_list.index(target_event[i])
+        prev_event_type = event_index_dict[event_list[event_index - 1]]
+        current_event_type = event_index_dict[event_list[event_index]]
+        next_event_type = event_index_dict[event_list[event_index + 1]]
+        if current_event_type == prev_event_type or current_event_type == next_event_type:
+            continue
+        current_step_length = target_event[i] - target_event[i - 1]
+        prev_step_length = target_event[i - 1] - target_event[i - 2]
+        if 1.5 * prev_step_length > current_step_length > 0.66 * prev_step_length \
+                and current_step_length < max_step_length:
+            r_steps.append([target_event[i - 1], target_event[i]])
 
     right_events = pd.DataFrame(r_steps)
     right_events.columns = ['begin', 'end']
