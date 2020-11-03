@@ -148,4 +148,5 @@ class BaseModel:
         axs[1, 1].legend(loc='upper right', fontsize=8)
         axs[1, 1].set_title("General Predicting status")
         plt.tight_layout()
+        plt.show(block=False)
 

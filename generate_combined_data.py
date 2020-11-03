@@ -7,6 +7,7 @@ from const import SEGMENT_DEFITIONS, SUBJECTS, STATIC_TRIALS, TRIALS, DATA_PATH,
 
 def sync_and_crop_data_frame(vicon_data_path, imu_data_path, v3d_data_path, video_90_data_path, video_180_data_path,
                              middle_data_path, vicon_calibrate_data_path):
+    is_verbose = False
     # read vicon, imu data
     vicon_data = wearable_toolkit.ViconCsvReader(vicon_data_path, SEGMENT_DEFITIONS, vicon_calibrate_data_path)
     video_90_data = wearable_toolkit.VideoCsvReader(video_90_data_path)
@@ -19,27 +20,27 @@ def sync_and_crop_data_frame(vicon_data_path, imu_data_path, v3d_data_path, vide
     video_180_data.fill_low_probability_data()
 
     # create step events
-    imu_data.create_step_id('stance+swing', False)
+    imu_data.create_step_id('stance+swing', is_verbose)
 
     # Synchronize Vicon and IMU data
     vicon_sync_data = vicon_data.get_angular_velocity_theta('R_SHANK', 1000)
     imu_sync_data = imu_data.get_norm('R_SHANK', 'Gyro')[0:1000]
     print("vicon-imu synchronization")
-    vicon_imu_sync_delay = wearable_toolkit.sync_via_correlation(vicon_sync_data, imu_sync_data, False)
+    vicon_imu_sync_delay = wearable_toolkit.sync_via_correlation(vicon_sync_data, imu_sync_data, is_verbose)
 
     # Synchronize Vicon and Video data 90
     vicon_sync_data = np.pi / 2 - vicon_data.get_rshank_angle('X')[0:1500]
     vicon_sync_data[np.isnan(vicon_sync_data)] = 0
     video_90_sync_data = np.pi / 2 - video_90_data.get_rshank_angle()[0:1500]
     print("vicon-video_90 synchronization")
-    vicon_video_90_sync_delay = wearable_toolkit.sync_via_correlation(-vicon_sync_data, -video_90_sync_data, False)
+    vicon_video_90_sync_delay = wearable_toolkit.sync_via_correlation(-vicon_sync_data, -video_90_sync_data, is_verbose)
 
     # Synchronize Vicon and Video data 180
     vicon_sync_data = np.pi / 2 - vicon_data.get_rshank_angle('Y')[0:1500]
     vicon_sync_data[np.isnan(vicon_sync_data)] = 0
     video_180_sync_data = np.pi / 2 - video_180_data.get_rshank_angle()[0:1500]
     print("vicon-video_180 synchronization")
-    vicon_video_180_sync_delay = wearable_toolkit.sync_via_correlation(-vicon_sync_data, -video_180_sync_data, False)
+    vicon_video_180_sync_delay = wearable_toolkit.sync_via_correlation(-vicon_sync_data, -video_180_sync_data, is_verbose)
 
     # Prepare output data
     minimum_delay = min([-imu_data.get_first_event_index(), vicon_imu_sync_delay, vicon_video_90_sync_delay,

@@ -90,24 +90,25 @@ class ViconCsvReader:
     '''
 
     # if static_trial is not none, it's used for filling missing data.
-    def __init__(self, file_path, segment_defitions=None, static_trial=None):
+    def __init__(self, file_path, segment_definitions=None, static_trial=None):
         self.data, self.sample_rate = ViconCsvReader.reading(file_path)
         # create segment marker data
         self.segment_data = dict()
-        if segment_defitions is None:
-            segment_defitions = {}
-        for segment, markers in segment_defitions.items():
+        if segment_definitions is None:
+            segment_definitions = {}
+        for segment, markers in segment_definitions.items():
             self.segment_data[segment] = pd.Series(dict([(marker, self.data[marker]) for marker in markers]))
 
         # used for filling missing marker data
         if static_trial is not None:
             calibrate_data, _ = ViconCsvReader.reading(static_trial)
-            for segment, markers in segment_defitions.items():
+            for segment, markers in segment_definitions.items():
                 segment_data = pd.Series(dict([(marker, calibrate_data[marker]) for marker in markers]))
                 self.fill_missing_marker(segment_data, self.segment_data[segment])
 
-        if segment_defitions != {}:
-            markers = [marker for markers in segment_defitions.values() for marker in markers]
+        self.segment_definitions = segment_definitions
+        if segment_definitions != {}:
+            markers = [marker for markers in segment_definitions.values() for marker in markers]
             self.data_frame = pd.concat([self.data[marker] for marker in markers], axis=1)
             self.data_frame.columns = [marker + '_' + axis for marker in markers for axis in ['X', 'Y', 'Z']]
 
@@ -240,6 +241,11 @@ class ViconCsvReader:
         # keep index after start_index
         self.data_frame = self.data_frame.loc[start_index:]
         self.data_frame.index = range(self.data_frame.shape[0])
+
+        for segment, markers in self.segment_definitions.items():
+            for marker in markers:
+                self.segment_data[segment][marker] = self.segment_data[segment][marker].loc[start_index:]
+                self.segment_data[segment][marker].index = range(self.segment_data[segment][marker].shape[0])
 
     def fill_missing_marker(self, calibrate_makers, motion_markers):
         if sum([motion_marker.isnull().sum().sum() for motion_marker in motion_markers.tolist()]) == 0:
@@ -526,14 +532,13 @@ def sync_via_correlation(data1, data2, verbose=False):
     correlation = np.correlate(data1, data2, 'full')
     delay = len(data2) - np.argmax(correlation) - 1
     if verbose:
-        print(delay)
         plt.figure()
         if delay > 0:
-            plt.plot(range(data1.size), data1)
-            plt.plot(range(data2[delay:].size), data2[delay:])
+            plt.plot(data1)
+            plt.plot(data2[delay:])
         else:
-            plt.plot(range(data1[-delay:].size), data1[-delay:])
-            plt.plot(range(data2.size), data2)
+            plt.plot(data1[-delay:])
+            plt.plot(data2)
         plt.show()
     return delay
 
