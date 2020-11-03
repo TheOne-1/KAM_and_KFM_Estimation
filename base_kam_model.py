@@ -65,6 +65,13 @@ class BaseModel:
                 test_sub_y, pred_sub_y)}
             print(test_results)
             self.representative_profile_curves(test_sub_y, pred_sub_y, test_results)
+            self.customized_analysis(test_sub_y, pred_sub_y, test_results)
+        plt.show()
+
+    @staticmethod
+    def customized_analysis(test_sub_y, pred_sub_y, test_results):
+        """ Customized data visualization"""
+        pass
 
     def preprocess_train_data(self, x_train, y_train):
         original_shape = x_train.shape
@@ -100,7 +107,8 @@ class BaseModel:
         rmse = np.round(np.sqrt(mean_squared_error(test, pred)), num_of_digits)
         mean_error = np.round(np.mean(diffs, axis=0), num_of_digits)
         absolute_mean_error = np.round(np.mean(abs(diffs)), num_of_digits)
-        return r2, rmse, mean_error, absolute_mean_error
+        scores = {'r2': r2, 'rmse': rmse, 'mean_error': mean_error, 'absolute_mean_error': absolute_mean_error}
+        return scores
 
     @staticmethod
     def representative_profile_curves(y_test, y_pred, metrics):
@@ -139,5 +147,5 @@ class BaseModel:
                                facecolor='yellow', alpha=0.2)
         axs[1, 1].legend(loc='upper right', fontsize=8)
         axs[1, 1].set_title("General Predicting status")
+        plt.tight_layout()
 
-        plt.show()
