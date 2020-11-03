@@ -15,7 +15,7 @@ import pandas as pd
 from scipy.signal import find_peaks, butter, filtfilt
 import matplotlib.pyplot as plt
 from scipy import linalg
-from const import SENSOR_LIST, IMU_FIELDS
+from const import SENSOR_LIST, IMU_FIELDS, FORCE_DATA_FIELDS
 import wearable_math
 
 
@@ -90,7 +90,7 @@ class ViconCsvReader:
     '''
 
     # if static_trial is not none, it's used for filling missing data.
-    def __init__(self, file_path, segment_defitions=None, static_trail=None):
+    def __init__(self, file_path, segment_defitions=None, static_trial=None):
         self.data, self.sample_rate = ViconCsvReader.reading(file_path)
         # create segment marker data
         self.segment_data = dict()
@@ -100,8 +100,8 @@ class ViconCsvReader:
             self.segment_data[segment] = pd.Series(dict([(marker, self.data[marker]) for marker in markers]))
 
         # used for filling missing marker data
-        if static_trail is not None:
-            calibrate_data, _ = ViconCsvReader.reading(static_trail)
+        if static_trial is not None:
+            calibrate_data, _ = ViconCsvReader.reading(static_trial)
             for segment, markers in segment_defitions.items():
                 segment_data = pd.Series(dict([(marker, calibrate_data[marker]) for marker in markers]))
                 self.fill_missing_marker(segment_data, self.segment_data[segment])
@@ -110,6 +110,15 @@ class ViconCsvReader:
             markers = [marker for markers in segment_defitions.values() for marker in markers]
             self.data_frame = pd.concat([self.data[marker] for marker in markers], axis=1)
             self.data_frame.columns = [marker + '_' + axis for marker in markers for axis in ['X', 'Y', 'Z']]
+
+        # filter and resample force data
+        force_names_ori = ['Imported Bertec Force Plate #' + plate_num + ' - ' + data_type for plate_num in ['1', '2']
+                           for data_type in ['Force', 'CoP']]
+        filtered_force_array = np.concatenate([SageCsvReader.data_filt(self.data[force_name], 50, 1000)
+                                               for force_name in force_names_ori], axis=1)
+        filtered_force_array = filtered_force_array[::10, :]
+        filtered_force_df = pd.DataFrame(filtered_force_array, columns=FORCE_DATA_FIELDS)
+        self.data_frame = pd.concat([self.data_frame, filtered_force_df], axis=1)
 
     @staticmethod
     def reading(file_path):
@@ -158,18 +167,18 @@ class ViconCsvReader:
                             data[i].append(np.nan)
         return data_collection, sample_rate_collection
 
-    def get_angular_velocity_theta(self, segment):
+    def get_angular_velocity_theta(self, segment, check_len):
         segment_data_series = self.segment_data[segment]
         sampling_rate = self.sample_rate['Trajectories']
 
         walking_data = pd.concat(segment_data_series.tolist(), axis=1).values
-        data_len = walking_data.shape[0]
+        check_len = min(walking_data.shape[0], check_len)
         marker_number = int(walking_data.shape[1] / 3)
-        angular_velocity_theta = np.zeros([data_len])
+        angular_velocity_theta = np.zeros([check_len])
 
         next_marker_matrix = walking_data[0, :].reshape([marker_number, 3])
         # vectiorize this for loop.
-        for i_frame in range(data_len):
+        for i_frame in range(check_len):
             if i_frame == 0:
                 continue
             current_marker_matrix = next_marker_matrix
@@ -500,7 +509,7 @@ def rigid_transform_3D(A, B):
     BB = B - np.tile(centroid_B, (N, 1))
     # dot is matrix multiplication for array
     H = np.dot(AA.T, BB)
-    U, _, V_t = linalg.svd(H)
+    U, _, V_t = linalg.svd(np.nan_to_num(H))
     R = np.dot(V_t.T, U.T)
 
     # special reflection case

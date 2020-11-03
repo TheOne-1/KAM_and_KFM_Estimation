@@ -2,8 +2,7 @@ import wearable_toolkit
 import pandas as pd
 import numpy as np
 import os
-
-from const import SEGMENT_DEFITIONS, SUBJECTS, STATIC_TRIALS, TRIALS, DATA_PATH
+from const import SEGMENT_DEFITIONS, SUBJECTS, STATIC_TRIALS, TRIALS, DATA_PATH, SENSOR_LIST
 
 
 def sync_and_crop_data_frame(vicon_data_path, imu_data_path, v3d_data_path, video_90_data_path, video_180_data_path,
@@ -20,10 +19,10 @@ def sync_and_crop_data_frame(vicon_data_path, imu_data_path, v3d_data_path, vide
     video_180_data.fill_low_probability_data()
 
     # create step events
-    imu_data.create_step_id('stance+swing', True)
+    imu_data.create_step_id('stance+swing', False)
 
     # Synchronize Vicon and IMU data
-    vicon_sync_data = vicon_data.get_angular_velocity_theta('R_SHANK')[0:1000]
+    vicon_sync_data = vicon_data.get_angular_velocity_theta('R_SHANK', 1000)
     imu_sync_data = imu_data.get_norm('R_SHANK', 'Gyro')[0:1000]
     print("vicon-imu synchronization")
     vicon_imu_sync_delay = wearable_toolkit.sync_via_correlation(vicon_sync_data, imu_sync_data, False)

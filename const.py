@@ -13,14 +13,15 @@ SEGMENT_DEFITIONS = {
     'R_SHANK': ['RTAM', 'RFAL', 'RSK', 'RTT'],
     'L_THIGH': ['LFME', 'LFLE', 'LTH', 'LFT'],
     'R_THIGH': ['RFME', 'RFLE', 'RTH', 'RFT'],
-    'PELVIS': ['LIPS', 'RIPS', 'LIAS', 'RIAS'],
-    'TRUNK': ['MAI', 'SXS', 'SJN', 'CV7', 'LAC', 'RAC']
+    'WAIST': ['LIPS', 'RIPS', 'LIAS', 'RIAS'],
+    'CHEST': ['MAI', 'SXS', 'SJN', 'CV7', 'LAC', 'RAC']
 }
 SENSOR_LIST = ['L_FOOT', 'R_FOOT', 'R_SHANK', 'R_THIGH', 'WAIST', 'CHEST', 'L_SHANK', 'L_THIGH']
 IMU_FIELDS = ['AccelX', 'AccelY', 'AccelZ', 'GyroX', 'GyroY', 'GyroZ', 'MagX', 'MagY', 'MagZ', 'Quat1', 'Quat2',
               'Quat3', 'Quat4']
 IMU_DATA_FIELDS = [IMU_FIELD + "_" + SENSOR for SENSOR in SENSOR_LIST for IMU_FIELD in IMU_FIELDS]
-
+FORCE_DATA_FIELDS = ['plate_' + num + '_' + data_type + '_' + axis for num in ['1', '2']
+                     for data_type in ['force', 'cop'] for axis in ['x', 'y', 'z']]
 VIDEO_LIST = ["LShoulder", "RShoulder", "MidHip", "RHip", "LHip", "RKnee", "LKnee", "RAnkle", "LAnkle", "RHeel",
               "LHeel"]
 VIDEO_DATA_FIELDS = [VIDEO + "_" + position + "_" + angle for VIDEO in VIDEO_LIST
@@ -89,4 +90,6 @@ ALL_FIELDS = ["Event", "AccelX_L_FOOT", "AccelY_L_FOOT", "AccelZ_L_FOOT", "GyroX
               "RTH_Y", "RTH_Z", "RFT_X", "RFT_Y", "RFT_Z", "LIPS_X", "LIPS_Y", "LIPS_Z", "RIPS_X", "RIPS_Y", "RIPS_Z",
               "LIAS_X", "LIAS_Y", "LIAS_Z", "RIAS_X", "RIAS_Y", "RIAS_Z", "MAI_X", "MAI_Y", "MAI_Z", "SXS_X", "SXS_Y",
               "SXS_Z", "SJN_X", "SJN_Y", "SJN_Z", "CV7_X", "CV7_Y", "CV7_Z", "LAC_X", "LAC_Y", "LAC_Z", "RAC_X",
-              "RAC_Y", "RAC_Z"]
+              "RAC_Y", "RAC_Z", 'plate_1_force_x', 'plate_1_force_y', 'plate_1_force_z', 'plate_2_force_x',
+              'plate_2_force_y', 'plate_2_force_z', 'plate_1_cop_x', 'plate_1_cop_y', 'plate_1_cop_z',
+              'plate_2_cop_x', 'plate_2_cop_y', 'plate_2_cop_z']
