@@ -63,7 +63,7 @@ class BaseModel:
             pred_sub_y = self.predict(model, test_sub_x)
             test_results = {test_sub_name: self.get_all_scores(
                 test_sub_y, pred_sub_y)}
-            print(test_results)
+            logging.info("for now, the final test result is {}".format(test_results))
             self.representative_profile_curves(test_sub_y, pred_sub_y, test_results)
             self.customized_analysis(test_sub_y, pred_sub_y, test_results)
         plt.show()
@@ -100,26 +100,29 @@ class BaseModel:
         raise RuntimeError('Method not implemented')
 
     @staticmethod
-    def get_all_scores(y_test, y_pred, num_of_digits=3):
-        test, pred = np.ravel(y_test), np.ravel(y_pred)
-        diffs = test - pred
-        r2 = np.round(r2_score(test, pred), num_of_digits)
-        rmse = np.round(np.sqrt(mean_squared_error(test, pred)), num_of_digits)
+    def get_all_scores(y_true, y_pred, num_of_digits=3):
+        y_true, y_pred = np.ravel(y_true), np.ravel(y_pred)
+        y_pred = y_pred[y_true != 0.]  # remove those padding zeros
+        y_true = y_true[y_true != 0.]  # remove those padding zeros
+        diffs = y_true - y_pred
+        r2 = np.round(r2_score(y_true, y_pred), num_of_digits)
+        rmse = np.round(np.sqrt(mean_squared_error(y_true, y_pred)), num_of_digits)
         mean_error = np.round(np.mean(diffs, axis=0), num_of_digits)
-        absolute_mean_error = np.round(np.mean(abs(diffs)), num_of_digits)
-        scores = {'r2': r2, 'rmse': rmse, 'mean_error': mean_error, 'absolute_mean_error': absolute_mean_error}
+        mean_absolute_error = np.round(np.mean(abs(diffs)), num_of_digits)
+        scores = {'r2': r2, 'rmse': rmse, 'mean_error': mean_error, 'mean_absolute_error': mean_absolute_error}
         return scores
 
     @staticmethod
-    def representative_profile_curves(y_test, y_pred, metrics):
+    def representative_profile_curves(y_true, y_pred, metrics):
         y_pred = y_pred[:, :, 0]
-        y_test = y_test[:, :, 0]
-        axis_x = range(y_test.shape[1])
-        diff = y_pred - y_test
+        y_true = y_true[:, :, 0]
+        axis_x = range(y_true.shape[1])
+        diff = y_pred - y_true
         mean_error = np.mean(diff, axis=1)
         rmse = np.mean(diff ** 2, axis=1) ** 0.5
-        r2 = np.array([r2_score(y_pred[i, :], y_test[i, :]) for i in range(y_pred.shape[0])])
-        absolute_mean_error = np.mean(abs(diff), axis=1)
+        r2 = np.array([r2_score(y_pred[i, y_true[i, :] != 0], y_true[i, y_true[i, :] != 0])  # y_pred[i, :] != 0 kick padding zeroes
+                       for i in range(y_pred.shape[0])])
+        mean_absolute_error = np.mean(abs(diff), axis=1)
 
         # print r2 worst, median, best result
         r2_best_index = r2.argmax()
@@ -128,22 +131,22 @@ class BaseModel:
         fig, axs = plt.subplots(2, 2)
         for sub_index, [sub_title, step_index] in enumerate(
                 [['r2_worst', r2_worst_index], ['r2_mid', r2_mid_index], ['r2_best', r2_best_index]]):
-            axs[sub_index // 2, sub_index % 2].plot(axis_x, y_test[step_index, :], 'g-', label='Real_Value')
-            axs[sub_index // 2, sub_index % 2].plot(axis_x, y_pred[step_index, :], 'y-', label='Predict_Value')
+            axs[sub_index // 2, sub_index % 2].plot(axis_x, y_true[step_index, :], 'g-', label='True_Value')
+            axs[sub_index // 2, sub_index % 2].plot(axis_x, y_pred[step_index, :], 'y-', label='Pred_Value')
             axs[sub_index // 2, sub_index % 2].legend(loc='upper right', fontsize=8)
             axs[sub_index // 2, sub_index % 2].set_title(sub_title)
 
         # plot the general prediction status result
-        y_predict_mean = y_pred.mean(axis=0).reshape((-1))
-        y_predict_std = y_pred.std(axis=0).reshape((-1))
-        y_test_mean = y_test.mean(axis=0)
-        y_test_std = y_test.std(axis=0)
-        axis_x = range(y_test_mean.shape[0])
-        axs[1, 1].plot(axis_x, y_test_mean, 'g-', label='Real_Value')
-        axs[1, 1].fill_between(axis_x, y_test_mean - y_test_std, y_test_mean + y_test_std, facecolor='green',
+        y_pred_mean = y_pred.mean(axis=0).reshape((-1))
+        y_pred_std = y_pred.std(axis=0).reshape((-1))
+        y_true_mean = y_true.mean(axis=0)
+        y_true_std = y_true.std(axis=0)
+        axis_x = range(y_true_mean.shape[0])
+        axs[1, 1].plot(axis_x, y_true_mean, 'g-', label='Real_Value')
+        axs[1, 1].fill_between(axis_x, y_true_mean - y_true_std, y_true_mean + y_true_std, facecolor='green',
                                alpha=0.2)
-        axs[1, 1].plot(axis_x, y_predict_mean, 'y-', label='Predict_Value')
-        axs[1, 1].fill_between(axis_x, y_predict_mean - y_predict_std, y_predict_mean + y_predict_std,
+        axs[1, 1].plot(axis_x, y_pred_mean, 'y-', label='Predict_Value')
+        axs[1, 1].fill_between(axis_x, y_pred_mean - y_pred_std, y_pred_mean + y_pred_std,
                                facecolor='yellow', alpha=0.2)
         axs[1, 1].legend(loc='upper right', fontsize=8)
         axs[1, 1].set_title("General Predicting status")
