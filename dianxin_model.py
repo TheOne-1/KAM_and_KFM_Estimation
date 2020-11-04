@@ -1,7 +1,7 @@
 import os
 
 os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
-import logging
+from customized_logger import logger as logging
 import tensorflow as tf
 from keras.layers import GRU, LSTM, Activation, Dense, Masking, Conv1D
 from keras.preprocessing.sequence import pad_sequences
@@ -10,7 +10,6 @@ from keras.callbacks import Callback
 from base_kam_model import BaseModel
 from const import DATA_PATH, SENSOR_LIST, VIDEO_LIST, TARGETS_LIST
 
-logging.basicConfig(level=logging.INFO)
 gpus = tf.config.experimental.list_physical_devices('GPU')
 for gpu in gpus:
     tf.config.experimental.set_memory_growth(gpu, True)
@@ -39,8 +38,9 @@ class DXKamModel(BaseModel):
                   callbacks=[ErrorVisualization(x_validation, y_validation)])
         return model
 
-    def predict(self, model, y_test):
-        return model.predict(y_test, verbose=1)
+    @staticmethod
+    def predict(model, x_test):
+        return model.predict(x_test, verbose=1)
 
 
 class ErrorVisualization(Callback):
@@ -50,20 +50,20 @@ class ErrorVisualization(Callback):
         self.Y_test = y_test
 
     def on_train_begin(self, logs=None):
-        y_test = self.Y_test
+        y_true = self.Y_test
         y_pred = self.model.predict(self.X_test)
-        BaseModel.representative_profile_curves(y_test, y_pred, {})
+        BaseModel.representative_profile_curves(y_true, y_pred, {})
 
     def on_epoch_begin(self, epoch, logs=None):
-        y_test = self.Y_test
+        y_true = self.Y_test
         y_pred = self.model.predict(self.X_test)
-        scores = BaseModel.get_all_scores(y_test, y_pred)
+        scores = BaseModel.get_all_scores(y_true, y_pred)
         logging.info("initial scores: {}".format(scores))
 
     def on_epoch_end(self, epoch, logs=None):
-        y_test = self.Y_test
+        y_true = self.Y_test
         y_pred = self.model.predict(self.X_test)
-        BaseModel.representative_profile_curves(y_test, y_pred, {})
+        BaseModel.representative_profile_curves(y_true, y_pred, {})
 
 
 def gru_model(input_shape):

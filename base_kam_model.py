@@ -1,7 +1,7 @@
 import json
 import h5py
 import numpy as np
-import logging
+from customized_logger import logger as logging
 from const import SUBJECTS, VIDEO_DATA_FIELDS, IMU_DATA_FIELDS, TARGETS_LIST
 from sklearn.metrics import r2_score, mean_squared_error
 from typing import List
