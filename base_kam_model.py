@@ -7,6 +7,7 @@ from sklearn.metrics import r2_score, mean_squared_error
 from typing import List
 import matplotlib.pyplot as plt
 from sklearn.preprocessing import MinMaxScaler, StandardScaler
+import sklearn
 
 
 class BaseModel:
@@ -28,6 +29,35 @@ class BaseModel:
         return data[:, :, x_field_col_loc], data[:, :, y_field_col_loc]
 
     def param_tuning(self, train_sub_ids: List[int], validate_sub_ids: List[int], test_sub_ids: List[int]):
+        logging.info('Train the model with subject ids: {}'.format(train_sub_ids))
+        logging.info('Test the model with subject ids: {}'.format(test_sub_ids))
+        if len(validate_sub_ids) > 0:
+            logging.info('Validate the model with subject ids: {}'.format(validate_sub_ids))
+        logging.info('\tsubject\t\t\t\t\tR2\t\t\tRMSE\tmean_error\tmean_absolute_error\t\t')
+        model = self.preprocess_and_train(train_sub_ids, validate_sub_ids)
+        self.model_evaluation(model, test_sub_ids)
+
+    def cross_validation(self, sub_ids: List[int], test_set_sub_num=1):
+        logging.info('Cross validation with subject ids: {}'.format(sub_ids))
+        sub_num = len(sub_ids)
+        folder_num = int(np.ceil(sub_num / test_set_sub_num))  # the number of cross validation times
+        model_list, test_sub_ids_list = [], []
+        for i_folder in range(folder_num):
+            test_sub_ids = sub_ids[test_set_sub_num * i_folder:test_set_sub_num * (i_folder + 1)]
+            test_sub_ids_list.append(test_sub_ids)
+            train_sub_ids = list(np.setdiff1d(sub_ids, test_sub_ids))
+            test_sub_names = [sub_name for sub_index, sub_name in enumerate(SUBJECTS) if sub_index in test_sub_ids]
+            logging.info('Current subjects for test: {}'.format(test_sub_names))
+            model_list.append(self.preprocess_and_train(train_sub_ids, []))
+
+        logging.info('\tsubject\t\t\t\t\tR2\t\t\tRMSE\tmean_error\tmean_absolute_error\t\t')
+        result_all = {}
+        for i_folder in range(folder_num):
+            # separate training and testing so that the printed log would not get mixed.
+            folder_result = self.model_evaluation(model_list[i_folder], test_sub_ids_list[i_folder])
+            result_all.update(folder_result)
+
+    def preprocess_and_train(self, train_sub_ids: List[int], validate_sub_ids: List[int]):
         """
         train_sub_ids: a list of subject id for model training
         validate_sub_ids: a list of subject id for model validation
@@ -36,37 +66,53 @@ class BaseModel:
         train_sub_names = [sub_name for sub_index, sub_name in enumerate(SUBJECTS) if sub_index in train_sub_ids]
         train_data_list = [self._data_all_sub[sub_name] for sub_name in train_sub_names]
 
-        validate_sub_names = [sub_name for sub_index, sub_name in enumerate(SUBJECTS) if sub_index in validate_sub_ids]
-        validation_data_list = [self._data_all_sub[sub_name] for sub_name in validate_sub_names]
+        train_data = np.concatenate(train_data_list, axis=0)
+        train_data = sklearn.utils.shuffle(train_data, random_state=0)
+        x_train, y_train = self._depart_input_and_output(train_data)
+        x_train, y_train, train_step_lens = self.preprocess_train_data(x_train, y_train)
 
+        if len(validate_sub_ids) > 0:
+            validate_sub_names = [sub_name for sub_index, sub_name in enumerate(SUBJECTS) if sub_index in validate_sub_ids]
+            validation_data_list = [self._data_all_sub[sub_name] for sub_name in validate_sub_names]
+            validation_data = np.concatenate(validation_data_list, axis=0)
+            x_validation, y_validation = self._depart_input_and_output(validation_data)
+            x_validation, y_validation, validation_step_lens = self.preprocess_validation_test_data(x_validation,
+                                                                                                    y_validation)
+            model = self.train_model(x_train, y_train, train_step_lens, x_validation, y_validation, validation_step_lens)
+        else:
+            model = self.train_model(x_train, y_train, train_step_lens, None, None, None)
+        return model
+            
+    def model_evaluation(self, model, test_sub_ids: List[int]):
         test_sub_names = [sub_name for sub_index, sub_name in enumerate(SUBJECTS) if sub_index in test_sub_ids]
         test_data_list = [self._data_all_sub[sub_name] for sub_name in test_sub_names]
-
-        logging.info('Train the model with subjects: {}'.format(train_sub_names))
-        logging.info('Validate the model with subjects: {}'.format(validate_sub_names))
-        logging.info('Test the model with subjects: {}'.format(test_sub_names))
-        train_data = np.concatenate(train_data_list, axis=0)
-        validation_data = np.concatenate(validation_data_list, axis=0)
-
-        np.random.seed(0)
-        np.random.shuffle(train_data)
-
-        x_train, y_train = self._depart_input_and_output(train_data)
-        x_train, y_train = self.preprocess_train_data(x_train, y_train)
-        x_validation, y_validation = self._depart_input_and_output(validation_data)
-        x_validation, y_validation = self.preprocess_validation_test_data(x_validation, y_validation)
-        model = self.train_model(x_train, y_train, x_validation, y_validation)
+        test_results = {}
         for test_sub_id, test_sub_name in enumerate(test_sub_names):
             test_sub_data = test_data_list[test_sub_id]
             test_sub_x, test_sub_y = self._depart_input_and_output(test_sub_data)
-            test_sub_x, test_sub_y = self.preprocess_validation_test_data(test_sub_x, test_sub_y)
-            pred_sub_y = self.predict(model, test_sub_x)
-            test_results = {test_sub_name: self.get_all_scores(
-                test_sub_y, pred_sub_y)}
-            logging.info("for now, the final test result is {}".format(test_results))
+            test_sub_x, test_sub_y, test_step_lens = self.preprocess_validation_test_data(test_sub_x, test_sub_y)
+            pred_sub_y = self.predict(model, test_sub_x, test_step_lens)
+            test_results[test_sub_name] = self.get_all_scores(test_sub_y, pred_sub_y)
+            sub_results = test_results[test_sub_name]
+            logging.info("\t{:17}\t{:7.2f}\t {:7.2f}\t{:7.2f}\t\t{:7.2f}\t\t\t\t\t".format(
+                test_sub_name, sub_results['r2'], sub_results['rmse'], sub_results['mean_error'], sub_results['mean_absolute_error']))
             self.representative_profile_curves(test_sub_y, pred_sub_y, test_results)
             self.customized_analysis(test_sub_y, pred_sub_y, test_results)
-        plt.show()
+        return test_results
+
+    @staticmethod
+    def _get_step_len(data, feature_col_num=0):
+        """
+
+        :param data: Numpy array, 3d (step, sample, feature)
+        :param feature_col_num: int, feature column id for step length detection. Different id would probably return
+               the same results
+        :return:
+        """
+        data_the_feature = data[:, :, feature_col_num]
+        nan_loc = np.isnan(data_the_feature)
+        data_len = np.sum(~nan_loc, axis=1)
+        return data_len
 
     @staticmethod
     def customized_analysis(test_sub_y, pred_sub_y, test_results):
@@ -75,28 +121,30 @@ class BaseModel:
 
     def preprocess_train_data(self, x_train, y_train):
         original_shape = x_train.shape
+        train_step_lens = self._get_step_len(x_train)
         x_train = x_train.reshape([-1, x_train.shape[2]])
         x_train = self.scalar.fit_transform(x_train)
         x_train = x_train.reshape(original_shape)
         x_train[np.isnan(x_train)] = 0
         y_train[np.isnan(y_train)] = 0
-        return x_train, y_train
+        return x_train, y_train, train_step_lens
 
     def preprocess_validation_test_data(self, x, y):
         original_shape = x.shape
+        step_lens = self._get_step_len(x)
         x = x.reshape([-1, x.shape[2]])
         x = self.scalar.transform(x)
         x = x.reshape(original_shape)
         x[np.isnan(x)] = 0
         y[np.isnan(y)] = 0
-        return x, y
+        return x, y, step_lens
 
     @staticmethod
-    def train_model(x_train, y_train, x_validation, y_validation):
+    def train_model(x_train, y_train, train_step_lens, x_validation, y_validation, validation_step_lens):
         raise RuntimeError('Method not implemented')
 
     @staticmethod
-    def predict(model, x_test):
+    def predict(model, x_test, test_step_lens):
         raise RuntimeError('Method not implemented')
 
     @staticmethod
@@ -120,7 +168,8 @@ class BaseModel:
         diff = y_pred - y_true
         mean_error = np.mean(diff, axis=1)
         rmse = np.mean(diff ** 2, axis=1) ** 0.5
-        r2 = np.array([r2_score(y_pred[i, y_true[i, :] != 0], y_true[i, y_true[i, :] != 0])  # y_pred[i, :] != 0 kick padding zeroes
+        r2 = np.array([r2_score(y_pred[i, y_true[i, :] != 0], y_true[i, y_true[i, :] != 0])
+                       # y_pred[i, :] != 0 kick padding zeroes
                        for i in range(y_pred.shape[0])])
         mean_absolute_error = np.mean(abs(diff), axis=1)
 
@@ -152,4 +201,3 @@ class BaseModel:
         axs[1, 1].set_title("General Predicting status")
         plt.tight_layout()
         plt.show(block=False)
-

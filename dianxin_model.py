@@ -25,7 +25,7 @@ class DXKamModel(BaseModel):
         BaseModel.__init__(self, os.path.join(DATA_PATH, data_file), x_fields, y_fields)
         self.model_callback = model_callback
 
-    def train_model(self, x_train, y_train, x_validation, y_validation):
+    def train_model(self, x_train, y_train, train_step_lens, x_validation, y_validation, validation_step_lens):
         # TODO: feed IMU data fields and Video data fields into two separated network at the beginning.
         shape = x_train.shape[1:]
         model = self.model_callback(shape)
@@ -34,12 +34,11 @@ class DXKamModel(BaseModel):
         # Allocation of 1823325480 exceeds 10% of free system memory.
         # This is because you batch size is so large. Try to use 20 or similar.
         model.fit(x_train, y_train, validation_data=(x_validation, y_validation), shuffle=True, batch_size=50,
-                  epochs=30, verbose=1,
-                  callbacks=[ErrorVisualization(x_validation, y_validation)])
+                  epochs=30, verbose=1, callbacks=[ErrorVisualization(x_validation, y_validation)])
         return model
 
     @staticmethod
-    def predict(model, x_test):
+    def predict(model, x_test, test_step_lens):
         return model.predict(x_test, verbose=1)
 
 
