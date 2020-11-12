@@ -1,14 +1,13 @@
 import json
+from typing import List
 import h5py
 import numpy as np
 from customized_logger import logger as logging
 from const import SUBJECTS, VIDEO_DATA_FIELDS, IMU_DATA_FIELDS, TARGETS_LIST
-from sklearn.metrics import r2_score, mean_squared_error
-from typing import List
 import matplotlib.pyplot as plt
 from sklearn.preprocessing import MinMaxScaler, StandardScaler
-import sklearn
-
+from sklearn.utils import shuffle
+from sklearn.metrics import r2_score, mean_squared_error
 
 class BaseModel:
     def __init__(self, data_path, x_fields=IMU_DATA_FIELDS + VIDEO_DATA_FIELDS, y_fields=TARGETS_LIST,
@@ -67,20 +66,19 @@ class BaseModel:
         train_data_list = [self._data_all_sub[sub_name] for sub_name in train_sub_names]
 
         train_data = np.concatenate(train_data_list, axis=0)
-        train_data = sklearn.utils.shuffle(train_data, random_state=0)
+        train_data = shuffle(train_data, random_state=0)
         x_train, y_train = self._depart_input_and_output(train_data)
-        x_train, y_train, train_step_lens = self.preprocess_train_data(x_train, y_train)
+        x_train, y_train = self.preprocess_train_data(x_train, y_train)
 
-        if len(validate_sub_ids) > 0:
-            validate_sub_names = [sub_name for sub_index, sub_name in enumerate(SUBJECTS) if sub_index in validate_sub_ids]
-            validation_data_list = [self._data_all_sub[sub_name] for sub_name in validate_sub_names]
-            validation_data = np.concatenate(validation_data_list, axis=0)
+        validate_sub_names = [sub_name for sub_index, sub_name in enumerate(SUBJECTS) if sub_index in validate_sub_ids]
+        validation_data_list = [self._data_all_sub[sub_name] for sub_name in validate_sub_names]
+
+        validation_data = np.concatenate(validation_data_list, axis=0) if validation_data_list else None
+        x_validation, y_validation = [None] * 2
+        if validation_data is not None:
             x_validation, y_validation = self._depart_input_and_output(validation_data)
-            x_validation, y_validation, validation_step_lens = self.preprocess_validation_test_data(x_validation,
-                                                                                                    y_validation)
-            model = self.train_model(x_train, y_train, train_step_lens, x_validation, y_validation, validation_step_lens)
-        else:
-            model = self.train_model(x_train, y_train, train_step_lens, None, None, None)
+            x_validation, y_validation = self.preprocess_validation_test_data(x_validation, y_validation)
+        model = self.train_model(x_train, y_train, x_validation, y_validation)
         return model
             
     def model_evaluation(self, model, test_sub_ids: List[int]):
@@ -90,8 +88,8 @@ class BaseModel:
         for test_sub_id, test_sub_name in enumerate(test_sub_names):
             test_sub_data = test_data_list[test_sub_id]
             test_sub_x, test_sub_y = self._depart_input_and_output(test_sub_data)
-            test_sub_x, test_sub_y, test_step_lens = self.preprocess_validation_test_data(test_sub_x, test_sub_y)
-            pred_sub_y = self.predict(model, test_sub_x, test_step_lens)
+            test_sub_x, test_sub_y = self.preprocess_validation_test_data(test_sub_x, test_sub_y)
+            pred_sub_y = self.predict(model, test_sub_x)
             test_results[test_sub_name] = self.get_all_scores(test_sub_y, pred_sub_y)
             sub_results = test_results[test_sub_name]
             logging.info("\t{:17}\t{:7.2f}\t {:7.2f}\t{:7.2f}\t\t{:7.2f}\t\t\t\t\t".format(
@@ -101,50 +99,34 @@ class BaseModel:
         return test_results
 
     @staticmethod
-    def _get_step_len(data, feature_col_num=0):
-        """
-
-        :param data: Numpy array, 3d (step, sample, feature)
-        :param feature_col_num: int, feature column id for step length detection. Different id would probably return
-               the same results
-        :return:
-        """
-        data_the_feature = data[:, :, feature_col_num]
-        nan_loc = np.isnan(data_the_feature)
-        data_len = np.sum(~nan_loc, axis=1)
-        return data_len
-
-    @staticmethod
     def customized_analysis(test_sub_y, pred_sub_y, test_results):
         """ Customized data visualization"""
         pass
 
     def preprocess_train_data(self, x_train, y_train):
         original_shape = x_train.shape
-        train_step_lens = self._get_step_len(x_train)
         x_train = x_train.reshape([-1, x_train.shape[2]])
         x_train = self.scalar.fit_transform(x_train)
         x_train = x_train.reshape(original_shape)
         x_train[np.isnan(x_train)] = 0
         y_train[np.isnan(y_train)] = 0
-        return x_train, y_train, train_step_lens
+        return x_train, y_train
 
     def preprocess_validation_test_data(self, x, y):
         original_shape = x.shape
-        step_lens = self._get_step_len(x)
         x = x.reshape([-1, x.shape[2]])
         x = self.scalar.transform(x)
         x = x.reshape(original_shape)
         x[np.isnan(x)] = 0
         y[np.isnan(y)] = 0
-        return x, y, step_lens
+        return x, y
 
     @staticmethod
-    def train_model(x_train, y_train, train_step_lens, x_validation, y_validation, validation_step_lens):
+    def train_model(x_train, y_train, x_validation=None, y_validation=None):
         raise RuntimeError('Method not implemented')
 
     @staticmethod
-    def predict(model, x_test, test_step_lens):
+    def predict(model, x_test):
         raise RuntimeError('Method not implemented')
 
     @staticmethod
