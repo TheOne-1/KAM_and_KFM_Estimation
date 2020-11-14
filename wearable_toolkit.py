@@ -265,8 +265,8 @@ class ViconCsvReader:
             if len(missing_points) == 0:  # All the marker exist
                 continue
             if len(coordinate_points) >= 3:
-                origin, x, y, z = wearable_math.generat_coordinate(calibrate_makers[coordinate_points, :])
-                origin_m, x_m, y_m, z_m = wearable_math.generat_coordinate(marker_matrix[coordinate_points, :])
+                origin, x, y, z = wearable_math.generate_coordinate(calibrate_makers[coordinate_points, :])
+                origin_m, x_m, y_m, z_m = wearable_math.generate_coordinate(marker_matrix[coordinate_points, :])
                 for missing_point in missing_points.tolist():
                     relative_point = wearable_math.get_relative_position(origin, x, y, z,
                                                                          calibrate_makers[missing_point, :])
@@ -341,8 +341,8 @@ class SageCsvReader:
     def get_walking_strike_off(self, strike_delay, off_delay, max_step_length, cut_off_fre_strike_off=None,
                                verbose=False):
         """ Reliable algorithm used in TNSRE first submission"""
-        gyr_thd = np.rad2deg(1.7)
-        acc_thd = 0.8
+        gyr_thd = np.rad2deg(2.6)
+        acc_thd = 1.2
         max_distance = self.sample_rate * 2  # distance from stationary phase should be smaller than 2 seconds
 
         acc_data = np.array(
@@ -547,13 +547,12 @@ def translate_step_event_to_step_id(events_dict, step_type, max_step_length):
     # FILTER EVENTS
     r_steps = []
     event_list = sorted(
-        [[i, event_type] for event_type in ['RON', 'ROFF'] for i in events_dict[event_type]],
-        key=lambda x: x[0])
+        [[i, event_type] for event_type in ['RON', 'ROFF'] for i in events_dict[event_type]], key=lambda x: x[0])
     event_index_dict = {i: event_type for i, event_type in event_list}
     event_list = [i[0] for i in event_list]
     step_type_to_event = {'swing+stance': 'ROFF', 'stance+swing': 'RON'}
     target_event = events_dict[step_type_to_event[step_type]]
-    for i in range(10, len(target_event) - 1):
+    for i in range(10, len(target_event) - 5):
         event_index = event_list.index(target_event[i])
         prev_event_type = event_index_dict[event_list[event_index - 1]]
         current_event_type = event_index_dict[event_list[event_index]]
@@ -562,7 +561,7 @@ def translate_step_event_to_step_id(events_dict, step_type, max_step_length):
             continue
         current_step_length = target_event[i] - target_event[i - 1]
         prev_step_length = target_event[i - 1] - target_event[i - 2]
-        if 1.5 * prev_step_length > current_step_length > 0.66 * prev_step_length \
+        if 1.33 * prev_step_length > current_step_length > 0.75 * prev_step_length \
                 and current_step_length < max_step_length:
             r_steps.append([target_event[i - 1], target_event[i]])
 

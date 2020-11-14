@@ -1,11 +1,9 @@
 import os
 TRIALS = ['baseline', 'fpa', 'step_width', 'trunk_sway']
 STATIC_TRIALS = ['static_back', 'static_side']
-SUBJECTS = ['s001_tantian', 's002_wangdianxin', 's003_linyuan', 's004_ouyangjue', 's005_tangansheng', 's006_xusen',
-            's007_zuogangao',
-            's008_liyu', 's009_sunyubo', 's010_handai', 's011_wuxingze', 's012_likaixiang', 's013_zhangxiaohan',
-            's014_maqichao',
-            's015_weihuan', 's016_houjikang']
+SUBJECTS = ['s002_wangdianxin', 's004_ouyangjue', 's005_tangansheng', 's006_xusen', 's007_zuogangao', 's008_liyu',
+            's009_sunyubo', 's010_handai', 's011_wuxingze', 's012_likaixiang', 's013_zhangxiaohan','s014_maqichao',
+            's015_weihuan']  # , 's003_linyuan', 's001_tantian', 's016_houjikang']
 SEGMENT_DEFITIONS = {
     'L_FOOT': ['LFCC', 'LFM5', 'LFM2'],
     'R_FOOT': ['RFCC', 'RFM5', 'RFM2'],
@@ -28,9 +26,14 @@ VIDEO_DATA_FIELDS = [VIDEO + "_" + position + "_" + angle for VIDEO in VIDEO_LIS
                      for position in ["x", "y", "probability"] for angle in ["90", "180"]]
 
 SAMPLES_BEFORE_STEP = 40
+KAM_DROPS = [DROP_NONE, DROP_NEGATIVE] = range(2)
+KAM_DROP = DROP_NONE
 PADDING_MODES = [PADDING_NAN, PADDING_NEXT_STEP] = range(2)
 PADDING_MODE = PADDING_NAN
 DATA_PATH = os.environ.get('KAM_DATA_PATH')
+EVENT_COLUMN = 'Event'
+RKAM_COLUMN = 'RIGHT_KNEE_ADDUCTION_MOMENT'
+RFORCE_Z_COLUMN = 'plate_2_force_z'
 TARGETS_LIST = ["RIGHT_KNEE_ADDUCTION_MOMENT"]
 
 # all the fields of combined data

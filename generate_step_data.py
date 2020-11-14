@@ -3,50 +3,86 @@ import pandas as pd
 import numpy as np
 import h5py
 import json
+import matplotlib.pyplot as plt
+from customized_logger import logger as logging
 from const import TRIALS, SUBJECTS, ALL_FIELDS
-from const import SAMPLES_BEFORE_STEP, DATA_PATH, PADDING_MODE, PADDING_NAN, PADDING_NEXT_STEP
+from const import SAMPLES_BEFORE_STEP, DATA_PATH
+from const import PADDING_MODE, PADDING_NAN, PADDING_NEXT_STEP
+from const import DROP_NONE, DROP_NEGATIVE, KAM_DROP
+from const import RFORCE_Z_COLUMN, RKAM_COLUMN, EVENT_COLUMN
 
 
 def filter_and_clip_data(middle_data, max_len):
     # count the maximum time steps for each gati step
-    def form_array_list(array, column):
-        target_ids = array[column].drop_duplicates().dropna()
+    def form_array_list(array, abnormal_ids):
+        target_ids = array[EVENT_COLUMN].drop_duplicates().dropna()
         skip_list = list(target_ids[target_ids < 0])
         if skip_list:
-            print('Containing corrupted data in steps: {}. These will be dropped out'.format(skip_list))
+            logging.debug('Containing corrupted data in steps: {}. These will be dropped out'.format(skip_list))
         for _id in target_ids:
             if -abs(_id) in skip_list:
                 continue
             # fetch data before a step
-            c = array[array[column] == _id].index
-            b_min = c.min() - SAMPLES_BEFORE_STEP
+            stance_swing_step = array[array[EVENT_COLUMN] == _id]
+            step_begin = stance_swing_step.index.min() - SAMPLES_BEFORE_STEP
             if PADDING_MODE == PADDING_NAN:
-                b_max = c.max()
+                step_end = stance_swing_step.index.max()
             elif PADDING_MODE == PADDING_NEXT_STEP:
-                b_max = c.min() + max_len
+                step_end = stance_swing_step.index.min() + max_len
             else:
                 raise RuntimeError("PADDING_MODE is not appropriate.")
-            if b_min < array.index.min():
+            if step_begin < array.index.min():
                 continue
-            b = array.loc[b_min:b_max, :]
-            if (b[column] < 0).any():
+            expected_step = array.loc[step_begin:step_end, :].copy()
+            if (expected_step[EVENT_COLUMN] < 0).any():
                 continue
-            b.index = range(b.shape[0])
-            b = b.reindex(range(max_len + SAMPLES_BEFORE_STEP))
-            yield b
+            if KAM_DROP == DROP_NEGATIVE:
+                # -20: swing phase might contain stance phase of next step, in which case, force might be positive.
+                stance_swing_step_cliped = stance_swing_step.iloc[:-20]
+                stance_phase = stance_swing_step_cliped[stance_swing_step_cliped[RFORCE_Z_COLUMN] < -20]
+                stance_phase_min_index = stance_phase.index.min()
+                stance_phase_max_index = stance_phase.index.max()
+                stance_phase_mid_index = (stance_phase_min_index + stance_phase_max_index) // 2
+                stance_phase_peak_index = stance_phase.loc[:stance_phase_mid_index, RFORCE_Z_COLUMN].idxmin()
+                stance_phase = stance_swing_step_cliped.loc[stance_phase_min_index:stance_phase_max_index]
+                if (stance_phase.loc[stance_phase_peak_index:stance_phase_mid_index, RKAM_COLUMN] < 0.).any():
+                    abnormal_ids.append(_id)
+                    if is_verbose:
+                        plt.figure()
+                        plt.plot(stance_swing_step[RKAM_COLUMN].values)
+                        plt.show()
+                    continue
+                kam_keep_begin = stance_phase[stance_phase[RKAM_COLUMN] < 0.].loc[:stance_phase_peak_index].index.max()
+                if np.isnan(kam_keep_begin):
+                    kam_keep_begin = stance_phase[RKAM_COLUMN].loc[:stance_phase_peak_index].idxmin()
+                    assert stance_phase_min_index <= kam_keep_begin <= stance_phase_max_index
+                expected_step.loc[:kam_keep_begin, RKAM_COLUMN] = 0.
+                kam_keep_end = stance_phase_max_index
+                expected_step.loc[kam_keep_end:, RKAM_COLUMN] = 0.
+            expected_step.index = range(expected_step.shape[0])
+            expected_step = expected_step.reindex(range(max_len + SAMPLES_BEFORE_STEP))
+            yield expected_step
 
-    step_list = list(form_array_list(middle_data, 'Event'))
-    return step_list
+    ab_ids = []
+    step_list = list(form_array_list(middle_data, ab_ids))
+    return step_list, ab_ids
 
 
 def generate_subject_data():
     # create training data and test data
+    logging.debug("Loading all csv data")
     all_data_dict = {subject + " " + trial: pd.read_csv(os.path.join(DATA_PATH, subject, "combined", trial + ".csv"))
                      for subject in SUBJECTS for trial in TRIALS}
-    max_step_length = max([trial_data['Event'].value_counts().max() for trial_data in all_data_dict.values()])
-    all_data_dict = {subject_trial: filter_and_clip_data(data, max_step_length)
-                     for subject_trial, data in all_data_dict.items()}
-    subject_dict = {subject: [data for trial in TRIALS for data in all_data_dict[subject + " " + trial]]
+    max_step_length = max([trial_data[EVENT_COLUMN].value_counts().max() for trial_data in all_data_dict.values()])
+    subject_trial_dict = {}
+    for subject_trial, data in all_data_dict.items():
+        logging.debug("{} is now in filter and clip process".format(subject_trial))
+        subject_trial_dict[subject_trial], abnormal_steps = filter_and_clip_data(data, max_step_length)
+        if abnormal_steps:
+            logging.warning(
+                "In {}, Total count of abnormal gait ids with KAM is negative is: {}.The details is {}.".format(
+                    subject_trial, len(abnormal_steps), abnormal_steps))
+    subject_dict = {subject: [data for trial in TRIALS for data in subject_trial_dict[subject + " " + trial]]
                     for subject in SUBJECTS}
     return subject_dict
 
@@ -64,7 +100,17 @@ def generate_step_data(export_path):
 
 
 if __name__ == "__main__":
+    is_verbose = False
+    KAM_DROP = DROP_NONE
     PADDING_MODE = PADDING_NAN
     generate_step_data('40samples+stance_swing+padding_nan.h5')
+    KAM_DROP = DROP_NONE
     PADDING_MODE = PADDING_NEXT_STEP
     generate_step_data('40samples+stance_swing+padding_next_step.h5')
+    KAM_DROP = DROP_NEGATIVE
+    PADDING_MODE = PADDING_NAN
+    generate_step_data('40samples+stance_swing+drop_negative.h5')
+    KAM_DROP = DROP_NEGATIVE
+    PADDING_MODE = PADDING_NAN
+    TRIALS = ['baseline', 'fpa', 'step_width']
+    generate_step_data('40samples+stance_swing+kick_out_trunksway.h5')

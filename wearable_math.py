@@ -1,6 +1,6 @@
 import numpy as np
 
-def generat_coordinate(points):
+def generate_coordinate(points):
     origin = points[0]
     x_direction = points[1] - points[0]
     x_direction = x_direction / np.linalg.norm(x_direction)
@@ -19,4 +19,4 @@ def get_relative_position(origin, x_axis, y_axis, z_axis, point):
     return np.array([x, y, z])
 
 def get_world_position(origin, x_axis, y_axis, z_axis, relative_point):
-    return origin + relative_point[0] * x_axis + relative_point[1] * y_axis + relative_point[2] * z_axis;
+    return origin + relative_point[0] * x_axis + relative_point[1] * y_axis + relative_point[2] * z_axis

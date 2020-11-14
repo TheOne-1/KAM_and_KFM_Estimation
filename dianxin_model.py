@@ -35,16 +35,17 @@ class DXKamModel(BaseModel):
         input_shape = x_train.shape[1:]
         self.model = self.model_callback(input_shape, LSTM)
         validation_data = None if x_validation is None else (x_validation, y_validation)
-        self.model.fit(x_train, y_train, validation_data=validation_data, shuffle=True, batch_size=10,
+        self.model.fit(x_train, y_train, validation_data=validation_data, shuffle=True, batch_size=30,
                        epochs=50, verbose=1, callbacks=[ErrorVisualization(x_validation, y_validation),
-                                                        ModelCheckpoint("val_best.h5", monitor='val_loss', verbose=1,
+                                                        ModelCheckpoint(os.path.join(DATA_PATH, "val_best.h5"),
+                                                                        monitor='val_loss', verbose=1,
                                                                         save_best_only=True, mode='max'),
                                                         ReduceLROnPlateau('val_loss', factor=0.1, patience=5)])
         return self.model
 
     @staticmethod
     def predict(model, x_test):
-        model.load_weights("val_best.h5")
+        model.load_weights(os.path.join(DATA_PATH, "val_best.h5"))
         return model.predict(x_test, verbose=1)
 
 
@@ -143,7 +144,6 @@ class DXKamModelWithAutoencoder(BaseModel):
 
 
 if __name__ == "__main__":
-    GOOD_SUBJECTS = [1, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14]
-    dx_model = DXKamModel('40samples+stance_swing+padding_nan.h5', IMU_DATA_FIELDS,
+    dx_model = DXKamModel('40samples+stance_swing+drop_negative.h5', IMU_DATA_FIELDS,
                           TARGETS_LIST)
-    dx_model.param_tuning(GOOD_SUBJECTS[0:-1], GOOD_SUBJECTS[-1:], GOOD_SUBJECTS[-1:])
+    dx_model.param_tuning(range(11), range(11, 13), range(11, 13))
