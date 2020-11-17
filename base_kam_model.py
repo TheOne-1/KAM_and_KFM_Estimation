@@ -6,7 +6,7 @@ import prettytable as pt
 from customized_logger import logger as logging
 from const import SUBJECTS, VIDEO_DATA_FIELDS, IMU_DATA_FIELDS, TARGETS_LIST
 import matplotlib.pyplot as plt
-from sklearn.preprocessing import MinMaxScaler, StandardScaler
+from sklearn.preprocessing import MinMaxScaler  # , StandardScaler
 from sklearn.utils import shuffle
 from sklearn.metrics import r2_score, mean_squared_error
 
@@ -29,7 +29,8 @@ class BaseModel:
         y_field_col_loc = [self.data_columns.index(field_name) for field_name in self._y_fields]
         return data[:, :, x_field_col_loc], data[:, :, y_field_col_loc]
 
-    def preprocess_train_evaluation(self, train_sub_ids: List[int], validate_sub_ids: List[int], test_sub_ids: List[int]):
+    def preprocess_train_evaluation(self, train_sub_ids: List[int], validate_sub_ids: List[int],
+                                    test_sub_ids: List[int]):
         logging.debug('Train the model with subject ids: {}'.format(train_sub_ids))
         logging.debug('Test the model with subject ids: {}'.format(test_sub_ids))
         logging.debug('Validate the model with subject ids: {}'.format(validate_sub_ids))
@@ -47,7 +48,7 @@ class BaseModel:
             train_sub_ids = list(np.setdiff1d(sub_ids, test_sub_ids))
             test_sub_names = [sub_name for sub_index, sub_name in enumerate(SUBJECTS) if sub_index in test_sub_ids]
             logging.info('Cross validation: Subjects for test: {}'.format(test_sub_names))
-            results += self.preprocess_train_evaluation(train_sub_ids, [], test_sub_ids)
+            results += self.preprocess_train_evaluation(train_sub_ids, test_sub_ids, test_sub_ids)
         tb = pt.PrettyTable()
         for test_result in results:
             tb.field_names = test_result.keys()
@@ -78,7 +79,7 @@ class BaseModel:
             x_validation, y_validation = self.preprocess_validation_test_data(x_validation, y_validation)
         model = self.train_model(x_train, y_train, x_validation, y_validation)
         return model
-            
+
     def model_evaluation(self, model, test_sub_ids: List[int]):
         test_sub_names = [sub_name for sub_index, sub_name in enumerate(SUBJECTS) if sub_index in test_sub_ids]
         test_data_list = [self._data_all_sub[sub_name] for sub_name in test_sub_names]
@@ -89,16 +90,20 @@ class BaseModel:
             test_sub_x, test_sub_y = self.preprocess_validation_test_data(test_sub_x, test_sub_y)
             pred_sub_y = self.predict(model, test_sub_x)
             sub_result = {'subject': test_sub_name}
-            sub_result.update(self.get_all_scores(test_sub_y, pred_sub_y))
+            all_scores = self.get_all_scores(test_sub_y, pred_sub_y)
+            self.customized_analysis(test_sub_y, pred_sub_y)
+            for target_col, scores in enumerate(all_scores):
+                target = self._y_fields[target_col]
+                self.representative_profile_curves(test_sub_y[:, :, target_col], pred_sub_y[:, :, target_col],
+                                                   "test result for {}, {}".format(test_sub_name, target),
+                                                   scores['r2'])
+                for score_name, score in scores.items():
+                    sub_result['_'.join([target, score_name])] = np.round(np.mean(score), 3)
             test_results.append(sub_result)
-            logging.debug("\t{:17}\t{:7.2f}\t {:7.2f}\t{:7.2f}\t\t{:7.2f}\t\t\t\t\t".format(
-                test_sub_name, sub_result['r2'], sub_result['rmse'], sub_result['mean_error'], sub_result['mean_absolute_error']))
-            self.representative_profile_curves(test_sub_y, pred_sub_y, "test result for {}".format(test_sub_name))
-            self.customized_analysis(test_sub_y, pred_sub_y, sub_result)
         return test_results
 
     @staticmethod
-    def customized_analysis(test_sub_y, pred_sub_y, test_results):
+    def customized_analysis(test_sub_y, pred_sub_y):
         """ Customized data visualization"""
         pass
 
@@ -129,40 +134,41 @@ class BaseModel:
         raise RuntimeError('Method not implemented')
 
     @staticmethod
-    def get_all_scores(y_true, y_pred, num_of_digits=3):
-        y_true, y_pred = np.ravel(y_true), np.ravel(y_pred)
-        y_pred = y_pred[y_true != 0.]  # remove those padding zeros
-        y_true = y_true[y_true != 0.]  # remove those padding zeros
-        diffs = y_true - y_pred
-        r2 = np.round(r2_score(y_true, y_pred), num_of_digits)
-        rmse = np.round(np.sqrt(mean_squared_error(y_true, y_pred)), num_of_digits)
-        mean_error = np.round(np.mean(diffs, axis=0), num_of_digits)
-        mean_absolute_error = np.round(np.mean(abs(diffs)), num_of_digits)
-        scores = {'r2': r2, 'rmse': rmse, 'mean_error': mean_error, 'mean_absolute_error': mean_absolute_error}
+    def get_all_scores(y_true, y_pred, weight=None):
+        scores = []
+        for col in range(y_true.shape[2]):
+            y_pred_one_target = y_pred[:, :, col]
+            y_true_one_target = y_true[:, :, col]
+            r2 = np.array([r2_score(y_pred_one_target[i, :], y_true_one_target[i, :],
+                                    sample_weight=None if weight is None else weight[i, :])
+                           for i in range(y_pred_one_target.shape[0])])
+            rmse = np.array([np.sqrt(mean_squared_error(y_pred_one_target[i, :], y_true_one_target[i, :],
+                                                        sample_weight=None if weight is None else weight[i, :]))
+                             for i in range(y_pred_one_target.shape[0])])
+            mae = np.array([np.average(abs((y_pred_one_target[i, :] - y_true_one_target[i, :])),
+                                       weights=None if weight is None else weight[i, :])
+                            for i in range(y_pred_one_target.shape[0])])
+            scores.append({'r2': r2, 'rmse': rmse, 'mae': mae})
         return scores
 
     @staticmethod
-    def representative_profile_curves(y_true, y_pred, title):
-        y_pred = y_pred[:, :, 0]
-        y_true = y_true[:, :, 0]
-        axis_x = range(y_true.shape[1])
-        diff = y_pred - y_true
-        mean_error = np.mean(diff, axis=1)
-        rmse = np.mean(diff ** 2, axis=1) ** 0.5
-        r2 = np.array([r2_score(y_pred[i, y_true[i, :] != 0], y_true[i, y_true[i, :] != 0])
-                       # y_pred[i, :] != 0 kick padding zeroes
-                       for i in range(y_pred.shape[0])])
-        mean_absolute_error = np.mean(abs(diff), axis=1)
-
+    def representative_profile_curves(y_true, y_pred, title, metric):
+        """
+        y_true: 2-dimensional array
+        y_pred: 2-dimensional array
+        title: graph title
+        metric: 1-dimensional array
+        """
         # print r2 worst, median, best result
-        r2_best_index = r2.argmax()
-        r2_worst_index = r2.argmin()
-        r2_mid_index = np.argsort(r2)[len(r2) // 2]
+        best_index = metric.argmax()
+        worst_index = metric.argmin()
+        median_index = np.argsort(metric)[len(metric) // 2]
         fig, axs = plt.subplots(2, 2)
+        plt.title = title
         for sub_index, [sub_title, step_index] in enumerate(
-                [['r2_worst', r2_worst_index], ['r2_mid', r2_mid_index], ['r2_best', r2_best_index]]):
-            axs[sub_index // 2, sub_index % 2].plot(axis_x, y_true[step_index, :], 'g-', label='True_Value')
-            axs[sub_index // 2, sub_index % 2].plot(axis_x, y_pred[step_index, :], 'y-', label='Pred_Value')
+                [['r2_worst', worst_index], ['r2_mid', median_index], ['r2_best', best_index]]):
+            axs[sub_index // 2, sub_index % 2].plot(y_true[step_index, :], 'g-', label='True_Value')
+            axs[sub_index // 2, sub_index % 2].plot(y_pred[step_index, :], 'y-', label='Pred_Value')
             axs[sub_index // 2, sub_index % 2].legend(loc='upper right', fontsize=8)
             axs[sub_index // 2, sub_index % 2].set_title(sub_title)
 
@@ -179,6 +185,6 @@ class BaseModel:
         axs[1, 1].fill_between(axis_x, y_pred_mean - y_pred_std, y_pred_mean + y_pred_std,
                                facecolor='yellow', alpha=0.2)
         axs[1, 1].legend(loc='upper right', fontsize=8)
-        axs[1, 1].set_title(title)
+        axs[1, 1].set_title('general performance')
         plt.tight_layout()
         plt.show(block=False)

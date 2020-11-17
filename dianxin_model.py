@@ -5,17 +5,16 @@ import time
 from customized_logger import logger as logging
 import tensorflow as tf
 import numpy as np
+from random import shuffle
 from keras import Model, Input
-from keras.layers import GRU, LSTM, Activation, Dense, Masking, Conv1D, Bidirectional, GaussianNoise, MaxPooling1D
-from keras.layers import UpSampling1D
+from keras.layers import GRU, LSTM, Dense, Masking, Conv1D, Bidirectional, GaussianNoise, MaxPooling1D
+from keras.layers import UpSampling1D, concatenate, RepeatVector
 import keras.backend as K
 import keras.losses as Kloss
-from sklearn.preprocessing import MinMaxScaler, StandardScaler
-from keras.preprocessing.sequence import pad_sequences
-from keras.models import Sequential
-from keras.callbacks import Callback, ModelCheckpoint, ReduceLROnPlateau
+from sklearn.preprocessing import StandardScaler  # MinMaxScaler,
+from keras.callbacks import Callback, ReduceLROnPlateau
 from base_kam_model import BaseModel
-from const import DATA_PATH, SENSOR_LIST, VIDEO_LIST, TARGETS_LIST
+from const import DATA_PATH, SENSOR_LIST, VIDEO_LIST, TARGETS_LIST, SUBJECT_WEIGHT, SUBJECT_HEIGHT, PHASE
 
 gpus = tf.config.experimental.list_physical_devices('GPU')
 for gpu in gpus:
@@ -30,27 +29,28 @@ VIDEO_DATA_FIELDS = [VIDEO + "_" + position + "_" + angle for VIDEO in VIDEO_LIS
 class DXKamModelWithAutoencoder(BaseModel):
     def __init__(self, data_file, x_fields, y_fields):
         BaseModel.__init__(self, os.path.join(DATA_PATH, data_file), x_fields, y_fields, StandardScaler)
-        # TODO: feed IMU data fields and Video data fields into two separated network at the beginning.
         self.imu_autoencoder = None
 
     def train_model(self, x_train, y_train, x_validation=None, y_validation=None):
-        input_shape = x_train.shape[1:]
-        model = rnn_model(input_shape, LSTM)
+        time_length = x_train.shape[2]
+        model = rnn_model(time_length, LSTM)
         validation_data = None
         callbacks = []
         if x_validation is not None:
-            validation_data = (x_validation, y_validation)
-            # callbacks.append(ErrorVisualization(x_validation, y_validation))
+            validation_data = (
+                {'main_input': x_validation[:, :, :48], 'aux_input': x_validation[:, 0, -2:]}, y_validation)
+            callbacks.append(ErrorVisualization(self, x_validation, y_validation))
             callbacks.append(ReduceLROnPlateau('val_loss', factor=0.1, patience=5))
-        model.fit(x_train, y_train, validation_data=validation_data, shuffle=True, batch_size=30,
-                       epochs=20, verbose=1, callbacks=callbacks)
+        model.fit(x={'main_input': x_train[:, :, :48], 'aux_input': x_train[:, 0, -2:]}, y=y_train,
+                  validation_data=validation_data, shuffle=True, batch_size=30,
+                  epochs=30, verbose=1, callbacks=callbacks)
         return model
 
     def preprocess_train_data(self, x_train, y_train):
         x_train, y_train = BaseModel.preprocess_train_data(self, x_train, y_train)
         input_shape = x_train.shape[1:]
         self.imu_autoencoder = autoencoder(input_shape)
-        self.imu_autoencoder.fit(x_train, x_train, shuffle=True, batch_size=20, epochs=30, verbose=1, callbacks=[PlotVisualization(x_train, x_train)])
+        self.imu_autoencoder.fit(x_train, x_train, shuffle=True, batch_size=20, epochs=30, verbose=1)
         x_train = np.multiply(self.imu_autoencoder.predict(x_train), (x_train != 0.).all(axis=2)[:, :, None])
         return x_train, y_train
 
@@ -59,82 +59,82 @@ class DXKamModelWithAutoencoder(BaseModel):
         x_train = np.multiply(self.imu_autoencoder.predict(x_train), (x_train != 0.).all(axis=2)[:, :, None])
         return x_train, y_train
 
+    def _depart_input_and_output(self, data):
+        self.y_phase_data = data[:, :, [PHASE]]
+        return BaseModel._depart_input_and_output(self, data)
+
     @staticmethod
     def predict(model, x_test):
-        return model.predict(x_test, verbose=1)
+        return model.predict({'main_input': x_test[:, :, :48], 'aux_input': x_test[:, 0, -2:]}, verbose=1)
 
 
 class DXKamModel(BaseModel):
     def __init__(self, data_file, x_fields, y_fields):
         BaseModel.__init__(self, os.path.join(DATA_PATH, data_file), x_fields, y_fields, StandardScaler)
-        # TODO: feed IMU data fields and Video data fields into two separated network at the beginning.
 
     def train_model(self, x_train, y_train, x_validation=None, y_validation=None):
-        input_shape = x_train.shape[1:]
-        model = rnn_model(input_shape, LSTM)
+        time_length = x_train.shape[1]
+        model = rnn_model(time_length, GRU)
         validation_data = None
         callbacks = []
         if x_validation is not None:
-            validation_data = (x_validation, y_validation)
-            callbacks.append(ErrorVisualization(x_validation, y_validation))
-            callbacks.append(ReduceLROnPlateau('val_loss', factor=0.1, patience=5))
-        model.fit(x_train, y_train, validation_data=validation_data, shuffle=True, batch_size=30,
-                       epochs=20, verbose=1, callbacks=callbacks)
+            validation_data = (
+                {'main_input': x_validation[:, :, :48], 'aux_input': x_validation[:, 0, -2:]}, y_validation)
+            callbacks.append(ErrorVisualization(self, x_validation, y_validation))
+            # callbacks.append(ReduceLROnPlateau('val_loss', factor=0.1, patience=5))
+        model.fit(x={'main_input': x_train[:, :, :48], 'aux_input': x_train[:, 0, -2:]}, y=y_train,
+                  validation_data=validation_data, shuffle=True, batch_size=30,
+                  epochs=30, verbose=1, callbacks=callbacks)
         return model
+
+    def _depart_input_and_output(self, data):
+        self.y_phase_data = (data[:, :, self.data_columns.index(PHASE)] == 1.).astype('float32')
+        return BaseModel._depart_input_and_output(self, data)
+
+    def get_all_scores(self, y_true, y_pred, weight=None):
+        return BaseModel.get_all_scores(y_true, y_pred, self.y_phase_data)
 
     @staticmethod
     def predict(model, x_test):
-        return model.predict(x_test, verbose=1)
+        return model.predict({'main_input': x_test[:, :, :48], 'aux_input': x_test[:, 0, -2:]}, verbose=1)
 
 
 class ErrorVisualization(Callback):
-    def __init__(self, x_test, y_test):
+    def __init__(self, model, x_test, y_test):
         Callback.__init__(self)
+        self.dx_model = model
         self.X_test = x_test
         self.Y_test = y_test
 
-    def on_train_begin(self, logs=None):
-        y_true = self.Y_test
-        y_pred = self.model.predict(self.X_test)
-        BaseModel.representative_profile_curves(y_true, y_pred, "Validation results")
-
     def on_epoch_begin(self, epoch, logs=None):
         y_true = self.Y_test
-        y_pred = self.model.predict(self.X_test)
-        scores = BaseModel.get_all_scores(y_true, y_pred)
-        logging.info("initial scores: {}".format(scores))
+        y_pred = self.model.predict({'main_input': self.X_test[:, :, :48], 'aux_input': self.X_test[:, 0, -2:]})
+        scores = self.dx_model.get_all_scores(y_true, y_pred)
+        self.dx_model.representative_profile_curves(y_true[:, :, 0], y_pred[:, :, 0], "Validation results", scores[0]['r2'])
         time.sleep(0.1)  # Make sure the logging is printed first
-
-    def on_epoch_end(self, epoch, logs=None):
-        y_true = self.Y_test
-        y_pred = self.model.predict(self.X_test)
-        BaseModel.representative_profile_curves(y_true, y_pred, "Validation results")
-
-
-class PlotVisualization(Callback):
-    def __init__(self, x_test, y_test):
-        Callback.__init__(self)
-        self.x_test = x_test
-        self.y_test = y_test
-
-    def on_epoch_end(self, epoch, logs=None):
-        y_true = self.y_test
-        y_pred = self.model.predict(self.x_test)
-        BaseModel.representative_profile_curves(y_true, y_pred, "Validation results")
+        logging.info("initial scores: {}".format([{key: np.mean(value) for key, value in score.items()} for score in scores]))
 
 
 # baseline model
-def rnn_model(input_shape, rnn_layer):
-    model = Sequential()
-    model.add(Masking(mask_value=0., input_shape=input_shape))
-    model.add(GaussianNoise(0.01))
-    model.add(Bidirectional(rnn_layer(96, dropout=0.2, return_sequences=True)))
-    model.add(Bidirectional(rnn_layer(30, dropout=0.2, return_sequences=True)))
-    model.add(Bidirectional(rnn_layer(15, dropout=0.2, return_sequences=True)))
-    model.add(Dense(20, use_bias=True, activation='tanh'))
-    model.add(Dense(1, use_bias=True))
+def rnn_model(time_length, rnn_layer):
+    dynamic_input = Input(shape=(time_length, len(IMU_DATA_FIELDS)), name='main_input')
+    x = Masking(mask_value=0.)(dynamic_input)
+    x = GaussianNoise(0.02)(x)
+    x = Bidirectional(rnn_layer(96, dropout=0, return_sequences=True))(x)
+    x = Bidirectional(rnn_layer(30, dropout=0, return_sequences=True))(x)
+    x = Bidirectional(rnn_layer(15, dropout=0, return_sequences=True))(x)
+    static_input = Input(shape=(2,), name='aux_input')
+    x_1 = RepeatVector(time_length)(static_input)
+    x = concatenate([x, x_1])
+    x = Dense(15, use_bias=True, activation='tanh')(x)
+    output = Dense(len(TARGETS_LIST), use_bias=True)(x)
+    model = Model(inputs=[dynamic_input, static_input], outputs=[output])
 
-    model.compile(loss='mean_squared_error', optimizer='adam', metrics=['mae'])
+    def custom_loss(y_true, y_pred):
+        temp = K.cast(y_true >= 0, 'float32')
+        return K.sum(K.abs(y_true - y_pred) * temp * y_true)
+
+    model.compile(loss='mae', optimizer='adam', metrics=['mae'])
     return model
 
 
@@ -144,7 +144,7 @@ def autoencoder(input_shape):
     x = MaxPooling1D(2, strides=2, padding="same")(x)
     x = Conv1D(16, 5, activation="relu", padding="same")(x)
     encoded = MaxPooling1D(2, strides=2, padding="same")(x)
-    encoder = Model(input_ts, encoded)
+    # encoder = Model(input_ts, encoded)
 
     x = Conv1D(16, 5, activation="relu", padding="same")(encoded)
     x = UpSampling1D(2)(x)
@@ -157,6 +157,7 @@ def autoencoder(input_shape):
     convolutional_autoencoder.summary()
 
     optimizer = "adam"
+
     def custom_loss(y_true, y_pred):
         temp = K.cast(y_true != 0, 'float32')
         temp = K.flatten(temp)
@@ -164,14 +165,17 @@ def autoencoder(input_shape):
         y_pred_f = K.flatten(y_pred)
         y_pred_f = y_pred_f * temp
         return Kloss.mean_absolute_error(y_true_f, y_pred_f)
+
     convolutional_autoencoder.compile(optimizer=optimizer, loss=custom_loss)
     return convolutional_autoencoder
 
 
 if __name__ == "__main__":
-    dx_model = DXKamModel('40samples+stance_swing+kick_out_trunksway.h5', IMU_DATA_FIELDS,
+    dx_model = DXKamModel('40samples+stance_swing+padding_nan.h5', IMU_DATA_FIELDS + [SUBJECT_WEIGHT, SUBJECT_HEIGHT],
                           TARGETS_LIST)
-    # dx_model.param_tuning(range(11), range(11, 13), range(11, 13))
-    dx_model.cross_validation(range(13))
+    # dx_model.preprocess_train_evaluation(range(11), range(11, 13), range(11, 13))
+    subject_list = list(range(13))
+    shuffle(subject_list)
+    dx_model.cross_validation(subject_list)
     # dx_model = DXKamModelWithAutoencoder('40samples+stance_swing+kick_out_trunksway.h5', IMU_DATA_FIELDS, TARGETS_LIST)
-    # dx_model.param_tuning(range(11), range(11, 13), range(11, 13))
+    # dx_model.cross_validation(range(13))

@@ -115,7 +115,7 @@ class ViconCsvReader:
         # filter and resample force data
         force_names_ori = ['Imported Bertec Force Plate #' + plate_num + ' - ' + data_type for plate_num in ['1', '2']
                            for data_type in ['Force', 'CoP']]
-        filtered_force_array = np.concatenate([SageCsvReader.data_filt(self.data[force_name], 50, 1000)
+        filtered_force_array = np.concatenate([data_filt(self.data[force_name], 50, 1000)
                                                for force_name in force_names_ori], axis=1)
         filtered_force_array = filtered_force_array[::10, :]
         filtered_force_df = pd.DataFrame(filtered_force_array, columns=FORCE_DATA_FIELDS)
@@ -350,8 +350,8 @@ class SageCsvReader:
         gyr_data = np.array(self.data_frame[['_'.join([direct, 'R_FOOT']) for direct in ['GyroX', 'GyroY', 'GyroZ']]])
 
         if cut_off_fre_strike_off is not None:
-            acc_data = self.data_filt(acc_data, cut_off_fre_strike_off, self.sample_rate, filter_order=2)
-            gyr_data = self.data_filt(gyr_data, cut_off_fre_strike_off, self.sample_rate, filter_order=2)
+            acc_data = data_filt(acc_data, cut_off_fre_strike_off, self.sample_rate, filter_order=2)
+            gyr_data = data_filt(gyr_data, cut_off_fre_strike_off, self.sample_rate, filter_order=2)
 
         gyr_x = gyr_data[:, 0]
         data_len = gyr_data.shape[0]
@@ -440,16 +440,6 @@ class SageCsvReader:
         return front_crossing, back_crossing
 
     @staticmethod
-    def data_filt(data, cut_off_fre, sampling_fre, filter_order=4):
-        fre = cut_off_fre / (sampling_fre / 2)
-        b, a = butter(filter_order, fre, 'lowpass')
-        if len(data.shape) == 1:
-            data_filt = filtfilt(b, a, data)
-        else:
-            data_filt = filtfilt(b, a, data, axis=0)
-        return data_filt
-
-    @staticmethod
     def find_peak_max(data_clip, height, width=None, prominence=None):
         """
         find the maximum peak
@@ -481,6 +471,16 @@ class SageCsvReader:
             self.data_frame.loc[self.missing_data_index, 'Event'] *= -1  # mark the missing IMU data as minus event
         if verbose:
             plt.show()
+
+
+def data_filt(data, cut_off_fre, sampling_fre, filter_order=4):
+    fre = cut_off_fre / (sampling_fre / 2)
+    b, a = butter(filter_order, fre, 'lowpass')
+    if len(data.shape) == 1:
+        data_filt = filtfilt(b, a, data)
+    else:
+        data_filt = filtfilt(b, a, data, axis=0)
+    return data_filt
 
 
 def rotationMatrixToEulerAngles(R):
@@ -562,7 +562,7 @@ def translate_step_event_to_step_id(events_dict, step_type, max_step_length):
         current_step_length = target_event[i] - target_event[i - 1]
         prev_step_length = target_event[i - 1] - target_event[i - 2]
         if 1.33 * prev_step_length > current_step_length > 0.75 * prev_step_length \
-                and current_step_length < max_step_length:
+                and 50 < current_step_length < max_step_length:
             r_steps.append([target_event[i - 1], target_event[i]])
 
     right_events = pd.DataFrame(r_steps)
