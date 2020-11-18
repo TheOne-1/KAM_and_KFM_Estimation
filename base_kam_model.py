@@ -55,6 +55,17 @@ class BaseModel:
             logging.info('Cross validation: Subjects for test: {}'.format(test_sub_names))
             results += self.preprocess_train_evaluation(train_sub_ids, test_sub_ids, test_sub_ids)
         self.print_table(results)
+        # get mean results
+        mean_results = []
+        for output_name, output_fields in self._y_fields.items():
+            for field in output_fields:
+                field_results = list(filter(lambda x: x['output'] == output_name and x['field'] == field, results))
+                r2 = np.round(np.mean(np.concatenate([res['r2'] for res in field_results])), 3)
+                rmse = np.round(np.mean(np.concatenate([res['rmse'] for res in field_results])), 3)
+                mae = np.round(np.mean(np.concatenate([res['mae'] for res in field_results])), 3)
+                mean_results += [{'output': output_name, 'field': field, 'r2': r2, 'rmse': rmse, 'mae': mae}]
+        self.print_table(mean_results)
+
 
     def preprocess_and_train(self, train_sub_ids: List[int], validate_sub_ids: List[int]):
         """
@@ -179,11 +190,14 @@ class BaseModel:
         fig, axs = plt.subplots(2, 2)
         fig.suptitle(title)
         for sub_index, [sub_title, step_index] in enumerate(
-                [['r2_worst', worst_index], ['r2_mid', median_index], ['r2_best', best_index]]):
-            axs[sub_index // 2, sub_index % 2].plot(arr1[step_index, :], 'g-', label='True_Value')
-            axs[sub_index // 2, sub_index % 2].plot(arr2[step_index, :], 'y-', label='Pred_Value')
-            axs[sub_index // 2, sub_index % 2].legend(loc='upper right', fontsize=8)
-            axs[sub_index // 2, sub_index % 2].set_title(sub_title)
+                [['r2_worst', worst_index], ['r2_median', median_index], ['r2_best', best_index]]):
+            sub_ax = axs[sub_index // 2, sub_index % 2]
+            sub_ax.plot(arr1[step_index, :], 'g-', label='True_Value')
+            sub_ax.plot(arr2[step_index, :], 'y-', label='Pred_Value')
+            sub_ax.legend(loc='upper right', fontsize=8)
+            sub_ax.text(0.4, 0.9, "r2: {}".format(np.round(metric[step_index], 3)), horizontalalignment='center',
+                        verticalalignment='center', transform=sub_ax.transAxes)
+            sub_ax.set_title(sub_title)
 
         # plot the general prediction status result
         y_pred_mean = arr2.mean(axis=0).reshape((-1))
@@ -198,6 +212,8 @@ class BaseModel:
         axs[1, 1].fill_between(axis_x, y_pred_mean - y_pred_std, y_pred_mean + y_pred_std,
                                facecolor='yellow', alpha=0.2)
         axs[1, 1].legend(loc='upper right', fontsize=8)
+        axs[1, 1].text(0.4, 0.9, "mean r2: {}".format(np.round(np.mean(metric), 3)),
+                       horizontalalignment='center', verticalalignment='center', transform=axs[1, 1].transAxes)
         axs[1, 1].set_title('general performance')
         plt.tight_layout()
         plt.show(block=False)

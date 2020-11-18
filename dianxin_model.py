@@ -33,7 +33,7 @@ class DXKamModel(BaseModel):
         callbacks = []
         if x_validation is not None:
             validation_data = (x_validation, y_validation)
-            callbacks.append(ErrorVisualization(self, x_validation, y_validation))
+            # callbacks.append(ErrorVisualization(self, x_validation, y_validation))
             callbacks.append(ReduceLROnPlateau('val_loss', factor=0.1, patience=5))
         model.fit(x=x_train, y=y_train, validation_data=validation_data, shuffle=True, batch_size=20,
                   epochs=30, verbose=1, callbacks=callbacks)
@@ -135,7 +135,7 @@ if __name__ == "__main__":
     x_fields = {'main_input': IMU_DATA_FIELDS, 'aux_input': [SUBJECT_WEIGHT, SUBJECT_HEIGHT]}
     y_fields = {'output': TARGETS_LIST}
     weights = {'output': [PHASE]*len(TARGETS_LIST)}
-    dx_model = DXKamModel('40samples+stance_swing+padding_nan.h5', x_fields, y_fields, weights)
+    dx_model = DXKamModel('40samples+stance_swing+padding_zero.h5', x_fields, y_fields, weights)
     # dx_model.preprocess_train_evaluation(range(11), range(11, 13), range(11, 13))
     subject_list = list(range(13))
     shuffle(subject_list)

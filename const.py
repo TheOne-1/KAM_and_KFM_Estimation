@@ -27,10 +27,8 @@ VIDEO_LIST = ["LShoulder", "RShoulder", "MidHip", "RHip", "LHip", "RKnee", "LKne
 VIDEO_DATA_FIELDS = [VIDEO + "_" + position + "_" + angle for VIDEO in VIDEO_LIST
                      for position in ["x", "y", "probability"] for angle in ["90", "180"]]
 SAMPLES_BEFORE_STEP = 40
-KAM_DROPS = [DROP_NONE, DROP_NEGATIVE] = range(2)
-KAM_DROP = DROP_NONE
-PADDING_MODES = [PADDING_NAN, PADDING_NEXT_STEP] = range(2)
-PADDING_MODE = PADDING_NAN
+PADDING_MODES = [PADDING_ZERO, PADDING_NEXT_STEP] = range(2)
+PADDING_MODE = PADDING_ZERO
 DATA_PATH = os.environ.get('KAM_DATA_PATH')
 EVENT_COLUMN = 'Event'
 RKAM_COLUMN = 'RIGHT_KNEE_ADDUCTION_MOMENT'
