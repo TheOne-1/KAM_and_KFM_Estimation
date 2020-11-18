@@ -62,6 +62,7 @@ def filter_and_clip_data(middle_data, max_len):
             expected_step.loc[kam_keep_begin:kam_keep_end, PHASE] = 1.
             expected_step.index = range(expected_step.shape[0])
             expected_step = expected_step.reindex(range(max_len + SAMPLES_BEFORE_STEP))
+            expected_step[np.isnan(expected_step)] = 0
             yield expected_step
 
     ab_ids = []

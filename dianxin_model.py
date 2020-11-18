@@ -9,9 +9,9 @@ from keras.layers import UpSampling1D, concatenate
 import keras.backend as K
 import keras.losses as Kloss
 from sklearn.preprocessing import StandardScaler  # MinMaxScaler,
-from keras.callbacks import Callback
+from keras.callbacks import Callback, ReduceLROnPlateau
 from base_kam_model import BaseModel
-from const import DATA_PATH, SENSOR_LIST, VIDEO_LIST, TARGETS_LIST, SUBJECT_WEIGHT, SUBJECT_HEIGHT
+from const import DATA_PATH, SENSOR_LIST, VIDEO_LIST, TARGETS_LIST, SUBJECT_WEIGHT, SUBJECT_HEIGHT, PHASE
 
 gpus = tf.config.experimental.list_physical_devices('GPU')
 for gpu in gpus:
@@ -24,8 +24,8 @@ VIDEO_DATA_FIELDS = [VIDEO + "_" + position + "_" + angle for VIDEO in VIDEO_LIS
 
 
 class DXKamModel(BaseModel):
-    def __init__(self, data_file, input_fields, output_fields):
-        BaseModel.__init__(self, os.path.join(DATA_PATH, data_file), input_fields, output_fields, StandardScaler)
+    def __init__(self, data_file, input_fields, output_fields, weights):
+        BaseModel.__init__(self, os.path.join(DATA_PATH, data_file), input_fields, output_fields, weights, StandardScaler)
 
     def train_model(self, x_train, y_train, x_validation=None, y_validation=None):
         model = rnn_model(x_train, y_train, GRU)
@@ -34,9 +34,9 @@ class DXKamModel(BaseModel):
         if x_validation is not None:
             validation_data = (x_validation, y_validation)
             callbacks.append(ErrorVisualization(self, x_validation, y_validation))
-            # callbacks.append(ReduceLROnPlateau('val_loss', factor=0.1, patience=5))
-        model.fit(x=x_train, y=y_train, validation_data=validation_data, shuffle=True, batch_size=50,
-                  epochs=1, verbose=1, callbacks=callbacks)
+            callbacks.append(ReduceLROnPlateau('val_loss', factor=0.1, patience=5))
+        model.fit(x=x_train, y=y_train, validation_data=validation_data, shuffle=True, batch_size=20,
+                  epochs=30, verbose=1, callbacks=callbacks)
         return model
 
     @staticmethod
@@ -69,7 +69,7 @@ class ErrorVisualization(Callback):
 
     def on_epoch_begin(self, epoch, logs=None):
         y_pred = self.dx_model.predict(self.model, self.x_true)
-        all_scores = self.dx_model.get_all_scores(self.y_true, y_pred)
+        all_scores = self.dx_model.get_all_scores(self.y_true, y_pred, {})
         all_scores = [{'subject': '', **scores} for scores in all_scores]
         self.dx_model.customized_analysis(self.y_true, y_pred, all_scores)
 
@@ -134,7 +134,8 @@ def autoencoder(input_shape):
 if __name__ == "__main__":
     x_fields = {'main_input': IMU_DATA_FIELDS, 'aux_input': [SUBJECT_WEIGHT, SUBJECT_HEIGHT]}
     y_fields = {'output': TARGETS_LIST}
-    dx_model = DXKamModel('40samples+stance_swing+padding_nan.h5', x_fields, y_fields)
+    weights = {'output': [PHASE]*len(TARGETS_LIST)}
+    dx_model = DXKamModel('40samples+stance_swing+padding_nan.h5', x_fields, y_fields, weights)
     # dx_model.preprocess_train_evaluation(range(11), range(11, 13), range(11, 13))
     subject_list = list(range(13))
     shuffle(subject_list)

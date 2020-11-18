@@ -12,7 +12,7 @@ from sklearn.metrics import r2_score, mean_squared_error as mse
 
 
 class BaseModel:
-    def __init__(self, data_path, x_fields, y_fields, scalar=MinMaxScaler):
+    def __init__(self, data_path, x_fields, y_fields, weights=None, scalar=MinMaxScaler):
         """
         x_fileds: a dict contains input names and input fields
         y_fileds: a dict contains output names and output fields
@@ -22,6 +22,7 @@ class BaseModel:
         self._data_path = data_path
         self._x_fields = x_fields
         self._y_fields = y_fields
+        self._weights = {} if weights is None else weights
         self._scalars = {input_name: scalar() for input_name in list(x_fields.keys())+list(y_fields.keys())}
         with h5py.File(self._data_path, 'r') as hf:
             self._data_all_sub = {subject: hf[subject][:] for subject in SUBJECTS}
@@ -90,9 +91,10 @@ class BaseModel:
             test_sub_data = test_data_list[test_sub_id]
             test_sub_x = self._get_raw_data_dict(test_sub_data, self._x_fields)
             test_sub_y = self._get_raw_data_dict(test_sub_data, self._y_fields)
+            test_sub_weight = self._get_raw_data_dict(test_sub_data, self._weights)
             test_sub_x, test_sub_y = self.preprocess_validation_test_data(test_sub_x, test_sub_y)
             pred_sub_y = self.predict(model, test_sub_x)
-            all_scores = self.get_all_scores(test_sub_y, pred_sub_y)
+            all_scores = self.get_all_scores(test_sub_y, pred_sub_y, test_sub_weight)
             all_scores = [{'subject': test_sub_name, **scores} for scores in all_scores]
             self.customized_analysis(test_sub_y, pred_sub_y, all_scores)
             test_results += all_scores
@@ -127,7 +129,6 @@ class BaseModel:
                 input_data = input_data.reshape([-1, input_data.shape[2]])
                 input_data = self._scalars[input_name].transform(input_data)
                 input_data = input_data.reshape(original_shape)
-                input_data[np.isnan(input_data)] = 0
                 data_dict[input_name] = input_data
         return x, y
 
@@ -139,11 +140,14 @@ class BaseModel:
     def predict(model, x_test):
         raise RuntimeError('Method not implemented')
 
-    def get_all_scores(self, y_true, y_pred, weight=None):
+    def get_all_scores(self, y_true, y_pred, weights):
         def get_colum_score(arr1, arr2, w=None):
-            r2 = np.array([r2_score(arr1[i, :], arr2[i, :], sample_weight=w) for i in range(arr2.shape[0])])
-            rmse = np.array([np.sqrt(mse(arr1[i, :], arr2[i, :], sample_weight=w)) for i in range(arr2.shape[0])])
-            mae = np.array([np.average(abs((arr1[i, :] - arr2[i, :])), weights=w) for i in range(arr2.shape[0])])
+            r2 = np.array([r2_score(arr1[i, :], arr2[i, :], sample_weight=None if w is None else w[i, :])
+                           for i in range(arr2.shape[0])])
+            rmse = np.array([np.sqrt(mse(arr1[i, :], arr2[i, :], sample_weight=None if w is None else w[i, :]))
+                             for i in range(arr2.shape[0])])
+            mae = np.array([np.average(abs((arr1[i, :] - arr2[i, :])), weights=None if w is None else w[i, :])
+                            for i in range(arr2.shape[0])])
             return {'r2': r2, 'rmse': rmse, 'mae': mae}
 
         scores = []
@@ -151,7 +155,10 @@ class BaseModel:
             for col, field in enumerate(fields):
                 y_pred_one_field = y_pred[output_name][:, :, col]
                 y_true_one_field = y_true[output_name][:, :, col]
-                weight_one_field = None if weight is None else weight[:, col]
+                try:
+                    weight_one_field = weights[output_name][:, :, col]
+                except KeyError:
+                    weight_one_field = None
                 score_one_field = {'output': output_name, 'field': field}
                 score_one_field.update(get_colum_score(y_pred_one_field, y_true_one_field, weight_one_field))
                 scores.append(score_one_field)
