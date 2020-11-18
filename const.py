@@ -18,13 +18,14 @@ SENSOR_LIST = ['L_FOOT', 'R_FOOT', 'R_SHANK', 'R_THIGH', 'WAIST', 'CHEST', 'L_SH
 IMU_FIELDS = ['AccelX', 'AccelY', 'AccelZ', 'GyroX', 'GyroY', 'GyroZ', 'MagX', 'MagY', 'MagZ', 'Quat1', 'Quat2',
               'Quat3', 'Quat4']
 IMU_DATA_FIELDS = [IMU_FIELD + "_" + SENSOR for SENSOR in SENSOR_LIST for IMU_FIELD in IMU_FIELDS]
+SUBJECT_HEIGHT = 'body height'
+SUBJECT_WEIGHT = 'body weight'
 FORCE_DATA_FIELDS = ['plate_' + num + '_' + data_type + '_' + axis for num in ['1', '2']
                      for data_type in ['force', 'cop'] for axis in ['x', 'y', 'z']]
 VIDEO_LIST = ["LShoulder", "RShoulder", "MidHip", "RHip", "LHip", "RKnee", "LKnee", "RAnkle", "LAnkle", "RHeel",
               "LHeel"]
 VIDEO_DATA_FIELDS = [VIDEO + "_" + position + "_" + angle for VIDEO in VIDEO_LIST
                      for position in ["x", "y", "probability"] for angle in ["90", "180"]]
-
 SAMPLES_BEFORE_STEP = 40
 KAM_DROPS = [DROP_NONE, DROP_NEGATIVE] = range(2)
 KAM_DROP = DROP_NONE
@@ -34,8 +35,9 @@ DATA_PATH = os.environ.get('KAM_DATA_PATH')
 EVENT_COLUMN = 'Event'
 RKAM_COLUMN = 'RIGHT_KNEE_ADDUCTION_MOMENT'
 RFORCE_Z_COLUMN = 'plate_2_force_z'
-TARGETS_LIST = ["RIGHT_KNEE_ADDUCTION_MOMENT"]
-
+TARGETS_LIST = ["RIGHT_KNEE_ADDUCTION_MOMENT", "RIGHT_KNEE_FLEXION_MOMENT", "RIGHT_KNEE_ADDUCTION_ANGLE",
+                "RIGHT_KNEE__ADDUCTION_VELOCITY"]
+PHASE = 'phase'
 # all the fields of combined data
 ALL_FIELDS = ["Event", "AccelX_L_FOOT", "AccelY_L_FOOT", "AccelZ_L_FOOT", "GyroX_L_FOOT", "GyroY_L_FOOT",
               "GyroZ_L_FOOT", "MagX_L_FOOT", "MagY_L_FOOT", "MagZ_L_FOOT", "Quat1_L_FOOT", "Quat2_L_FOOT",
@@ -95,4 +97,4 @@ ALL_FIELDS = ["Event", "AccelX_L_FOOT", "AccelY_L_FOOT", "AccelZ_L_FOOT", "GyroX
               "SXS_Z", "SJN_X", "SJN_Y", "SJN_Z", "CV7_X", "CV7_Y", "CV7_Z", "LAC_X", "LAC_Y", "LAC_Z", "RAC_X",
               "RAC_Y", "RAC_Z", 'plate_1_force_x', 'plate_1_force_y', 'plate_1_force_z', 'plate_2_force_x',
               'plate_2_force_y', 'plate_2_force_z', 'plate_1_cop_x', 'plate_1_cop_y', 'plate_1_cop_z',
-              'plate_2_cop_x', 'plate_2_cop_y', 'plate_2_cop_z']
+              'plate_2_cop_x', 'plate_2_cop_y', 'plate_2_cop_z', 'body weight', 'body height', 'phase']

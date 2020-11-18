@@ -2,11 +2,20 @@ import wearable_toolkit
 import pandas as pd
 import numpy as np
 import os
-from const import SEGMENT_DEFITIONS, SUBJECTS, STATIC_TRIALS, TRIALS, DATA_PATH, SENSOR_LIST
+from const import SEGMENT_DEFITIONS, SUBJECTS, STATIC_TRIALS, TRIALS, DATA_PATH, SENSOR_LIST, SUBJECT_HEIGHT, SUBJECT_WEIGHT
 
+# read subject personal info
+subject_info_csv = pd.read_csv(os.path.join(DATA_PATH, 'subject_info.csv'))
+subject_info_dict = {subject['subject id']: [subject[SUBJECT_HEIGHT], subject[SUBJECT_WEIGHT]] for _, subject in subject_info_csv.iterrows()}
 
-def sync_and_crop_data_frame(vicon_data_path, imu_data_path, v3d_data_path, video_90_data_path, video_180_data_path,
-                             middle_data_path, vicon_calibrate_data_path):
+def sync_and_crop_data_frame(subject, trial):
+    vicon_data_path = os.path.join(DATA_PATH, subject, 'vicon', trial + '.csv')
+    vicon_calibrate_data_path = os.path.join(DATA_PATH, subject, 'vicon', 'calibrate' + '.csv')
+    video_90_data_path = os.path.join(DATA_PATH, subject, 'video_output', trial + '_90.csv')
+    video_180_data_path = os.path.join(DATA_PATH, subject, 'video_output', trial + '_180.csv')
+    imu_data_path = os.path.join(DATA_PATH, subject, 'imu', trial + '.csv')
+    v3d_data_path = os.path.join(DATA_PATH, subject, 'v3d', trial + '.csv')
+    middle_data_path = os.path.join(DATA_PATH, subject, 'combined', trial + '.csv')
     is_verbose = False
     # read vicon, imu data
     vicon_data = wearable_toolkit.ViconCsvReader(vicon_data_path, SEGMENT_DEFITIONS, vicon_calibrate_data_path)
@@ -65,7 +74,8 @@ def sync_and_crop_data_frame(vicon_data_path, imu_data_path, v3d_data_path, vide
         [imu_data.data_frame, video_90_data.data_frame, video_180_data.data_frame, V3d_data.data_frame,
          vicon_data.data_frame], axis=1)
     middle_data = middle_data.loc[:min_length]
-
+    middle_data[SUBJECT_HEIGHT] = subject_info_dict[subject][0]
+    middle_data[SUBJECT_WEIGHT] = subject_info_dict[subject][1]
     middle_data.to_csv(middle_data_path)
 
 
@@ -73,15 +83,7 @@ def get_combined_data():
     for subject in SUBJECTS:
         for trial in TRIALS:
             print("Subject {}, Trial {}".format(subject, trial))
-            vicon_data_path = os.path.join(DATA_PATH, subject, 'vicon', trial + '.csv')
-            vicon_calibrate_data_path = os.path.join(DATA_PATH, subject, 'vicon', 'calibrate' + '.csv')
-            video_data_path_90 = os.path.join(DATA_PATH, subject, 'video_output', trial + '_90.csv')
-            video_data_path_180 = os.path.join(DATA_PATH, subject, 'video_output', trial + '_180.csv')
-            imu_data_path = os.path.join(DATA_PATH, subject, 'imu', trial + '.csv')
-            v3d_data_path = os.path.join(DATA_PATH, subject, 'v3d', trial + '.csv')
-            middle_data_path = os.path.join(DATA_PATH, subject, 'combined', trial + '.csv')
-            sync_and_crop_data_frame(vicon_data_path, imu_data_path, v3d_data_path, video_data_path_90,
-                                     video_data_path_180, middle_data_path, vicon_calibrate_data_path)
+            sync_and_crop_data_frame(subject, trial)
 
 
 def get_static_combined_data():
@@ -96,7 +98,6 @@ def get_static_combined_data():
             vicon_data = wearable_toolkit.ViconCsvReader(vicon_data_path, SEGMENT_DEFITIONS, calibrate_vicon_data_path)
             video_90_data = wearable_toolkit.VideoCsvReader(video_data_path_90)
             video_180_data = wearable_toolkit.VideoCsvReader(video_data_path_180)
-
             video_90_data.data_frame.columns = [col + '_90' for col in video_90_data.data_frame.columns]
             video_180_data.data_frame.columns = [col + '_180' for col in video_180_data.data_frame.columns]
 

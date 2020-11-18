@@ -5,7 +5,7 @@ import h5py
 import json
 import matplotlib.pyplot as plt
 from customized_logger import logger as logging
-from const import TRIALS, SUBJECTS, ALL_FIELDS
+from const import TRIALS, SUBJECTS, ALL_FIELDS, PHASE
 from const import SAMPLES_BEFORE_STEP, DATA_PATH
 from const import PADDING_MODE, PADDING_NAN, PADDING_NEXT_STEP
 from const import DROP_NONE, DROP_NEGATIVE, KAM_DROP
@@ -36,31 +36,33 @@ def filter_and_clip_data(middle_data, max_len):
             expected_step = array.loc[step_begin:step_end, :].copy()
             if (expected_step[EVENT_COLUMN] < 0).any():
                 continue
-            if KAM_DROP == DROP_NEGATIVE:
-                # -20: swing phase might contain stance phase of next step, in which case, force might be positive.
-                stance_swing_step_cliped = stance_swing_step.iloc[:-20]
-                stance_phase = stance_swing_step_cliped[stance_swing_step_cliped[RFORCE_Z_COLUMN] < -20]
-                stance_phase_min_index = stance_phase.index.min()
-                stance_phase_max_index = stance_phase.index.max()
-                stance_phase_mid_index = (stance_phase_min_index + stance_phase_max_index) // 2
-                stance_phase_peak_index = stance_phase.loc[:stance_phase_mid_index, RFORCE_Z_COLUMN].idxmin()
-                stance_phase = stance_swing_step_cliped.loc[stance_phase_min_index:stance_phase_max_index]
-                if (stance_phase.loc[stance_phase_peak_index:stance_phase_mid_index, RKAM_COLUMN] < 0.).any():
-                    abnormal_ids.append(_id)
-                    if is_verbose:
-                        plt.figure()
-                        plt.plot(stance_swing_step[RKAM_COLUMN].values)
-                        plt.show()
-                    continue
-                kam_keep_begin = stance_phase[stance_phase[RKAM_COLUMN] < 0.].loc[:stance_phase_peak_index].index.max()
-                if np.isnan(kam_keep_begin):
-                    kam_keep_begin = stance_phase[RKAM_COLUMN].loc[:stance_phase_peak_index].idxmin()
-                    assert stance_phase_min_index <= kam_keep_begin <= stance_phase_max_index
-                expected_step.loc[:kam_keep_begin, RKAM_COLUMN] = 0.
-                kam_keep_end = stance_phase_max_index
-                expected_step.loc[kam_keep_end:, RKAM_COLUMN] = 0.
+            # -20: swing phase might contain stance phase of next step, in which case, force might be positive.
+            stance_swing_step_cliped = stance_swing_step.iloc[:-20]
+            stance_phase = stance_swing_step_cliped[stance_swing_step_cliped[RFORCE_Z_COLUMN] < -20]
+            stance_phase_min_index = stance_phase.index.min()
+            stance_phase_max_index = stance_phase.index.max()
+            stance_phase_mid_index = (stance_phase_min_index + stance_phase_max_index) // 2
+            stance_phase_peak_index = stance_phase.loc[:stance_phase_mid_index, RFORCE_Z_COLUMN].idxmin()
+            stance_phase = stance_swing_step_cliped.loc[stance_phase_min_index:stance_phase_max_index]
+            if (stance_phase.loc[stance_phase_peak_index:stance_phase_mid_index, RKAM_COLUMN] < 0.).any():
+                abnormal_ids.append(_id)
+                if is_verbose:
+                    plt.figure()
+                    plt.plot(stance_swing_step[RKAM_COLUMN].values)
+                    plt.show()
+                continue
+            kam_keep_begin = stance_phase[stance_phase[RKAM_COLUMN] < 0.].loc[:stance_phase_peak_index].index.max()
+            if np.isnan(kam_keep_begin):
+                kam_keep_begin = stance_phase[RKAM_COLUMN].loc[:stance_phase_peak_index].idxmin()
+                assert stance_phase_min_index <= kam_keep_begin <= stance_phase_max_index
+            kam_keep_end = stance_phase_max_index
+            if kam_keep_end - kam_keep_begin < 30:
+                continue
+            expected_step[PHASE] = 0.
+            expected_step.loc[kam_keep_begin:kam_keep_end, PHASE] = 1.
             expected_step.index = range(expected_step.shape[0])
             expected_step = expected_step.reindex(range(max_len + SAMPLES_BEFORE_STEP))
+            expected_step[np.isnan(expected_step)] = 0
             yield expected_step
 
     ab_ids = []
@@ -104,12 +106,9 @@ if __name__ == "__main__":
     KAM_DROP = DROP_NONE
     PADDING_MODE = PADDING_NAN
     generate_step_data('40samples+stance_swing+padding_nan.h5')
-    KAM_DROP = DROP_NONE
-    PADDING_MODE = PADDING_NEXT_STEP
-    generate_step_data('40samples+stance_swing+padding_next_step.h5')
-    KAM_DROP = DROP_NEGATIVE
-    PADDING_MODE = PADDING_NAN
-    generate_step_data('40samples+stance_swing+drop_negative.h5')
+    # KAM_DROP = DROP_NONE
+    # PADDING_MODE = PADDING_NEXT_STEP
+    # generate_step_data('40samples+stance_swing+padding_next_step.h5')
     KAM_DROP = DROP_NEGATIVE
     PADDING_MODE = PADDING_NAN
     TRIALS = ['baseline', 'fpa', 'step_width']
