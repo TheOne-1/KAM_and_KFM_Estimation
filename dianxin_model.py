@@ -11,7 +11,7 @@ import keras.losses as Kloss
 from sklearn.preprocessing import StandardScaler  # MinMaxScaler,
 from keras.callbacks import Callback, ReduceLROnPlateau
 from base_kam_model import BaseModel
-from const import DATA_PATH, SENSOR_LIST, VIDEO_LIST, TARGETS_LIST, SUBJECT_WEIGHT, SUBJECT_HEIGHT, PHASE
+from const import DATA_PATH, SENSOR_LIST, VIDEO_LIST, TARGETS_LIST, SUBJECT_WEIGHT, SUBJECT_HEIGHT, PHASE, RKAM_COLUMN
 
 gpus = tf.config.experimental.list_physical_devices('GPU')
 for gpu in gpus:
@@ -46,6 +46,17 @@ class DXKamModel(BaseModel):
         prediction_dict = {name: pred for name, pred in zip(model.output_names, prediction_list)}
         return prediction_dict
 
+    def preprocess_train_data(self, x_train, y_train):
+        KAM_index = self._y_fields['output'].index(RKAM_COLUMN)
+        height_index = self._x_fields['aux_input'].index(SUBJECT_HEIGHT)
+        y_train['output'][:, :, KAM_index] *= x_train['aux_input'][:, :, height_index]
+        return BaseModel.preprocess_train_data(self, x_train, y_train)
+
+    def preprocess_validation_test_data(self, x_train, y_train):
+        KAM_index = self._y_fields['output'].index(RKAM_COLUMN)
+        height_index = self._x_fields['aux_input'].index(SUBJECT_HEIGHT)
+        y_train['output'][:, :, KAM_index] *= x_train['aux_input'][:, :, height_index]
+        return BaseModel.preprocess_validation_test_data(self, x_train, y_train)
     # def preprocess_train_data(self, x_train, y_train):
     #     x_train, y_train = BaseModel.preprocess_train_data(self, x_train, y_train)
     #     input_shape = x_train.shape[1:]

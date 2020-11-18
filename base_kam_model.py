@@ -66,7 +66,6 @@ class BaseModel:
                 mean_results += [{'output': output_name, 'field': field, 'r2': r2, 'rmse': rmse, 'mae': mae}]
         self.print_table(mean_results)
 
-
     def preprocess_and_train(self, train_sub_ids: List[int], validate_sub_ids: List[int]):
         """
         train_sub_ids: a list of subject id for model training
