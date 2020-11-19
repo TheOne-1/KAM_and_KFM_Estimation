@@ -6,7 +6,7 @@ import json
 import matplotlib.pyplot as plt
 from customized_logger import logger as logging
 from const import TRIALS, SUBJECTS, ALL_FIELDS, PHASE
-from const import SAMPLES_BEFORE_STEP, DATA_PATH
+from const import SAMPLES_BEFORE_STEP, DATA_PATH, LEFT_PLATE_FORCE_Z
 from const import PADDING_MODE, PADDING_ZERO, PADDING_NEXT_STEP
 from const import RFORCE_Z_COLUMN, RKAM_COLUMN, EVENT_COLUMN
 
@@ -43,6 +43,14 @@ def filter_and_clip_data(middle_data, max_len):
             stance_phase_mid_index = (stance_phase_min_index + stance_phase_max_index) // 2
             stance_phase_peak_index = stance_phase.loc[:stance_phase_mid_index, RFORCE_Z_COLUMN].idxmin()
             stance_phase = stance_swing_step_cliped.loc[stance_phase_min_index:stance_phase_max_index]
+            if np.mean(stance_phase.loc[
+                       int(0.7 * stance_phase_min_index + 0.3 * stance_phase_max_index):
+                       int(0.3 * stance_phase_min_index + 0.7 * stance_phase_max_index), LEFT_PLATE_FORCE_Z]) < -20:
+                if is_verbose:
+                    plt.figure()
+                    plt.plot(stance_phase[LEFT_PLATE_FORCE_Z].values)
+                    plt.show()
+                continue
             if (stance_phase.loc[stance_phase_peak_index:stance_phase_mid_index, RKAM_COLUMN] < 0.).any():
                 abnormal_ids.append(_id)
                 if is_verbose:
