@@ -8,7 +8,7 @@ import os
 import pandas as pd
 import numpy as np
 import time
-from const import IMU_FIELDS, SENSOR_LIST, DATA_PATH, SUBJECTS
+from const import IMU_FIELDS, SENSOR_LIST, DATA_PATH, SUBJECTS, PHASE, TARGETS_LIST, SUBJECT_WEIGHT, SUBJECT_HEIGHT
 from torch.nn.utils.rnn import pad_sequence, pack_padded_sequence, pad_packed_sequence
 from transforms3d.euler import euler2mat
 
@@ -26,7 +26,7 @@ class TianRNN(nn.Module):
 
     def forward(self, sequence, hidden):
         lstm_out, hidden = self.lstm(sequence, hidden)
-        lstm_out, _ = pad_packed_sequence(lstm_out, batch_first=True, total_length=229)
+        lstm_out, _ = pad_packed_sequence(lstm_out, batch_first=True, total_length=230)
         output = self.hidden2output(lstm_out)
         return output, hidden
 
@@ -38,17 +38,19 @@ class TianRNN(nn.Module):
 
 class TianModel(BaseModel):
     def __init__(self):
-        data_path = DATA_PATH + '/40samples+stance_swing+padding_nan.h5'
+        data_path = DATA_PATH + '/40samples+stance_swing+drop_negative.h5'
         inertial_cols = [inertial_field + '_' + sensor for sensor in SENSOR_LIST for inertial_field in IMU_FIELDS[:6]]
         video_cols = [loc + '_' + axis + '_' + angle for loc in ['RHip', 'LHip', 'RKnee', 'LKnee']
                       for angle in ['90', '180'] for axis in ['x', 'y']]
         output_cols = ['RIGHT_KNEE_ADDUCTION_MOMENT']
-        # BaseModel.__init__(self, data_path, x_fields=inertial_cols + video_cols, y_fields=output_cols)
-        BaseModel.__init__(self, data_path, x_fields=inertial_cols, y_fields=output_cols)
-        # BaseModel.__init__(self, data_path, x_fields=video_cols, y_fields=output_cols)
+
+        x_fields = {'main_input': inertial_cols+video_cols, 'aux_input': [SUBJECT_WEIGHT, SUBJECT_HEIGHT]}
+        y_fields = {'output': output_cols}
+        weights = {'output': [PHASE]*len(output_cols)}
+
+        BaseModel.__init__(self, data_path, x_fields, y_fields, weights)
         if CALI_VIA_GRAVITY:
             self.cali_via_gravity()
-
         self.train_step_lens, self.validation_step_lens, self.test_step_lens = [None] * 3
 
     def cali_via_gravity(self):
@@ -65,6 +67,15 @@ class TianModel(BaseModel):
                 gyr_col_locs = [self.data_columns.index(col) for col in gyr_cols]
                 self._data_all_sub[subject][:, :, gyr_col_locs] = np.apply_along_axis(rotation_fun, 2, self._data_all_sub[subject][:, :, gyr_col_locs])
 
+    @staticmethod
+    def loss_fun_emphasize_peak(y_pred, y):
+        peak_locs = torch.argmax(y, dim=1).reshape([-1])
+        loss_peak = (y_pred[range(y.shape[0]), peak_locs] - y[range(y.shape[0]), peak_locs]).pow(2).mean()
+        y_pred_non_zero = y_pred[y != 0]
+        y_non_zero = y[y != 0]
+        loss_profile = (y_pred_non_zero - y_non_zero).pow(2).mean()
+        return (loss_profile + loss_peak) * 1e3
+
     def train_model(self, x_train, y_train, x_validation=None, y_validation=None):
         N_step, D_in, D_hidden, N_layer, D_out = x_train.shape[0], x_train.shape[2], 10, 2, y_train.shape[2]
         x_train = torch.from_numpy(x_train)
@@ -79,7 +90,7 @@ class TianModel(BaseModel):
         loss_fn = torch.nn.MSELoss(reduction='sum')
         optimizer = torch.optim.Adam(nn_model.parameters(), lr=2e-3, weight_decay=2e-4)
 
-        batch_size = 20
+        batch_size = 50
         train_ds = TensorDataset(x_train, y_train, train_step_lens)
         train_size = int(0.8 * len(train_ds))
         validation_size = len(train_ds) - train_size
@@ -88,7 +99,7 @@ class TianModel(BaseModel):
         validation_dl = DataLoader(validation_ds, batch_size=validation_size)
 
         logging.info('\tEpoch\t\tTrain Loss\t\tValidation Loss\t\tDuration\t\t')
-        for epoch in range(1):
+        for epoch in range(10):
             epoch_start_time = time.time()
             for i_batch, (xb, yb, lens) in enumerate(train_dl):
 
@@ -96,7 +107,8 @@ class TianModel(BaseModel):
                 hidden = nn_model.init_hidden(xb.shape[0])
                 xb = pack_padded_sequence(xb, lens, batch_first=True, enforce_sorted=False)
                 y_pred, _ = nn_model(xb, hidden)
-                train_loss = loss_fn(y_pred, yb)
+                train_loss = self.loss_fun_emphasize_peak(y_pred, yb)
+                # train_loss = loss_fn(y_pred, yb)
 
                 if epoch == 0 and i_batch == 0:
                     logging.info("\t{:3}\t{:15.2f}\t{:15.2f}\t\t{:13.2f}s\t\t\t".format(
@@ -113,7 +125,7 @@ class TianModel(BaseModel):
 
     @staticmethod
     def get_static_calibration(subject_name):
-        data_path = DATA_PATH + '/' + subject_name + '/combined/static_back.csv'
+        data_path = DATA_PATH + '/' + subject_name + '/combined/static_side.csv'
         static_data = pd.read_csv(data_path, index_col=0)
         transform_mat_dict = {}
         for sensor in SENSOR_LIST:
@@ -127,11 +139,11 @@ class TianModel(BaseModel):
 
     def preprocess_train_data(self, x_train, y_train):
         self.train_step_lens = self._get_step_len(x_train)
-        return BaseModel.preprocess_train_data(x_train, y_train)
+        return BaseModel.preprocess_train_data(self, x_train, y_train)
 
     def preprocess_validation_test_data(self, x, y):
         self.test_step_lens = self._get_step_len(x)
-        return BaseModel.preprocess_validation_test_data(x, y)
+        return BaseModel.preprocess_validation_test_data(self, x, y)
 
     @staticmethod
     def evaluate_validation_set(nn_model, validation_dl, loss_fn, batch_size):
@@ -154,10 +166,11 @@ class TianModel(BaseModel):
 
     @staticmethod
     def customized_analysis(y_test, y_pred, metrics):
-        for i_channel in range(y_pred.shape[2]):
-            plt.figure()
-            plt.plot(y_test[:, :, i_channel].ravel())
-            plt.plot(y_pred[:, :, i_channel].ravel())
+        pass
+        # for i_channel in range(y_pred.shape[2]):
+        #     plt.figure()
+        #     plt.plot(y_test[:, :, i_channel].ravel())
+        #     plt.plot(y_pred[:, :, i_channel].ravel())
 
     @staticmethod
     def _get_step_len(data, feature_col_num=0):
@@ -173,8 +186,9 @@ class TianModel(BaseModel):
         data_len = np.sum(~nan_loc, axis=1)
         return data_len
 
+
 if __name__ == "__main__":
     model = TianModel()
-    # model.param_tuning(range(3, 13), [], range(13, 16))
-    model.cross_validation(range(3, 6))
+    model.param_tuning(range(10), [], range(10, 13))
+    # model.cross_validation(range(13))
     plt.show()
