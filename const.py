@@ -1,10 +1,12 @@
 import os
+
 TRIALS = ['baseline', 'fpa', 'step_width', 'trunk_sway']
 STATIC_TRIALS = ['static_back', 'static_side']
 SUBJECTS = ['s002_wangdianxin', 's004_ouyangjue', 's005_tangansheng', 's006_xusen', 's007_zuogangao', 's008_liyu',
             's009_sunyubo', 's010_handai', 's011_wuxingze', 's012_likaixiang', 's013_zhangxiaohan', 's014_maqichao',
-            's015_weihuan', 's017_tantian', 's018_wangmian', 's019_chenhongyuan', 's020_houjikang']
-# , 's003_linyuan', 's001_tantian', 's016_houjikang']
+            's015_weihuan', 's017_tantian', 's018_wangmian', 's019_chenhongyuan', 's020_houjikang'
+            # , 's003_linyuan', 's001_tantian', 's016_houjikang'
+            ]
 SEGMENT_DEFITIONS = {
     'L_FOOT': ['LFCC', 'LFM5', 'LFM2'],
     'R_FOOT': ['RFCC', 'RFM5', 'RFM2'],

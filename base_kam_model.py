@@ -23,7 +23,7 @@ class BaseModel:
         self._x_fields = x_fields
         self._y_fields = y_fields
         self._weights = {} if weights is None else weights
-        self._scalars = {input_name: scalar() for input_name in list(x_fields.keys())+list(y_fields.keys())}
+        self._scalars = {input_name: scalar() for input_name in list(x_fields.keys()) + list(y_fields.keys())}
         with h5py.File(self._data_path, 'r') as hf:
             self._data_all_sub = {subject: hf[subject][:] for subject in SUBJECTS}
             self.data_columns = json.loads(hf.attrs['columns'])
@@ -122,18 +122,17 @@ class BaseModel:
             self.representative_profile_curves(arr1, arr2, title, r2)
 
     def preprocess_train_data(self, x_train, y_train):
-        for data_dict in [x_train, y_train]:
+        for data_dict in [x_train]:
             for input_name, input_data in data_dict.items():
                 original_shape = input_data.shape
                 input_data = input_data.reshape([-1, input_data.shape[2]])
                 input_data = self._scalars[input_name].fit_transform(input_data)
                 input_data = input_data.reshape(original_shape)
-                input_data[np.isnan(input_data)] = 0
                 data_dict[input_name] = input_data
         return x_train, y_train
 
     def preprocess_validation_test_data(self, x, y):
-        for data_dict in [x, y]:
+        for data_dict in [x]:
             for input_name, input_data in data_dict.items():
                 original_shape = input_data.shape
                 input_data = input_data.reshape([-1, input_data.shape[2]])
@@ -151,26 +150,30 @@ class BaseModel:
         raise RuntimeError('Method not implemented')
 
     def get_all_scores(self, y_true, y_pred, weights):
-        def get_colum_score(arr1, arr2, w=None):
-            r2 = np.array([r2_score(arr1[i, :], arr2[i, :], sample_weight=None if w is None else w[i, :])
-                           for i in range(arr2.shape[0])])
-            rmse = np.array([np.sqrt(mse(arr1[i, :], arr2[i, :], sample_weight=None if w is None else w[i, :]))
-                             for i in range(arr2.shape[0])])
-            mae = np.array([np.average(abs((arr1[i, :] - arr2[i, :])), weights=None if w is None else w[i, :])
-                            for i in range(arr2.shape[0])])
-            return {'r2': r2, 'rmse': rmse, 'mae': mae}
+        def get_colum_score(arr_true, arr_pred, w=None):
+            r2 = np.array([r2_score(arr_true[i, :], arr_pred[i, :], sample_weight=None if w is None else w[i, :])
+                           for i in range(arr_true.shape[0])])
+            rmse = np.array([np.sqrt(mse(arr_true[i, :], arr_pred[i, :], sample_weight=None if w is None else w[i, :]))
+                             for i in range(arr_true.shape[0])])
+            mae = np.array([np.average(abs((arr_true[i, :] - arr_pred[i, :])), weights=None if w is None else w[i, :])
+                            for i in range(arr_true.shape[0])])
+
+            locs = np.where(w.ravel() == 1)[0]
+            r2_all = r2_score(arr_true.ravel()[locs], arr_pred.ravel()[locs])
+            r2_all = np.full(r2.shape, r2_all)
+            return {'r2': r2, 'rmse': rmse, 'mae': mae, 'r2_all': r2_all}
 
         scores = []
         for output_name, fields in self._y_fields.items():
             for col, field in enumerate(fields):
-                y_pred_one_field = y_pred[output_name][:, :, col]
                 y_true_one_field = y_true[output_name][:, :, col]
+                y_pred_one_field = y_pred[output_name][:, :, col]
                 try:
                     weight_one_field = weights[output_name][:, :, col]
                 except KeyError:
                     weight_one_field = None
                 score_one_field = {'output': output_name, 'field': field}
-                score_one_field.update(get_colum_score(y_pred_one_field, y_true_one_field, weight_one_field))
+                score_one_field.update(get_colum_score(y_true_one_field, y_pred_one_field, weight_one_field))
                 scores.append(score_one_field)
         return scores
 
@@ -225,3 +228,27 @@ class BaseModel:
             tb.add_row([np.round(np.mean(value), 3) if isinstance(value, np.ndarray) else value
                         for value in test_result.values()])
         print(tb)
+
+    # def get_all_scores_test(self, y_true, y_pred, weights):
+    #     def get_colum_score(arr_pred, arr_true, w=None):
+    #         r2 = np.array([r2_score(arr_true[i, :], arr_pred[i, :], sample_weight=None if w is None else w[i, :])
+    #                        for i in range(arr_true.shape[0])])
+    #         rmse = np.array([np.sqrt(mse(arr_pred[i, :], arr_true[i, :], sample_weight=None if w is None else w[i, :]))
+    #                          for i in range(arr_true.shape[0])])
+    #         mae = np.array([np.average(abs((arr_pred[i, :] - arr_true[i, :])), weights=None if w is None else w[i, :])
+    #                         for i in range(arr_true.shape[0])])
+    #         return {'r2': r2, 'rmse': rmse, 'mae': mae}
+    #
+    #     scores = []
+    #     for output_name, fields in self._y_fields.items():
+    #         for col, field in enumerate(fields):
+    #             y_true_one_field = y_true[output_name][:, :, col]
+    #             y_pred_one_field = y_pred[output_name][:, :, col]
+    #             try:
+    #                 weight_one_field = weights[output_name][:, :, col]
+    #             except KeyError:
+    #                 weight_one_field = None
+    #             score_one_field = {'output': output_name, 'field': field}
+    #             score_one_field.update(get_colum_score(y_pred_one_field, y_true_one_field, weight_one_field))
+    #             scores.append(score_one_field)
+    #     return scores
