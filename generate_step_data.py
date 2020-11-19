@@ -7,8 +7,7 @@ import matplotlib.pyplot as plt
 from customized_logger import logger as logging
 from const import TRIALS, SUBJECTS, ALL_FIELDS, PHASE
 from const import SAMPLES_BEFORE_STEP, DATA_PATH
-from const import PADDING_MODE, PADDING_NAN, PADDING_NEXT_STEP
-from const import DROP_NONE, DROP_NEGATIVE, KAM_DROP
+from const import PADDING_MODE, PADDING_ZERO, PADDING_NEXT_STEP
 from const import RFORCE_Z_COLUMN, RKAM_COLUMN, EVENT_COLUMN
 
 
@@ -25,7 +24,7 @@ def filter_and_clip_data(middle_data, max_len):
             # fetch data before a step
             stance_swing_step = array[array[EVENT_COLUMN] == _id]
             step_begin = stance_swing_step.index.min() - SAMPLES_BEFORE_STEP
-            if PADDING_MODE == PADDING_NAN:
+            if PADDING_MODE == PADDING_ZERO:
                 step_end = stance_swing_step.index.max()
             elif PADDING_MODE == PADDING_NEXT_STEP:
                 step_end = stance_swing_step.index.min() + max_len
@@ -103,13 +102,10 @@ def generate_step_data(export_path):
 
 if __name__ == "__main__":
     is_verbose = False
-    KAM_DROP = DROP_NONE
-    PADDING_MODE = PADDING_NAN
-    generate_step_data('40samples+stance_swing+padding_nan.h5')
-    # KAM_DROP = DROP_NONE
+    PADDING_MODE = PADDING_ZERO
+    generate_step_data('40samples+stance_swing+padding_zero.h5')
     # PADDING_MODE = PADDING_NEXT_STEP
     # generate_step_data('40samples+stance_swing+padding_next_step.h5')
-    KAM_DROP = DROP_NEGATIVE
-    PADDING_MODE = PADDING_NAN
+    PADDING_MODE = PADDING_ZERO
     TRIALS = ['baseline', 'fpa', 'step_width']
     generate_step_data('40samples+stance_swing+kick_out_trunksway.h5')

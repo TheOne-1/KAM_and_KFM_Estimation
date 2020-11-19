@@ -11,7 +11,7 @@ import keras.losses as Kloss
 from sklearn.preprocessing import StandardScaler  # MinMaxScaler,
 from keras.callbacks import Callback, ReduceLROnPlateau
 from base_kam_model import BaseModel
-from const import DATA_PATH, SENSOR_LIST, VIDEO_LIST, TARGETS_LIST, SUBJECT_WEIGHT, SUBJECT_HEIGHT, PHASE
+from const import DATA_PATH, SENSOR_LIST, VIDEO_LIST, TARGETS_LIST, SUBJECT_WEIGHT, SUBJECT_HEIGHT, PHASE, RKAM_COLUMN
 
 gpus = tf.config.experimental.list_physical_devices('GPU')
 for gpu in gpus:
@@ -33,7 +33,7 @@ class DXKamModel(BaseModel):
         callbacks = []
         if x_validation is not None:
             validation_data = (x_validation, y_validation)
-            callbacks.append(ErrorVisualization(self, x_validation, y_validation))
+            # callbacks.append(ErrorVisualization(self, x_validation, y_validation))
             callbacks.append(ReduceLROnPlateau('val_loss', factor=0.1, patience=5))
         model.fit(x=x_train, y=y_train, validation_data=validation_data, shuffle=True, batch_size=20,
                   epochs=30, verbose=1, callbacks=callbacks)
@@ -46,6 +46,17 @@ class DXKamModel(BaseModel):
         prediction_dict = {name: pred for name, pred in zip(model.output_names, prediction_list)}
         return prediction_dict
 
+    def preprocess_train_data(self, x_train, y_train):
+        KAM_index = self._y_fields['output'].index(RKAM_COLUMN)
+        height_index = self._x_fields['aux_input'].index(SUBJECT_HEIGHT)
+        y_train['output'][:, :, KAM_index] *= x_train['aux_input'][:, :, height_index]
+        return BaseModel.preprocess_train_data(self, x_train, y_train)
+
+    def preprocess_validation_test_data(self, x_train, y_train):
+        KAM_index = self._y_fields['output'].index(RKAM_COLUMN)
+        height_index = self._x_fields['aux_input'].index(SUBJECT_HEIGHT)
+        y_train['output'][:, :, KAM_index] *= x_train['aux_input'][:, :, height_index]
+        return BaseModel.preprocess_validation_test_data(self, x_train, y_train)
     # def preprocess_train_data(self, x_train, y_train):
     #     x_train, y_train = BaseModel.preprocess_train_data(self, x_train, y_train)
     #     input_shape = x_train.shape[1:]
@@ -135,7 +146,7 @@ if __name__ == "__main__":
     x_fields = {'main_input': IMU_DATA_FIELDS, 'aux_input': [SUBJECT_WEIGHT, SUBJECT_HEIGHT]}
     y_fields = {'output': TARGETS_LIST}
     weights = {'output': [PHASE]*len(TARGETS_LIST)}
-    dx_model = DXKamModel('40samples+stance_swing+padding_nan.h5', x_fields, y_fields, weights)
+    dx_model = DXKamModel('40samples+stance_swing+padding_zero.h5', x_fields, y_fields, weights)
     # dx_model.preprocess_train_evaluation(range(11), range(11, 13), range(11, 13))
     subject_list = list(range(13))
     shuffle(subject_list)

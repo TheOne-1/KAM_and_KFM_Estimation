@@ -106,12 +106,6 @@ class ViconCsvReader:
                 segment_data = pd.Series(dict([(marker, calibrate_data[marker]) for marker in markers]))
                 self.fill_missing_marker(segment_data, self.segment_data[segment])
 
-        self.segment_definitions = segment_definitions
-        if segment_definitions != {}:
-            markers = [marker for markers in segment_definitions.values() for marker in markers]
-            self.data_frame = pd.concat([self.data[marker] for marker in markers], axis=1)
-            self.data_frame.columns = [marker + '_' + axis for marker in markers for axis in ['X', 'Y', 'Z']]
-
         # filter and resample force data
         force_names_ori = ['Imported Bertec Force Plate #' + plate_num + ' - ' + data_type for plate_num in ['1', '2']
                            for data_type in ['Force', 'CoP']]
@@ -119,7 +113,13 @@ class ViconCsvReader:
                                                for force_name in force_names_ori], axis=1)
         filtered_force_array = filtered_force_array[::10, :]
         filtered_force_df = pd.DataFrame(filtered_force_array, columns=FORCE_DATA_FIELDS)
-        self.data_frame = pd.concat([self.data_frame, filtered_force_df], axis=1)
+
+        self.segment_definitions = segment_definitions
+        if segment_definitions != {}:
+            markers = [marker for markers in segment_definitions.values() for marker in markers]
+            self.data_frame = pd.concat([self.data[marker] for marker in markers], axis=1)
+            self.data_frame.columns = [marker + '_' + axis for marker in markers for axis in ['X', 'Y', 'Z']]
+            self.data_frame = pd.concat([self.data_frame, filtered_force_df], axis=1)
 
     @staticmethod
     def reading(file_path):
