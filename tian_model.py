@@ -4,13 +4,13 @@ import torch.nn as nn
 from customized_logger import logger as logging
 import matplotlib.pyplot as plt
 from torch.utils.data import DataLoader, TensorDataset
-import os
 import pandas as pd
 import numpy as np
 import time
-from const import IMU_FIELDS, SENSOR_LIST, DATA_PATH, SUBJECTS
-from torch.nn.utils.rnn import pad_sequence, pack_padded_sequence, pad_packed_sequence
+from const import IMU_FIELDS, SENSOR_LIST, DATA_PATH, SUBJECTS, PHASE, SUBJECT_WEIGHT, SUBJECT_HEIGHT
+from torch.nn.utils.rnn import pack_padded_sequence, pad_packed_sequence
 from transforms3d.euler import euler2mat
+from sklearn.preprocessing import MinMaxScaler  # , StandardScaler
 
 USE_GPU = True
 CALI_VIA_GRAVITY = False
@@ -26,7 +26,7 @@ class TianRNN(nn.Module):
 
     def forward(self, sequence, hidden):
         lstm_out, hidden = self.lstm(sequence, hidden)
-        lstm_out, _ = pad_packed_sequence(lstm_out, batch_first=True, total_length=229)
+        lstm_out, _ = pad_packed_sequence(lstm_out, batch_first=True, total_length=230)
         output = self.hidden2output(lstm_out)
         return output, hidden
 
@@ -37,19 +37,67 @@ class TianRNN(nn.Module):
 
 
 class TianModel(BaseModel):
-    def __init__(self):
-        data_path = DATA_PATH + '/40samples+stance_swing+padding_nan.h5'
-        inertial_cols = [inertial_field + '_' + sensor for sensor in SENSOR_LIST for inertial_field in IMU_FIELDS[:6]]
-        video_cols = [loc + '_' + axis + '_' + angle for loc in ['RHip', 'LHip', 'RKnee', 'LKnee']
-                      for angle in ['90', '180'] for axis in ['x', 'y']]
-        output_cols = ['RIGHT_KNEE_ADDUCTION_MOMENT']
-        # BaseModel.__init__(self, data_path, x_fields=inertial_cols + video_cols, y_fields=output_cols)
-        BaseModel.__init__(self, data_path, x_fields=inertial_cols, y_fields=output_cols)
-        # BaseModel.__init__(self, data_path, x_fields=video_cols, y_fields=output_cols)
+    def __init__(self, data_path, x_fields, y_fields, weights):
+        BaseModel.__init__(self, data_path, x_fields, y_fields, weights)
         if CALI_VIA_GRAVITY:
             self.cali_via_gravity()
-
         self.train_step_lens, self.validation_step_lens, self.test_step_lens = [None] * 3
+
+    # """ Norm each axis """
+    # def preprocess_train_data(self, x_train, y_train):
+    #     self.train_step_lens = self._get_step_len(x_train)
+    #     return BaseModel.preprocess_train_data(self, x_train, y_train)
+    #
+    # def preprocess_validation_test_data(self, x, y):
+    #     self.test_step_lens = self._get_step_len(x)
+    #     return BaseModel.preprocess_validation_test_data(self, x, y)
+
+    """ Norm each type of data """
+    def preprocess_train_data(self, x_train, y_train):
+        def transform(input_data, col, input_name):
+            original_shape = input_data.shape
+            input_data = input_data.reshape([-1, input_data.shape[2]])
+            self._scalars[input_name] = MinMaxScaler()
+            input_data[:, col] = self._scalars[input_name].fit_transform(input_data[:, col])
+            input_data.reshape(original_shape)
+
+        self.train_step_lens = self._get_step_len(x_train)
+        acc_col = [i for i, x in enumerate(self._x_fields['main_input']) if 'Accel' in x]
+        gyr_col = [i for i, x in enumerate(self._x_fields['main_input']) if 'Gyr' in x]
+        vid_col = [i for i, x in enumerate(self._x_fields['main_input']) if '0' in x]
+
+        input_data = x_train['main_input']
+        transform(input_data, acc_col, 'acc_col')
+        transform(input_data, gyr_col, 'gyr_col')
+        if len(vid_col) > 0:
+            transform(input_data, vid_col, 'vid_col')
+
+        # for input_name, input_data in x_train.items():
+        #     original_shape = input_data.shape
+        #     input_data = input_data.reshape([-1, input_data.shape[2]])
+        #     input_data = self._scalars[input_name].fit_transform(input_data)
+        #     input_data = input_data.reshape(original_shape)
+        #     x_train[input_name] = input_data
+        return x_train, y_train
+
+    def preprocess_validation_test_data(self, x, y):
+        def transform(input_data, col, input_name):
+            original_shape = input_data.shape
+            input_data = input_data.reshape([-1, input_data.shape[2]])
+            input_data[:, col] = self._scalars[input_name].transform(input_data[:, col])
+            input_data.reshape(original_shape)
+
+        self.test_step_lens = self._get_step_len(x)
+        acc_col = [i for i, x in enumerate(self._x_fields['main_input']) if 'Accel' in x]
+        gyr_col = [i for i, x in enumerate(self._x_fields['main_input']) if 'Gyr' in x]
+        vid_col = [i for i, x in enumerate(self._x_fields['main_input']) if '0' in x]
+
+        input_data = x['main_input']
+        transform(input_data, acc_col, 'acc_col')
+        transform(input_data, gyr_col, 'gyr_col')
+        if len(vid_col) > 0:
+            transform(input_data, vid_col, 'vid_col')
+        return x, y
 
     def cali_via_gravity(self):
         for subject in SUBJECTS:
@@ -65,7 +113,24 @@ class TianModel(BaseModel):
                 gyr_col_locs = [self.data_columns.index(col) for col in gyr_cols]
                 self._data_all_sub[subject][:, :, gyr_col_locs] = np.apply_along_axis(rotation_fun, 2, self._data_all_sub[subject][:, :, gyr_col_locs])
 
+    @staticmethod
+    def loss_fun_emphasize_peak(y_pred, y):
+        peak_locs = torch.argmax(y, dim=1).reshape([-1])
+        loss_peak = (y_pred[range(y.shape[0]), peak_locs] - y[range(y.shape[0]), peak_locs]).pow(2).mean()
+        y_pred_non_zero = y_pred[y != 0]
+        y_non_zero = y[y != 0]
+        loss_profile = (y_pred_non_zero - y_non_zero).pow(2).mean()
+        return (loss_profile + loss_peak) * 1e3
+
+    @staticmethod
+    def loss_fun_only_positive(y_pred, y):
+        y_pred_positive = y_pred[y > 0]
+        y_positive = y[y > 0]
+        loss_positive = (y_pred_positive - y_positive).pow(2).sum()
+        return loss_positive
+
     def train_model(self, x_train, y_train, x_validation=None, y_validation=None):
+        x_train, y_train = x_train['main_input'], y_train['output']
         N_step, D_in, D_hidden, N_layer, D_out = x_train.shape[0], x_train.shape[2], 10, 2, y_train.shape[2]
         x_train = torch.from_numpy(x_train)
         y_train = torch.from_numpy(y_train)
@@ -79,7 +144,7 @@ class TianModel(BaseModel):
         loss_fn = torch.nn.MSELoss(reduction='sum')
         optimizer = torch.optim.Adam(nn_model.parameters(), lr=2e-3, weight_decay=2e-4)
 
-        batch_size = 20
+        batch_size = 50
         train_ds = TensorDataset(x_train, y_train, train_step_lens)
         train_size = int(0.8 * len(train_ds))
         validation_size = len(train_ds) - train_size
@@ -88,7 +153,7 @@ class TianModel(BaseModel):
         validation_dl = DataLoader(validation_ds, batch_size=validation_size)
 
         logging.info('\tEpoch\t\tTrain Loss\t\tValidation Loss\t\tDuration\t\t')
-        for epoch in range(1):
+        for epoch in range(10):
             epoch_start_time = time.time()
             for i_batch, (xb, yb, lens) in enumerate(train_dl):
 
@@ -96,6 +161,8 @@ class TianModel(BaseModel):
                 hidden = nn_model.init_hidden(xb.shape[0])
                 xb = pack_padded_sequence(xb, lens, batch_first=True, enforce_sorted=False)
                 y_pred, _ = nn_model(xb, hidden)
+                # train_loss = self.loss_fun_emphasize_peak(y_pred, yb)
+                # train_loss = self.loss_fun_only_positive(y_pred, yb)
                 train_loss = loss_fn(y_pred, yb)
 
                 if epoch == 0 and i_batch == 0:
@@ -113,7 +180,7 @@ class TianModel(BaseModel):
 
     @staticmethod
     def get_static_calibration(subject_name):
-        data_path = DATA_PATH + '/' + subject_name + '/combined/static_back.csv'
+        data_path = DATA_PATH + '/' + subject_name + '/combined/static_side.csv'
         static_data = pd.read_csv(data_path, index_col=0)
         transform_mat_dict = {}
         for sensor in SENSOR_LIST:
@@ -125,14 +192,6 @@ class TianModel(BaseModel):
             transform_mat_dict[sensor] = euler2mat(roll, pitch, 0)
         return transform_mat_dict
 
-    def preprocess_train_data(self, x_train, y_train):
-        self.train_step_lens = self._get_step_len(x_train)
-        return BaseModel.preprocess_train_data(x_train, y_train)
-
-    def preprocess_validation_test_data(self, x, y):
-        self.test_step_lens = self._get_step_len(x)
-        return BaseModel.preprocess_validation_test_data(x, y)
-
     @staticmethod
     def evaluate_validation_set(nn_model, validation_dl, loss_fn, batch_size):
         for x_validation, y_validation, lens in validation_dl:
@@ -143,6 +202,7 @@ class TianModel(BaseModel):
             return validation_loss
 
     def predict(self, nn_model, x_test):
+        x_test = x_test['main_input']
         x_test = torch.from_numpy(x_test)
         if USE_GPU:
             x_test = x_test.cuda()
@@ -150,17 +210,10 @@ class TianModel(BaseModel):
         x_test = pack_padded_sequence(x_test, self.test_step_lens, batch_first=True, enforce_sorted=False)
         y_pred, _ = nn_model(x_test, hidden)
         y_pred = y_pred.detach().cpu().numpy()
-        return y_pred
+        return {'output': y_pred}
 
     @staticmethod
-    def customized_analysis(y_test, y_pred, metrics):
-        for i_channel in range(y_pred.shape[2]):
-            plt.figure()
-            plt.plot(y_test[:, :, i_channel].ravel())
-            plt.plot(y_pred[:, :, i_channel].ravel())
-
-    @staticmethod
-    def _get_step_len(data, feature_col_num=0):
+    def _get_step_len(data, input_cate='main_input', feature_col_num=0):
         """
 
         :param data: Numpy array, 3d (step, sample, feature)
@@ -168,13 +221,25 @@ class TianModel(BaseModel):
                the same results
         :return:
         """
-        data_the_feature = data[:, :, feature_col_num]
+        data_the_feature = data[input_cate][:, :, feature_col_num]
         nan_loc = np.isnan(data_the_feature)
         data_len = np.sum(~nan_loc, axis=1)
         return data_len
 
+
 if __name__ == "__main__":
-    model = TianModel()
-    # model.param_tuning(range(3, 13), [], range(13, 16))
-    model.cross_validation(range(3, 6))
+
+    data_path = DATA_PATH + '/40samples+stance_swing+padding_zero.h5'
+    inertial_cols = [inertial_field + '_' + sensor for sensor in SENSOR_LIST for inertial_field in IMU_FIELDS[:6]]
+    video_cols = [loc + '_' + axis + '_' + angle for loc in ['RHip', 'LHip', 'RKnee', 'LKnee']
+                  for angle in ['90', '180'] for axis in ['x', 'y']]
+    output_cols = ['RIGHT_KNEE_ADDUCTION_MOMENT']
+
+    x_fields = {'main_input': inertial_cols+video_cols, 'aux_input': [SUBJECT_WEIGHT, SUBJECT_HEIGHT]}
+    y_fields = {'output': output_cols}
+    weights = {'output': [PHASE]*len(output_cols)}
+
+    model = TianModel(data_path, x_fields, y_fields, weights)
+    # model.preprocess_train_evaluation(range(10), [], range(10, 13))
+    model.cross_validation(range(len(SUBJECTS)))
     plt.show()
