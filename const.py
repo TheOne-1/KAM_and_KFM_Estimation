@@ -1,5 +1,6 @@
 import os
 
+EXT_KFM, EXT_KAM, _ = EXT_KNEE_MOMENT = ['EXT_KM_X', 'EXT_KM_Y', 'EXT_KM_Z']
 TRIALS = ['baseline', 'fpa', 'step_width', 'trunk_sway']
 STATIC_TRIALS = ['static_back', 'static_side']
 SUBJECTS = ['s002_wangdianxin', 's004_ouyangjue', 's005_tangansheng', 's006_xusen', 's007_zuogangao', 's008_liyu',
@@ -38,7 +39,7 @@ LEFT_PLATE_FORCE_Z = 'plate_1_force_z'
 RKAM_COLUMN = 'RIGHT_KNEE_ADDUCTION_MOMENT'
 RFORCE_Z_COLUMN = 'plate_2_force_z'
 TARGETS_LIST = ["RIGHT_KNEE_ADDUCTION_MOMENT", "RIGHT_KNEE_FLEXION_MOMENT", "RIGHT_KNEE_ADDUCTION_ANGLE",
-                "RIGHT_KNEE__ADDUCTION_VELOCITY"]
+                "RIGHT_KNEE_ADDUCTION_VELOCITY"]
 PHASE = 'phase'
 # all the fields of combined data
 ALL_FIELDS = ["Event", "AccelX_L_FOOT", "AccelY_L_FOOT", "AccelZ_L_FOOT", "GyroX_L_FOOT", "GyroY_L_FOOT",
@@ -88,7 +89,7 @@ ALL_FIELDS = ["Event", "AccelX_L_FOOT", "AccelY_L_FOOT", "AccelZ_L_FOOT", "GyroX
               "RBigToe_y_180", "RBigToe_probability_180", "RSmallToe_x_180", "RSmallToe_y_180",
               "RSmallToe_probability_180", "RHeel_x_180", "RHeel_y_180", "RHeel_probability_180",
               "RIGHT_KNEE_ADDUCTION_MOMENT", "RIGHT_KNEE_FLEXION_MOMENT", "RIGHT_KNEE_ADDUCTION_ANGLE",
-              "RIGHT_KNEE__ADDUCTION_VELOCITY", "LFCC_X", "LFCC_Y", "LFCC_Z", "LFM5_X", "LFM5_Y", "LFM5_Z", "LFM2_X",
+              "RIGHT_KNEE_ADDUCTION_VELOCITY", "LFCC_X", "LFCC_Y", "LFCC_Z", "LFM5_X", "LFM5_Y", "LFM5_Z", "LFM2_X",
               "LFM2_Y", "LFM2_Z", "RFCC_X", "RFCC_Y", "RFCC_Z", "RFM5_X", "RFM5_Y", "RFM5_Z", "RFM2_X", "RFM2_Y",
               "RFM2_Z", "LTAM_X", "LTAM_Y", "LTAM_Z", "LFAL_X", "LFAL_Y", "LFAL_Z", "LSK_X", "LSK_Y", "LSK_Z", "LTT_X",
               "LTT_Y", "LTT_Z", "RTAM_X", "RTAM_Y", "RTAM_Z", "RFAL_X", "RFAL_Y", "RFAL_Z", "RSK_X", "RSK_Y", "RSK_Z",
@@ -99,4 +100,5 @@ ALL_FIELDS = ["Event", "AccelX_L_FOOT", "AccelY_L_FOOT", "AccelZ_L_FOOT", "GyroX
               "SXS_Z", "SJN_X", "SJN_Y", "SJN_Z", "CV7_X", "CV7_Y", "CV7_Z", "LAC_X", "LAC_Y", "LAC_Z", "RAC_X",
               "RAC_Y", "RAC_Z", 'plate_1_force_x', 'plate_1_force_y', 'plate_1_force_z', 'plate_2_force_x',
               'plate_2_force_y', 'plate_2_force_z', 'plate_1_cop_x', 'plate_1_cop_y', 'plate_1_cop_z',
-              'plate_2_cop_x', 'plate_2_cop_y', 'plate_2_cop_z', 'body weight', 'body height', 'phase']
+              'plate_2_cop_x', 'plate_2_cop_y', 'plate_2_cop_z', 'body weight', 'body height', 'phase',
+              'EXT_KM_X', 'EXT_KM_Y', 'EXT_KM_Z']

@@ -15,7 +15,8 @@ import pandas as pd
 from scipy.signal import find_peaks, butter, filtfilt
 import matplotlib.pyplot as plt
 from scipy import linalg
-from const import SENSOR_LIST, IMU_FIELDS, FORCE_DATA_FIELDS
+from const import SENSOR_LIST, IMU_FIELDS, FORCE_DATA_FIELDS, EXT_KNEE_MOMENT, TARGETS_LIST, SUBJECT_HEIGHT
+from const import SUBJECT_WEIGHT
 import wearable_math
 
 
@@ -59,8 +60,7 @@ class Visual3dCsvReader:
         self.data.fillna(0)
         self.data_frame = self.data[[
             'RIGHT_KNEE_MOMENT', 'RIGHT_KNEE_MOMENT.1', 'RIGHT_KNEE_ANGLE', 'RIGHT_KNEE_VELOCITY']].fillna(0)
-        self.data_frame.columns = ['RIGHT_KNEE_ADDUCTION_MOMENT', 'RIGHT_KNEE_FLEXION_MOMENT',
-                                   'RIGHT_KNEE_ADDUCTION_ANGLE', 'RIGHT_KNEE__ADDUCTION_VELOCITY']
+        self.data_frame.columns = TARGETS_LIST
 
     def create_step_id(self, step_type):
         [LOFF, LON, ROFF, RON] = [self.data[event].dropna().values.tolist() for event in ['LOFF', 'LON', 'ROFF', 'RON']]
@@ -90,7 +90,7 @@ class ViconCsvReader:
     '''
 
     # if static_trial is not none, it's used for filling missing data.
-    def __init__(self, file_path, segment_definitions=None, static_trial=None):
+    def __init__(self, file_path, segment_definitions=None, static_trial=None, sub_info=None):
         self.data, self.sample_rate = ViconCsvReader.reading(file_path)
         # create segment marker data
         self.segment_data = dict()
@@ -109,7 +109,7 @@ class ViconCsvReader:
         # filter and resample force data
         force_names_ori = ['Imported Bertec Force Plate #' + plate_num + ' - ' + data_type for plate_num in ['1', '2']
                            for data_type in ['Force', 'CoP']]
-        filtered_force_array = np.concatenate([data_filt(self.data[force_name], 50, 1000)
+        filtered_force_array = np.concatenate([data_filter(self.data[force_name], 50, 1000)
                                                for force_name in force_names_ori], axis=1)
         filtered_force_array = filtered_force_array[::10, :]
         filtered_force_df = pd.DataFrame(filtered_force_array, columns=FORCE_DATA_FIELDS)
@@ -120,6 +120,9 @@ class ViconCsvReader:
             self.data_frame = pd.concat([self.data[marker] for marker in markers], axis=1)
             self.data_frame.columns = [marker + '_' + axis for marker in markers for axis in ['X', 'Y', 'Z']]
             self.data_frame = pd.concat([self.data_frame, filtered_force_df], axis=1)
+        if sub_info is not None:
+            knee_moment = self.get_right_external_kam(sub_info)
+            self.data_frame = pd.concat([self.data_frame, knee_moment], axis=1)
 
     @staticmethod
     def reading(file_path):
@@ -167,6 +170,19 @@ class ViconCsvReader:
                         except ValueError:
                             data[i].append(np.nan)
         return data_collection, sample_rate_collection
+
+    def get_right_external_kam(self, sub_info):
+        sub_height, sub_weight = sub_info[[SUBJECT_HEIGHT, SUBJECT_WEIGHT]]
+        cal_offset = sub_info[['Caliwand for plate 2-x', 'Caliwand for plate 2-y', 'Caliwand for plate 2-z']]
+        force_cop = self.data_frame[['plate_2_cop_x', 'plate_2_cop_y', 'plate_2_cop_z']].values
+        force_cop += cal_offset
+        knee_origin = (self.data_frame[['RFME_X', 'RFME_Y', 'RFME_Z']].values +
+                       self.data_frame[['RFLE_X', 'RFLE_Y', 'RFLE_Z']].values) / 2
+        r = force_cop - knee_origin
+        force_data = -self.data_frame[['plate_2_force_x', 'plate_2_force_y', 'plate_2_force_z']].values
+        knee_moment = pd.DataFrame(np.cross(r, force_data), columns=EXT_KNEE_MOMENT)
+        knee_moment /= (sub_height * sub_weight * 1000.)
+        return knee_moment
 
     def get_angular_velocity_theta(self, segment, check_len):
         segment_data_series = self.segment_data[segment]
@@ -277,11 +293,15 @@ class ViconCsvReader:
         for motion_marker in motion_markers:
             motion_marker.interpolate(method='linear', axis=0, inplace=True)
 
+    def append_external_kam(self):
+        # calibrate force plate
+        pass
+
 
 class SageCsvReader:
-    '''
+    """
     Read the csv file exported from sage systems
-    '''
+    """
     GUESSED_EVENT_INDEX = 0
 
     def __init__(self, file_path):
@@ -304,6 +324,7 @@ class SageCsvReader:
                                    self.data_frame.columns]
         self.missing_data_index = self.data_frame.isnull().any(axis=1)
         self.data_frame = self.data_frame.interpolate(method='linear', axis=0)
+        self.data_frame.loc[:, :] = data_filter(self.data_frame.values, 15, 100, 2)
 
     def get_norm(self, sensor, field, is_plot=False):
         assert sensor in SENSOR_LIST
@@ -350,8 +371,8 @@ class SageCsvReader:
         gyr_data = np.array(self.data_frame[['_'.join([direct, 'R_FOOT']) for direct in ['GyroX', 'GyroY', 'GyroZ']]])
 
         if cut_off_fre_strike_off is not None:
-            acc_data = data_filt(acc_data, cut_off_fre_strike_off, self.sample_rate, filter_order=2)
-            gyr_data = data_filt(gyr_data, cut_off_fre_strike_off, self.sample_rate, filter_order=2)
+            acc_data = data_filter(acc_data, cut_off_fre_strike_off, self.sample_rate, filter_order=2)
+            gyr_data = data_filter(gyr_data, cut_off_fre_strike_off, self.sample_rate, filter_order=2)
 
         gyr_x = gyr_data[:, 0]
         data_len = gyr_data.shape[0]
@@ -473,14 +494,14 @@ class SageCsvReader:
             plt.show()
 
 
-def data_filt(data, cut_off_fre, sampling_fre, filter_order=4):
+def data_filter(data, cut_off_fre, sampling_fre, filter_order=4):
     fre = cut_off_fre / (sampling_fre / 2)
     b, a = butter(filter_order, fre, 'lowpass')
     if len(data.shape) == 1:
-        data_filt = filtfilt(b, a, data)
+        data_filtered = filtfilt(b, a, data)
     else:
-        data_filt = filtfilt(b, a, data, axis=0)
-    return data_filt
+        data_filtered = filtfilt(b, a, data, axis=0)
+    return data_filtered
 
 
 def rotationMatrixToEulerAngles(R):
@@ -570,8 +591,9 @@ def translate_step_event_to_step_id(events_dict, step_type, max_step_length):
     return right_events
 
 
-def calibrate_force_plate_center(vicon_data, plate_num):
+def calibrate_force_plate_center(file_path, plate_num):
     assert (plate_num in [1, 2])
+    vicon_data = ViconCsvReader(file_path)
     data_DL = vicon_data.data['DL']
     data_DR = vicon_data.data['DR']
     data_ML = vicon_data.data['ML']
@@ -581,6 +603,7 @@ def calibrate_force_plate_center(vicon_data, plate_num):
     else:
         center_plate = vicon_data.data['Imported Bertec Force Plate #2 - CoP']
     center_plate.columns = ['X', 'Y', 'Z']
-    cop_offset = np.mean(center_plate, axis=0) - np.mean(center_vicon, axis=0)
+    plate_cop = np.mean(center_plate, axis=0)
+    cop_offset = np.mean(center_vicon, axis=0) - plate_cop
+    return plate_cop, cop_offset
 
-    return cop_offset

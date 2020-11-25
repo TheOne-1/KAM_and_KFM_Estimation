@@ -102,8 +102,7 @@ def generate_step_data(export_path):
     with h5py.File(export_path, 'w') as hf:
         for subject, data_collections in subject_data_dict.items():
             subject_whole_trial = np.concatenate(
-                [np.array(data.loc[:, ALL_FIELDS])[np.newaxis, :, :] for data in
-                 data_collections], axis=0)
+                [np.array(data.loc[:, ALL_FIELDS])[np.newaxis, :, :] for data in data_collections], axis=0)
             hf.create_dataset(subject, data=subject_whole_trial, dtype='float32')
         hf.attrs['columns'] = json.dumps(ALL_FIELDS)
 
@@ -114,6 +113,6 @@ if __name__ == "__main__":
     generate_step_data('40samples+stance_swing+padding_zero.h5')
     # PADDING_MODE = PADDING_NEXT_STEP
     # generate_step_data('40samples+stance_swing+padding_next_step.h5')
-    PADDING_MODE = PADDING_ZERO
-    TRIALS = ['baseline', 'fpa', 'step_width']
-    generate_step_data('40samples+stance_swing+kick_out_trunksway.h5')
+    # PADDING_MODE = PADDING_ZERO
+    # TRIALS = ['baseline', 'fpa', 'step_width']
+    # generate_step_data('40samples+stance_swing+kick_out_trunksway.h5')
