@@ -9,6 +9,7 @@ import matplotlib.pyplot as plt
 from sklearn.preprocessing import MinMaxScaler  # , StandardScaler
 from sklearn.utils import shuffle
 from sklearn.metrics import r2_score, mean_squared_error as mse
+from scipy.stats import pearsonr
 
 
 class BaseModel:
@@ -154,20 +155,21 @@ class BaseModel:
 
     def get_all_scores(self, y_true, y_pred, weights=None):
         def get_colum_score(arr_true, arr_pred, w=None):
-            r2 = np.array([r2_score(arr_true[i, :], arr_pred[i, :], sample_weight=None if w is None else w[i, :])
-                           for i in range(arr_true.shape[0])])
-            rmse = np.array([np.sqrt(mse(arr_true[i, :], arr_pred[i, :], sample_weight=None if w is None else w[i, :]))
-                             for i in range(arr_true.shape[0])])
-            mae = np.array([np.average(abs((arr_true[i, :] - arr_pred[i, :])), weights=None if w is None else w[i, :])
-                            for i in range(arr_true.shape[0])])
-            r_rmse = rmse / np.array(
-                [(arr_true[i, :].max() + arr_pred[i, :].max() - arr_true[i, :].min() - arr_pred[i, :].min())/2
-                 for i in range(arr_true.shape[0])])
+            r2, rmse, mae, r_rmse, p_value = [np.zeros(arr_true.shape[0])] * 5
+            for i in range(arr_true.shape[0]):
+                arr_true_i = arr_true[i, :] if w is None else arr_true[i, w[i, :] == 1.]
+                arr_pred_i = arr_pred[i, :] if w is None else arr_pred[i, w[i, :] == 1.]
 
-            locs = np.where(w.ravel() == 1)[0]
+                r2[i] = r2_score(arr_true_i, arr_pred_i)
+                rmse[i] = np.sqrt(mse(arr_true_i, arr_pred_i))
+                mae[i] = np.mean(abs((arr_true_i - arr_pred_i)))
+                r_rmse[i] = rmse[i] / (arr_true_i.max() + arr_pred_i.max() - arr_true_i.min() - arr_pred_i.min()) / 2
+                p_value[i] = pearsonr(arr_true_i, arr_pred_i)[0]
+
+            locs = np.where(w.ravel() != 0.)[0]
             r2_all = r2_score(arr_true.ravel()[locs], arr_pred.ravel()[locs])
             r2_all = np.full(r2.shape, r2_all)
-            return {'r2': r2, 'rmse': rmse, 'mae': mae, 'r2_all': r2_all, 'r_rmse': r_rmse}
+            return {'r2': r2, 'rmse': rmse, 'mae': mae, 'r2_all': r2_all, 'r_rmse': r_rmse, 'p_value': p_value}
 
         scores = []
         weights = {} if weights is None else weights
