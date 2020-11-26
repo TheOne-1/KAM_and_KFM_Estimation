@@ -162,5 +162,5 @@ if __name__ == "__main__":
     dx_model = DXKamModel('40samples+stance_swing+padding_zero.h5', x_fields, y_fields, y_weights)
     subject_list = list(range(len(SUBJECTS)))
     shuffle(subject_list)
-    dx_model.preprocess_train_evaluation(subject_list[3:], subject_list[:3], subject_list[:3])
-    # dx_model.cross_validation(subject_list)
+    # dx_model.preprocess_train_evaluation(subject_list[3:], subject_list[:3], subject_list[:3])
+    dx_model.cross_validation(subject_list)
