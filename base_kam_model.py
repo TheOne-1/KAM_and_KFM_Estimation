@@ -128,7 +128,7 @@ class BaseModel:
         for input_name, input_data in data.items():
             input_data = input_data.copy()
             original_shape = input_data.shape
-            input_data[input_data == 0.] = np.nan
+            input_data[(input_data == 0.).all(axis=2), :] = np.nan
             input_data = input_data.reshape([-1, input_data.shape[2]])
             input_data = getattr(scalars[input_name], method)(input_data)
             input_data = input_data.reshape(original_shape)
