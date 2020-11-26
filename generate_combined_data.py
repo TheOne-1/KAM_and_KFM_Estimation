@@ -2,11 +2,10 @@ import wearable_toolkit
 import pandas as pd
 import numpy as np
 import os
-from const import SEGMENT_DEFITIONS, SUBJECTS, STATIC_TRIALS, TRIALS, DATA_PATH, SENSOR_LIST, SUBJECT_HEIGHT, SUBJECT_WEIGHT
+from const import SEGMENT_DEFITIONS, SUBJECTS, STATIC_TRIALS, TRIALS, DATA_PATH, SUBJECT_HEIGHT, SUBJECT_WEIGHT
 
-# read subject personal info
-subject_info_csv = pd.read_csv(os.path.join(DATA_PATH, 'subject_info.csv'))
-subject_info_dict = {subject['subject id']: [subject[SUBJECT_HEIGHT], subject[SUBJECT_WEIGHT]] for _, subject in subject_info_csv.iterrows()}
+subject_infos = pd.read_csv(os.path.join(DATA_PATH, 'subject_info.csv'), index_col=0)
+
 
 def sync_and_crop_data_frame(subject, trial):
     vicon_data_path = os.path.join(DATA_PATH, subject, 'vicon', trial + '.csv')
@@ -18,7 +17,8 @@ def sync_and_crop_data_frame(subject, trial):
     middle_data_path = os.path.join(DATA_PATH, subject, 'combined', trial + '.csv')
     is_verbose = False
     # read vicon, imu data
-    vicon_data = wearable_toolkit.ViconCsvReader(vicon_data_path, SEGMENT_DEFITIONS, vicon_calibrate_data_path)
+    subject_info = subject_infos.loc[subject, :]
+    vicon_data = wearable_toolkit.ViconCsvReader(vicon_data_path, SEGMENT_DEFITIONS, vicon_calibrate_data_path, subject_info)
     video_90_data = wearable_toolkit.VideoCsvReader(video_90_data_path)
     video_180_data = wearable_toolkit.VideoCsvReader(video_180_data_path)
     imu_data = wearable_toolkit.SageCsvReader(imu_data_path)
@@ -74,8 +74,8 @@ def sync_and_crop_data_frame(subject, trial):
         [imu_data.data_frame, video_90_data.data_frame, video_180_data.data_frame, V3d_data.data_frame,
          vicon_data.data_frame], axis=1)
     middle_data = middle_data.loc[:min_length]
-    middle_data[SUBJECT_HEIGHT] = subject_info_dict[subject][0]
-    middle_data[SUBJECT_WEIGHT] = subject_info_dict[subject][1]
+    middle_data[SUBJECT_HEIGHT] = subject_info[SUBJECT_HEIGHT]
+    middle_data[SUBJECT_WEIGHT] = subject_info[SUBJECT_WEIGHT]
     middle_data.to_csv(middle_data_path)
 
 
@@ -109,5 +109,5 @@ def get_static_combined_data():
 
 
 if __name__ == "__main__":
-    get_static_combined_data()
+    # get_static_combined_data()
     get_combined_data()

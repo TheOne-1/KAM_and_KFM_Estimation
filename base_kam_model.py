@@ -32,7 +32,7 @@ class BaseModel:
         data_dict = {}
         for input_name, input_fields in fields_dict.items():
             x_field_col_loc = [self.data_columns.index(field_name) for field_name in input_fields]
-            data_dict[input_name] = data[:, :, x_field_col_loc]
+            data_dict[input_name] = data[:, :, x_field_col_loc].copy()
         return data_dict
 
     def preprocess_train_evaluation(self, train_sub_ids: List[int], validate_sub_ids: List[int],
@@ -85,12 +85,13 @@ class BaseModel:
         validation_data_list = [self._data_all_sub[sub_name] for sub_name in validate_sub_names]
 
         validation_data = np.concatenate(validation_data_list, axis=0) if validation_data_list else None
-        x_validation, y_validation = [None] * 2
+        x_validation, y_validation, validation_weight = [None] * 3
         if validation_data is not None:
             x_validation = self._get_raw_data_dict(validation_data, self._x_fields)
             y_validation = self._get_raw_data_dict(validation_data, self._y_fields)
+            validation_weight = self._get_raw_data_dict(validation_data, self._weights)
             x_validation, y_validation = self.preprocess_validation_test_data(x_validation, y_validation)
-        model = self.train_model(x_train, y_train, x_validation, y_validation)
+        model = self.train_model(x_train, y_train, x_validation, y_validation, validation_weight)
         return model
 
     def model_evaluation(self, model, test_sub_ids: List[int]):
@@ -121,35 +122,37 @@ class BaseModel:
             title = "{}, {}, {}, r2".format(subject, output, field, 'r2')
             self.representative_profile_curves(arr1, arr2, title, r2)
 
-    def preprocess_train_data(self, x_train, y_train):
-        for data_dict in [x_train]:
-            for input_name, input_data in data_dict.items():
-                original_shape = input_data.shape
-                input_data = input_data.reshape([-1, input_data.shape[2]])
-                input_data = self._scalars[input_name].fit_transform(input_data)
-                input_data = input_data.reshape(original_shape)
-                data_dict[input_name] = input_data
-        return x_train, y_train
+    @staticmethod
+    def get_scaled_data(data, scalars, method):
+        scaled_date = {}
+        for input_name, input_data in data.items():
+            input_data = input_data.copy()
+            original_shape = input_data.shape
+            input_data[input_data == 0.] = np.nan
+            input_data = input_data.reshape([-1, input_data.shape[2]])
+            input_data = getattr(scalars[input_name], method)(input_data)
+            input_data = input_data.reshape(original_shape)
+            input_data[np.isnan(input_data)] = 0.
+            scaled_date[input_name] = input_data
+        return scaled_date
+
+    def preprocess_train_data(self, x, y):
+        x = self.get_scaled_data(x, self._scalars, 'fit_transform')
+        return x, y
 
     def preprocess_validation_test_data(self, x, y):
-        for data_dict in [x]:
-            for input_name, input_data in data_dict.items():
-                original_shape = input_data.shape
-                input_data = input_data.reshape([-1, input_data.shape[2]])
-                input_data = self._scalars[input_name].transform(input_data)
-                input_data = input_data.reshape(original_shape)
-                data_dict[input_name] = input_data
+        x = self.get_scaled_data(x, self._scalars, 'transform')
         return x, y
 
     @staticmethod
-    def train_model(x_train, y_train, x_validation=None, y_validation=None):
+    def train_model(x_train, y_train, x_validation=None, y_validation=None, validation_weight=None):
         raise RuntimeError('Method not implemented')
 
     @staticmethod
     def predict(model, x_test):
         raise RuntimeError('Method not implemented')
 
-    def get_all_scores(self, y_true, y_pred, weights):
+    def get_all_scores(self, y_true, y_pred, weights=None):
         def get_colum_score(arr_true, arr_pred, w=None):
             r2 = np.array([r2_score(arr_true[i, :], arr_pred[i, :], sample_weight=None if w is None else w[i, :])
                            for i in range(arr_true.shape[0])])
@@ -157,13 +160,17 @@ class BaseModel:
                              for i in range(arr_true.shape[0])])
             mae = np.array([np.average(abs((arr_true[i, :] - arr_pred[i, :])), weights=None if w is None else w[i, :])
                             for i in range(arr_true.shape[0])])
+            r_rmse = rmse / np.array(
+                [(arr_true[i, :].max() + arr_pred[i, :].max() - arr_true[i, :].min() - arr_pred[i, :].min())/2
+                 for i in range(arr_true.shape[0])])
 
             locs = np.where(w.ravel() == 1)[0]
             r2_all = r2_score(arr_true.ravel()[locs], arr_pred.ravel()[locs])
             r2_all = np.full(r2.shape, r2_all)
-            return {'r2': r2, 'rmse': rmse, 'mae': mae, 'r2_all': r2_all}
+            return {'r2': r2, 'rmse': rmse, 'mae': mae, 'r2_all': r2_all, 'r_rmse': r_rmse}
 
         scores = []
+        weights = {} if weights is None else weights
         for output_name, fields in self._y_fields.items():
             for col, field in enumerate(fields):
                 y_true_one_field = y_true[output_name][:, :, col]
@@ -214,7 +221,7 @@ class BaseModel:
         axs[1, 1].fill_between(axis_x, y_pred_mean - y_pred_std, y_pred_mean + y_pred_std,
                                facecolor='yellow', alpha=0.2)
         axs[1, 1].legend(loc='upper right', fontsize=8)
-        axs[1, 1].text(0.4, 0.9, "mean r2: {}".format(np.round(np.mean(metric), 3)),
+        axs[1, 1].text(0.4, 0.9, "r2: {}".format(np.round(np.mean(metric), 3)),
                        horizontalalignment='center', verticalalignment='center', transform=axs[1, 1].transAxes)
         axs[1, 1].set_title('general performance')
         plt.tight_layout()
