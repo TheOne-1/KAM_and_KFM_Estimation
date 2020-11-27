@@ -1,4 +1,5 @@
-from base_kam_model import BaseModel, DivideMaxScalar
+from base_kam_model import BaseModel
+from wearable_toolkit import DivideMaxScalar
 import torch
 import torch.nn as nn
 from customized_logger import logger as logging
@@ -47,8 +48,8 @@ class TianRNN(nn.Module):
 
 
 class TianModel(BaseModel):
-    def __init__(self, data_path, x_fields, y_fields, weights, scalar):
-        BaseModel.__init__(self, data_path, x_fields, y_fields, weights, scalar)
+    def __init__(self, data_path, x_fields, y_fields, weights, base_scalar):
+        BaseModel.__init__(self, data_path, x_fields, y_fields, weights, base_scalar)
         self.train_step_lens, self.validation_step_lens, self.test_step_lens = [None] * 3
 
     # """ Norm each axis """
