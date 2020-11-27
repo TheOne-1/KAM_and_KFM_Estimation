@@ -13,7 +13,7 @@ from scipy.stats import pearsonr
 import pandas as pd
 from transforms3d.euler import euler2mat
 
-CALI_VIA_GRAVITY = True     # by default, static_back is used for calibration
+CALI_VIA_GRAVITY = False     # by default, static_back is used for calibration
 # TODO：Calibrate via gravity should be place in generate_combined_data in the future, if it indeed shows better result.
 
 
@@ -134,13 +134,13 @@ class BaseModel:
             self.representative_profile_curves(arr1, arr2, title, r2)
 
     @staticmethod
-    def normalize_data(data, scalars, method, scalar_mode='by_column'):
-        assert(scalar_mode in ['by_column', 'by_sample'])
+    def normalize_data(data, scalars, method, scalar_mode='by_each_column'):
+        assert(scalar_mode in ['by_each_column', 'by_all_columns'])
         scaled_date = {}
         for input_name, input_data in data.items():
             input_data = input_data.copy()
             original_shape = input_data.shape
-            target_shape = [-1, input_data.shape[2]] if scalar_mode == 'by_column' else [-1, 1]
+            target_shape = [-1, input_data.shape[2]] if scalar_mode == 'by_each_column' else [-1, 1]
             input_data[(input_data == 0.).all(axis=2), :] = np.nan
             input_data = input_data.reshape(target_shape)
             input_data = getattr(scalars[input_name], method)(input_data)

@@ -8,15 +8,56 @@ from torch.utils.data import DataLoader, TensorDataset
 import pandas as pd
 import numpy as np
 import time
-from const import IMU_FIELDS, SENSOR_LIST, DATA_PATH, SUBJECTS, PHASE, SUBJECT_WEIGHT, SUBJECT_HEIGHT
+from const import IMU_FIELDS, SENSOR_LIST, DATA_PATH, PHASE, SUBJECT_WEIGHT, SUBJECT_HEIGHT
 from torch.nn.utils.rnn import pack_padded_sequence, pad_packed_sequence
 from sklearn.preprocessing import MinMaxScaler, StandardScaler
 
 USE_GPU = True
 
 
+class TianCNN(nn.Module):
+    def __init__(self, x_dim, y_dim, nlayer=2):
+        super().__init__()
+        self.conv1 = nn.Conv1d(x_dim, 10, kernel_size=3, stride=2)
+        self.conv2output = nn.Linear(100, y_dim)
+
+    def forward(self, sequence):
+        sequence = self.conv1(sequence)
+        output = self.hidden2output(sequence)
+        return output
+
+
+class WangRNN(nn.Module):
+    def __init__(self, x_dim, y_dim, nlayer=2):
+        super(WangRNN, self).__init__()
+        hidden_dim = 10
+        self.hidden_dim = hidden_dim
+        self.nlayer = nlayer
+        self.y_dim = y_dim
+        self.rnn_layer = nn.GRU(x_dim, hidden_dim, 2, dropout=0.5, batch_first=True, bidirectional=True)
+        self.hidden2output = nn.Linear(2*hidden_dim, y_dim)
+        for layer in [self.hidden2dense, self.dense2output]:
+            nn.init.xavier_normal_(layer.weight)
+        for name, param in self.rnn_layer.named_parameters():
+            if 'bias' in name:
+                nn.init.constant_(param, 0.0)
+            elif 'weight' in name:
+                nn.init.xavier_normal_(param)
+
+    def forward(self, sequence, hidden, lens):
+        sequence = pack_padded_sequence(sequence, lens, batch_first=True, enforce_sorted=False)
+        gru_out, hidden = self.rnn_layer(sequence, hidden)
+        gru_out, _ = pad_packed_sequence(gru_out, batch_first=True, total_length=230)
+        output = self.hidden2output(gru_out)
+        return output, hidden
+
+    def init_hidden(self, batch_size):
+        weight = next(self.parameters())
+        return weight.new_zeros(self.nlayer*2, batch_size, self.hidden_dim)
+
+
 class TianRNN(nn.Module):
-    def __init__(self, x_dim, hidden_dim, nlayer, y_dim):
+    def __init__(self, x_dim, y_dim, hidden_dim=30, nlayer=2):
         super(TianRNN, self).__init__()
         self.hidden_dim = hidden_dim
         self.nlayer = nlayer
@@ -32,7 +73,8 @@ class TianRNN(nn.Module):
             elif 'weight' in name:
                 nn.init.xavier_normal_(param)
 
-    def forward(self, sequence, hidden):
+    def forward(self, sequence, hidden, lens):
+        sequence = pack_padded_sequence(sequence, lens, batch_first=True, enforce_sorted=False)
         lstm_out, hidden = self.rnn_layer(sequence, hidden)
         lstm_out, _ = pad_packed_sequence(lstm_out, batch_first=True, total_length=230)
         relu_out = self.hidden2dense(lstm_out).clamp(min=0)
@@ -68,13 +110,13 @@ class TianModel(BaseModel):
 
     def train_model(self, x_train, y_train, x_validation=None, y_validation=None, validation_weight=None):
         self.train_step_lens, self.validation_step_lens = self._get_step_len(x_train), self._get_step_len(x_validation)
-        x_train, y_train = np.concatenate(x_train.values()), y_train['output']
-        x_validation, y_validation = np.concatenate(x_validation.values()), y_validation['output']
+        x_train, y_train = np.concatenate(list(x_train.values()), axis=2), y_train['output']
+        x_validation, y_validation = np.concatenate(list(x_validation.values()), axis=2), y_validation['output']
         N_step, D_in, D_hidden, N_layer, D_out = x_train.shape[0], x_train.shape[2], 30, 1, y_train.shape[2]
         x_train = torch.from_numpy(x_train).float()
         y_train = torch.from_numpy(y_train).float()
         train_step_lens = torch.from_numpy(self.train_step_lens)
-        nn_model = TianRNN(D_in, D_hidden, N_layer, D_out)
+        nn_model = TianRNN(x_train.shape[2], y_train.shape[2])
 
         if USE_GPU:
             # x_train = x_train.cuda()
@@ -104,7 +146,7 @@ class TianModel(BaseModel):
         vali_from_test_dl = DataLoader(vali_from_test_ds, batch_size=len(vali_from_test_ds))
 
         logging.info('\tEpoch\t\tTrain_Loss\tVali_train_Loss\tVali_test_Loss\t\tDuration\t\t')
-        for epoch in range(5):
+        for epoch in range(1):
             epoch_start_time = time.time()
             for i_batch, (xb, yb, lens) in enumerate(train_dl):
                 if USE_GPU:
@@ -112,9 +154,14 @@ class TianModel(BaseModel):
                     yb = yb.cuda()
 
                 optimizer.zero_grad()
+
+                # For RNN
                 hidden = nn_model.init_hidden(xb.shape[0])
-                xb = pack_padded_sequence(xb, lens, batch_first=True, enforce_sorted=False)
-                y_pred, _ = nn_model(xb, hidden)
+                y_pred, _ = nn_model(xb, hidden, lens)
+
+                # # For CNN
+                # y_pred, _ = nn_model(xb)
+
                 # train_loss = self.loss_fun_emphasize_peak(y_pred, yb)
                 # train_loss = self.loss_fun_only_positive(y_pred, yb)
                 train_loss = loss_fn(y_pred, yb)
@@ -141,25 +188,25 @@ class TianModel(BaseModel):
                 x_validation = x_validation.cuda()
                 y_validation = y_validation.cuda()
             hidden = nn_model.init_hidden(x_validation.shape[0])
-            x_validation = pack_padded_sequence(x_validation, lens, batch_first=True, enforce_sorted=False)
-            y_validation_pred, _ = nn_model(x_validation, hidden)
+            # x_validation = pack_padded_sequence(x_validation, lens, batch_first=True, enforce_sorted=False)
+            y_validation_pred, _ = nn_model(x_validation, hidden, lens)
             validation_loss = loss_fn(y_validation_pred, y_validation) / len(y_validation) * batch_size
             return validation_loss
 
     def predict(self, nn_model, x_test):
         self.test_step_lens = self._get_step_len(x_test)
-        x_test = np.concatenate(x_test.values())
+        x_test = np.concatenate(list(x_test.values()), axis=2)
         x_test = torch.from_numpy(x_test)
         if USE_GPU:
             x_test = x_test.cuda()
         hidden = nn_model.init_hidden(x_test.shape[0])
-        x_test = pack_padded_sequence(x_test, self.test_step_lens, batch_first=True, enforce_sorted=False)
-        y_pred, _ = nn_model(x_test, hidden)
+        # x_test = pack_padded_sequence(x_test, self.test_step_lens, batch_first=True, enforce_sorted=False)
+        y_pred, _ = nn_model(x_test, hidden, self.test_step_lens)
         y_pred = y_pred.detach().cpu().numpy()
         return {'output': y_pred}
 
     @staticmethod
-    def _get_step_len(data, input_cate='main_input', feature_col_num=0):
+    def _get_step_len(data, input_cate='main_input_acc', feature_col_num=0):
         """
 
         :param data: Numpy array, 3d (step, sample, feature)
@@ -171,6 +218,8 @@ class TianModel(BaseModel):
         nan_loc = np.isnan(data_the_feature)
         data_len = np.sum(~nan_loc, axis=1)
         return data_len
+        # TODO: needs to be updated
+
 
 
 if __name__ == "__main__":

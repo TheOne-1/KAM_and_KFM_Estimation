@@ -44,8 +44,8 @@ class DXKamModel(BaseModel):
         return prediction_dict
 
     def get_all_scores(self, y_true, y_pred, weights=None):
-        y_true = self.normalize_data(y_true, self._data_scalar, 'inverse_transform', 'by_column')
-        y_pred = self.normalize_data(y_pred, self._data_scalar, 'inverse_transform', 'by_column')
+        y_true = self.normalize_data(y_true, self._data_scalar, 'inverse_transform', 'by_each_column')
+        y_pred = self.normalize_data(y_pred, self._data_scalar, 'inverse_transform', 'by_each_column')
         return BaseModel.get_all_scores(self, y_true, y_pred, weights)
 
     def preprocess_train_data(self, x, y):
@@ -54,10 +54,10 @@ class DXKamModel(BaseModel):
         # y['main_output'][:, :, KAM_index] *= x['aux_input'][:, :, height_index]
         x1 = {'main_input_acc': x['main_input_acc'], 'main_input_gyr': x['main_input_gyr']}
         x2 = {'aux_input': x['aux_input']}
-        x1 = self.normalize_data(x1, self._data_scalar, 'fit_transform', 'by_sample')
-        x2 = self.normalize_data(x2, self._data_scalar, 'fit_transform', 'by_column')
+        x1 = self.normalize_data(x1, self._data_scalar, 'fit_transform', 'by_all_columns')
+        x2 = self.normalize_data(x2, self._data_scalar, 'fit_transform', 'by_each_column')
         x = {**x1, **x2}
-        y = self.normalize_data(y, self._data_scalar, 'fit_transform', 'by_column')
+        y = self.normalize_data(y, self._data_scalar, 'fit_transform', 'by_each_column')
         return x, y
 
     def preprocess_validation_test_data(self, x, y):
@@ -66,10 +66,10 @@ class DXKamModel(BaseModel):
         # y['main_output'][:, :, KAM_index] *= x['aux_input'][:, :, height_index]
         x1 = {'main_input_acc': x['main_input_acc'], 'main_input_gyr': x['main_input_gyr']}
         x2 = {'aux_input': x['aux_input']}
-        x1 = self.normalize_data(x1, self._data_scalar, 'transform', 'by_sample')
-        x2 = self.normalize_data(x2, self._data_scalar, 'transform', 'by_column')
+        x1 = self.normalize_data(x1, self._data_scalar, 'transform', 'by_all_columns')
+        x2 = self.normalize_data(x2, self._data_scalar, 'transform', 'by_each_column')
         x = {**x1, **x2}
-        y = self.normalize_data(y, self._data_scalar, 'transform', 'by_column')
+        y = self.normalize_data(y, self._data_scalar, 'transform', 'by_each_column')
         return x, y
     # def preprocess_train_data(self, x_train, y_train):
     #     x_train, y_train = BaseModel.preprocess_train_data(self, x_train, y_train)
