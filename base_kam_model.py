@@ -156,11 +156,11 @@ class BaseModel:
         return scaled_date
 
     def preprocess_train_data(self, x, y):
-        self.normalize_data(x, self._data_scalar, 'fit_transform')
+        x = self.normalize_data(x, self._data_scalar, 'fit_transform')
         return x, y
 
     def preprocess_validation_test_data(self, x, y):
-        self.normalize_data(x, self._data_scalar, 'transform')
+        x = self.normalize_data(x, self._data_scalar, 'transform')
         return x, y
 
     @staticmethod

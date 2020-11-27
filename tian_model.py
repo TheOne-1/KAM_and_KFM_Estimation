@@ -18,12 +18,19 @@ USE_GPU = True
 class TianCNN(nn.Module):
     def __init__(self, x_dim, y_dim, nlayer=2):
         super().__init__()
-        self.conv1 = nn.Conv1d(x_dim, 10, kernel_size=3, stride=2)
-        self.conv2output = nn.Linear(100, y_dim)
+        self.conv1 = nn.Conv1d(x_dim, 10, kernel_size=3, stride=1)
+        self.pooling1 = nn.MaxPool1d(10)
+        self.flatten = nn.Flatten()
+        self.conv2output = nn.Linear(220, y_dim * 230)
+        self.y_dim = y_dim
 
     def forward(self, sequence):
+        sequence.transpose_(1, 2)
         sequence = self.conv1(sequence)
-        output = self.hidden2output(sequence)
+        sequence = self.pooling1(sequence)
+        sequence = self.flatten(sequence)
+        output = self.conv2output(sequence)
+        output = torch.reshape(output, (-1, 230, self.y_dim))
         return output
 
 
@@ -112,11 +119,10 @@ class TianModel(BaseModel):
         self.train_step_lens, self.validation_step_lens = self._get_step_len(x_train), self._get_step_len(x_validation)
         x_train, y_train = np.concatenate(list(x_train.values()), axis=2), y_train['output']
         x_validation, y_validation = np.concatenate(list(x_validation.values()), axis=2), y_validation['output']
-        N_step, D_in, D_hidden, N_layer, D_out = x_train.shape[0], x_train.shape[2], 30, 1, y_train.shape[2]
         x_train = torch.from_numpy(x_train).float()
         y_train = torch.from_numpy(y_train).float()
         train_step_lens = torch.from_numpy(self.train_step_lens)
-        nn_model = TianRNN(x_train.shape[2], y_train.shape[2])
+        nn_model = TianCNN(x_train.shape[2], y_train.shape[2])
 
         if USE_GPU:
             # x_train = x_train.cuda()
@@ -146,7 +152,7 @@ class TianModel(BaseModel):
         vali_from_test_dl = DataLoader(vali_from_test_ds, batch_size=len(vali_from_test_ds))
 
         logging.info('\tEpoch\t\tTrain_Loss\tVali_train_Loss\tVali_test_Loss\t\tDuration\t\t')
-        for epoch in range(1):
+        for epoch in range(5):
             epoch_start_time = time.time()
             for i_batch, (xb, yb, lens) in enumerate(train_dl):
                 if USE_GPU:
@@ -155,12 +161,12 @@ class TianModel(BaseModel):
 
                 optimizer.zero_grad()
 
-                # For RNN
-                hidden = nn_model.init_hidden(xb.shape[0])
-                y_pred, _ = nn_model(xb, hidden, lens)
+                # # For RNN
+                # hidden = nn_model.init_hidden(xb.shape[0])
+                # y_pred, _ = nn_model(xb, hidden, lens)
 
-                # # For CNN
-                # y_pred, _ = nn_model(xb)
+                # For CNN
+                y_pred = nn_model(xb)
 
                 # train_loss = self.loss_fun_emphasize_peak(y_pred, yb)
                 # train_loss = self.loss_fun_only_positive(y_pred, yb)
@@ -187,9 +193,13 @@ class TianModel(BaseModel):
             if USE_GPU:
                 x_validation = x_validation.cuda()
                 y_validation = y_validation.cuda()
-            hidden = nn_model.init_hidden(x_validation.shape[0])
-            # x_validation = pack_padded_sequence(x_validation, lens, batch_first=True, enforce_sorted=False)
-            y_validation_pred, _ = nn_model(x_validation, hidden, lens)
+            # # For RNN
+            # hidden = nn_model.init_hidden(x_validation.shape[0])
+            # y_validation_pred, _ = nn_model(x_validation, hidden, lens)
+
+            # For CNN
+            y_validation_pred = nn_model(x_validation)
+
             validation_loss = loss_fn(y_validation_pred, y_validation) / len(y_validation) * batch_size
             return validation_loss
 
@@ -199,9 +209,13 @@ class TianModel(BaseModel):
         x_test = torch.from_numpy(x_test)
         if USE_GPU:
             x_test = x_test.cuda()
-        hidden = nn_model.init_hidden(x_test.shape[0])
-        # x_test = pack_padded_sequence(x_test, self.test_step_lens, batch_first=True, enforce_sorted=False)
-        y_pred, _ = nn_model(x_test, hidden, self.test_step_lens)
+        # # For RNN
+        # hidden = nn_model.init_hidden(x_test.shape[0])
+        # y_pred, _ = nn_model(x_test, hidden, self.test_step_lens)
+
+        # For CNN
+        y_pred = nn_model(x_test)
+
         y_pred = y_pred.detach().cpu().numpy()
         return {'output': y_pred}
 
@@ -219,7 +233,6 @@ class TianModel(BaseModel):
         data_len = np.sum(~nan_loc, axis=1)
         return data_len
         # TODO: needs to be updated
-
 
 
 if __name__ == "__main__":
