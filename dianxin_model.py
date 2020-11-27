@@ -30,10 +30,10 @@ class DXKamModel(BaseModel):
         callbacks = []
         if x_validation is not None:
             validation_data = (x_validation, y_validation)
-            callbacks.append(ErrorVisualization(self, x_validation, y_validation, validation_weight))
+            # callbacks.append(ErrorVisualization(self, x_validation, y_validation, validation_weight))
             callbacks.append(ReduceLROnPlateau('val_loss', factor=0.5, patience=5))
         model.fit(x=x_train, y=y_train, validation_data=validation_data, shuffle=True, batch_size=30,
-                  epochs=1, verbose=1, callbacks=callbacks)
+                  epochs=20, verbose=1, callbacks=callbacks)
         return model
 
     @staticmethod
@@ -174,7 +174,8 @@ if __name__ == "__main__":
     y_fields = {'main_output': TARGETS_LIST}
     y_weights = {'main_output': [PHASE] * len(TARGETS_LIST)}
     dx_model = DXKamModel('40samples+stance_swing+padding_zero.h5', x_fields, y_fields, y_weights)
-    subject_list = list(range(len(SUBJECTS)))
+    dx_model.cali_via_gravity()
+    subject_list = dx_model.get_all_subjects()
     shuffle(subject_list)
-    dx_model.preprocess_train_evaluation(subject_list[3:], subject_list[:3], subject_list[:3])
-    # dx_model.cross_validation(subject_list)
+    # dx_model.preprocess_train_evaluation(subject_list[3:], subject_list[:3], subject_list[:3])
+    dx_model.cross_validation(subject_list)

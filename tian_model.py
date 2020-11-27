@@ -241,6 +241,8 @@ if __name__ == "__main__":
     weights = {'output': [PHASE]*len(output_cols)}
 
     model = TianModel(data_path, x_fields, y_fields, weights, DivideMaxScalar)
-    model.preprocess_train_evaluation(range(13), range(13, 17), range(13, 17))
-    # model.cross_validation(range(len(SUBJECTS)))
+    model.cali_via_gravity()
+    subjects = model.get_all_subjects()
+    model.preprocess_train_evaluation(subjects[:13], subjects[13:], subjects[13:])
+    # model.cross_validation(subjects)
     plt.show()

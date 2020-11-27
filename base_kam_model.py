@@ -1,19 +1,18 @@
 import json
-from typing import List
 import h5py
 import numpy as np
+import pandas as pd
 import prettytable as pt
-from customized_logger import logger as logging
-from const import SUBJECTS, SENSOR_LIST, DATA_PATH
 import matplotlib.pyplot as plt
+from typing import List
+from customized_logger import logger as logging
 from sklearn.preprocessing import MinMaxScaler  # , StandardScaler
 from sklearn.utils import shuffle
 from sklearn.metrics import r2_score, mean_squared_error as mse
 from scipy.stats import pearsonr
-import pandas as pd
 from transforms3d.euler import euler2mat
 
-CALI_VIA_GRAVITY = False     # by default, static_back is used for calibration
+from const import SENSOR_LIST, DATA_PATH
 # TODO：Calibrate via gravity should be place in generate_combined_data in the future, if it indeed shows better result.
 
 
@@ -24,27 +23,27 @@ class BaseModel:
         y_fileds: a dict contains output names and output fields
         """
         logging.info("Load data from h5 file {}".format(data_path))
-        logging.info("Load data with input fields {}, output fields {}".format(x_fields, y_fields))
-        self._data_path = data_path
+        logging.debug("Load data with input fields {}, output fields {}".format(x_fields, y_fields))
         self._x_fields = x_fields
         self._y_fields = y_fields
         self._weights = {} if weights is None else weights
         self._data_scalar = {input_name: base_scalar() for input_name in list(x_fields.keys()) + list(y_fields.keys())}
-        with h5py.File(self._data_path, 'r') as hf:
-            self._data_all_sub = {subject: hf[subject][:] for subject in SUBJECTS}
-            self.data_columns = json.loads(hf.attrs['columns'])
-        if CALI_VIA_GRAVITY:
-            self.cali_via_gravity()
+        with h5py.File(data_path, 'r') as hf:
+            self._data_all_sub = {subject: subject_data[:] for subject, subject_data in hf.items()}
+            self._data_fields = json.loads(hf.attrs['columns'])
+
+    def get_all_subjects(self):
+        return list(self._data_all_sub.keys())
 
     def _get_raw_data_dict(self, data, fields_dict):
         data_dict = {}
         for input_name, input_fields in fields_dict.items():
-            x_field_col_loc = [self.data_columns.index(field_name) for field_name in input_fields]
+            x_field_col_loc = [self._data_fields.index(field_name) for field_name in input_fields]
             data_dict[input_name] = data[:, :, x_field_col_loc].copy()
         return data_dict
 
-    def preprocess_train_evaluation(self, train_sub_ids: List[int], validate_sub_ids: List[int],
-                                    test_sub_ids: List[int]):
+    def preprocess_train_evaluation(self, train_sub_ids: List[str], validate_sub_ids: List[str],
+                                    test_sub_ids: List[str]):
         logging.debug('Train the model with subject ids: {}'.format(train_sub_ids))
         logging.debug('Test the model with subject ids: {}'.format(test_sub_ids))
         logging.debug('Validate the model with subject ids: {}'.format(validate_sub_ids))
@@ -52,15 +51,14 @@ class BaseModel:
         test_results = self.model_evaluation(model, test_sub_ids)
         return test_results
 
-    def cross_validation(self, sub_ids: List[int], test_set_sub_num=1):
+    def cross_validation(self, sub_ids: List[str], test_set_sub_num=1):
         logging.info('Cross validation with subject ids: {}'.format(sub_ids))
         folder_num = int(np.ceil(len(sub_ids) / test_set_sub_num))  # the number of cross validation times
         results = []
         for i_folder in range(folder_num):
             test_sub_ids = sub_ids[test_set_sub_num * i_folder:test_set_sub_num * (i_folder + 1)]
             train_sub_ids = list(np.setdiff1d(sub_ids, test_sub_ids))
-            test_sub_names = [sub_name for sub_index, sub_name in enumerate(SUBJECTS) if sub_index in test_sub_ids]
-            logging.info('Cross validation: Subjects for test: {}'.format(test_sub_names))
+            logging.info('Cross validation: Subjects for test: {}'.format(test_sub_ids))
             results += self.preprocess_train_evaluation(train_sub_ids, test_sub_ids, test_sub_ids)
         self.print_table(results)
         # get mean results
@@ -77,24 +75,20 @@ class BaseModel:
                                   'r_rmse': r_rmse, 'cor_value': cor_value}]
         self.print_table(mean_results)
 
-    def preprocess_and_train(self, train_sub_ids: List[int], validate_sub_ids: List[int]):
+    def preprocess_and_train(self, train_sub_ids: List[str], validate_sub_ids: List[str]):
         """
         train_sub_ids: a list of subject id for model training
         validate_sub_ids: a list of subject id for model validation
         test_sub_ids: a list of subject id for model testing
         """
-        train_sub_names = [sub_name for sub_index, sub_name in enumerate(SUBJECTS) if sub_index in train_sub_ids]
-        train_data_list = [self._data_all_sub[sub_name] for sub_name in train_sub_names]
-
+        train_data_list = [self._data_all_sub[sub_name] for sub_name in train_sub_ids]
         train_data = np.concatenate(train_data_list, axis=0)
         train_data = shuffle(train_data, random_state=0)
         x_train = self._get_raw_data_dict(train_data, self._x_fields)
         y_train = self._get_raw_data_dict(train_data, self._y_fields)
         x_train, y_train = self.preprocess_train_data(x_train, y_train)
 
-        validate_sub_names = [sub_name for sub_index, sub_name in enumerate(SUBJECTS) if sub_index in validate_sub_ids]
-        validation_data_list = [self._data_all_sub[sub_name] for sub_name in validate_sub_names]
-
+        validation_data_list = [self._data_all_sub[sub] for sub in validate_sub_ids]
         validation_data = np.concatenate(validation_data_list, axis=0) if validation_data_list else None
         x_validation, y_validation, validation_weight = [None] * 3
         if validation_data is not None:
@@ -102,14 +96,14 @@ class BaseModel:
             y_validation = self._get_raw_data_dict(validation_data, self._y_fields)
             validation_weight = self._get_raw_data_dict(validation_data, self._weights)
             x_validation, y_validation = self.preprocess_validation_test_data(x_validation, y_validation)
+
         model = self.train_model(x_train, y_train, x_validation, y_validation, validation_weight)
         return model
 
-    def model_evaluation(self, model, test_sub_ids: List[int]):
-        test_sub_names = [sub_name for sub_index, sub_name in enumerate(SUBJECTS) if sub_index in test_sub_ids]
-        test_data_list = [self._data_all_sub[sub_name] for sub_name in test_sub_names]
+    def model_evaluation(self, model, test_sub_ids: List[str]):
+        test_data_list = [self._data_all_sub[sub] for sub in test_sub_ids]
         test_results = []
-        for test_sub_id, test_sub_name in enumerate(test_sub_names):
+        for test_sub_id, test_sub_name in enumerate(test_sub_ids):
             test_sub_data = test_data_list[test_sub_id]
             test_sub_x = self._get_raw_data_dict(test_sub_data, self._x_fields)
             test_sub_y = self._get_raw_data_dict(test_sub_data, self._y_fields)
@@ -126,16 +120,16 @@ class BaseModel:
     def customized_analysis(self, test_sub_y, pred_sub_y, all_scores):
         """ Customized data visualization"""
         for score in all_scores:
-            subject, output, field, r2 = [score[f] for f in ['subject', 'output', 'field', 'r2']]
+            subject, output, field, r_rmse = [score[f] for f in ['subject', 'output', 'field', 'r_rmse']]
             field_index = self._y_fields[output].index(field)
             arr1 = test_sub_y[output][:, :, field_index]
             arr2 = pred_sub_y[output][:, :, field_index]
-            title = "{}, {}, {}, r2".format(subject, output, field, 'r2')
-            self.representative_profile_curves(arr1, arr2, title, r2)
+            title = "{}, {}, {}, r_rmse".format(subject, output, field, 'r_rmse')
+            self.representative_profile_curves(arr1, arr2, title, r_rmse)
 
     @staticmethod
     def normalize_data(data, scalars, method, scalar_mode='by_each_column'):
-        assert(scalar_mode in ['by_each_column', 'by_all_columns'])
+        assert (scalar_mode in ['by_each_column', 'by_all_columns'])
         scaled_date = {}
         for input_name, input_data in data.items():
             input_data = input_data.copy()
@@ -200,44 +194,39 @@ class BaseModel:
         return scores
 
     @staticmethod
-    def representative_profile_curves(arr1, arr2, title, metric):
+    def representative_profile_curves(arr_true, arr_pred, title, metric):
         """
         arr1: 2-dimensional array
         arr2: 2-dimensional array
         title: graph title
         metric: 1-dimensional array
         """
-        # print r2 worst, median, best result
-        best_index = metric.argmax()
-        worst_index = metric.argmin()
-        median_index = np.argsort(metric)[len(metric) // 2]
+        # print metric worst, median, best result
+        high_index, low_index, median_index = metric.argmax(), metric.argmin(), np.argsort(metric)[len(metric) // 2]
+
         fig, axs = plt.subplots(2, 2)
         fig.suptitle(title)
         for sub_index, [sub_title, step_index] in enumerate(
-                [['r2_worst', worst_index], ['r2_median', median_index], ['r2_best', best_index]]):
+                [['low', low_index], ['median', median_index], ['high', high_index]]):
             sub_ax = axs[sub_index // 2, sub_index % 2]
-            sub_ax.plot(arr1[step_index, :], 'g-', label='True_Value')
-            sub_ax.plot(arr2[step_index, :], 'y-', label='Pred_Value')
+            sub_ax.plot(arr_true[step_index, :], 'g-', label='True_Value')
+            sub_ax.plot(arr_pred[step_index, :], 'y-', label='Pred_Value')
             sub_ax.legend(loc='upper right', fontsize=8)
-            sub_ax.text(0.4, 0.9, "r2: {}".format(np.round(metric[step_index], 3)), horizontalalignment='center',
-                        verticalalignment='center', transform=sub_ax.transAxes)
+            sub_ax.text(0.4, 0.9, np.round(metric[step_index], 3), transform=sub_ax.transAxes)
             sub_ax.set_title(sub_title)
 
         # plot the general prediction status result
-        y_pred_mean = arr2.mean(axis=0).reshape((-1))
-        y_pred_std = arr2.std(axis=0).reshape((-1))
-        y_true_mean = arr1.mean(axis=0)
-        y_true_std = arr1.std(axis=0)
-        axis_x = range(y_true_mean.shape[0])
-        axs[1, 1].plot(axis_x, y_true_mean, 'g-', label='Real_Value')
-        axs[1, 1].fill_between(axis_x, y_true_mean - y_true_std, y_true_mean + y_true_std, facecolor='green',
-                               alpha=0.2)
-        axs[1, 1].plot(axis_x, y_pred_mean, 'y-', label='Predict_Value')
-        axs[1, 1].fill_between(axis_x, y_pred_mean - y_pred_std, y_pred_mean + y_pred_std,
+        arr_true_mean, arr_true_std = arr_true.mean(axis=0), arr_true.std(axis=0)
+        arr_pred_mean, arr_pred_std = arr_pred.mean(axis=0), arr_pred.std(axis=0)
+        axis_x = range(arr_true_mean.shape[0])
+        axs[1, 1].plot(axis_x, arr_true_mean, 'g-', label='Real_Value')
+        axs[1, 1].fill_between(axis_x, arr_true_mean - arr_true_std, arr_true_mean + arr_true_std,
+                               facecolor='green', alpha=0.2)
+        axs[1, 1].plot(axis_x, arr_pred_mean, 'y-', label='Predict_Value')
+        axs[1, 1].fill_between(axis_x, arr_pred_mean - arr_pred_std, arr_pred_mean + arr_pred_std,
                                facecolor='yellow', alpha=0.2)
         axs[1, 1].legend(loc='upper right', fontsize=8)
-        axs[1, 1].text(0.4, 0.9, "r2: {}".format(np.round(np.mean(metric), 3)),
-                       horizontalalignment='center', verticalalignment='center', transform=axs[1, 1].transAxes)
+        axs[1, 1].text(0.4, 0.9, np.round(np.mean(metric), 3), transform=axs[1, 1].transAxes)
         axs[1, 1].set_title('general performance')
         plt.tight_layout()
         plt.show(block=False)
@@ -252,18 +241,18 @@ class BaseModel:
         print(tb)
 
     def cali_via_gravity(self):
-        for subject in SUBJECTS:
+        for subject in self.get_all_subjects():
             logging.info("Rotating {}'s data".format(subject))
             transform_mat_dict = self.get_static_calibration(subject)
             for sensor in SENSOR_LIST:
                 transform_mat = transform_mat_dict[sensor]
                 rotation_fun = lambda data: np.matmul(transform_mat, data)
                 acc_cols = ['Accel' + axis + sensor for axis in ['X_', 'Y_', 'Z_']]
-                acc_col_locs = [self.data_columns.index(col) for col in acc_cols]
+                acc_col_locs = [self._data_fields.index(col) for col in acc_cols]
                 self._data_all_sub[subject][:, :, acc_col_locs] = np.apply_along_axis(
                     rotation_fun, 2, self._data_all_sub[subject][:, :, acc_col_locs])
                 gyr_cols = ['Gyro' + axis + sensor for axis in ['X_', 'Y_', 'Z_']]
-                gyr_col_locs = [self.data_columns.index(col) for col in gyr_cols]
+                gyr_col_locs = [self._data_fields.index(col) for col in gyr_cols]
                 self._data_all_sub[subject][:, :, gyr_col_locs] = np.apply_along_axis(
                     rotation_fun, 2, self._data_all_sub[subject][:, :, gyr_col_locs])
 
