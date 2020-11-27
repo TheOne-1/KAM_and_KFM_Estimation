@@ -8,6 +8,7 @@ Read v3d exported csv data, sage csv data, vicon exported csv data and openPose 
 Synchronize vicon data and sage data.
 
 """
+import copy
 import csv
 import numpy as np
 import math
@@ -15,6 +16,8 @@ import pandas as pd
 from scipy.signal import find_peaks, butter, filtfilt
 import matplotlib.pyplot as plt
 from scipy import linalg
+from sklearn.preprocessing import MinMaxScaler
+
 from const import SENSOR_LIST, IMU_FIELDS, FORCE_DATA_FIELDS, EXT_KNEE_MOMENT, TARGETS_LIST, SUBJECT_HEIGHT
 from const import SUBJECT_WEIGHT
 import wearable_math
@@ -492,6 +495,23 @@ class SageCsvReader:
             self.data_frame.loc[self.missing_data_index, 'Event'] *= -1  # mark the missing IMU data as minus event
         if verbose:
             plt.show()
+
+
+class DivideMaxScalar(MinMaxScaler):
+    def partial_fit(self, X, y=None):
+        data_min = np.nanmin(X, axis=0)
+        data_max = np.nanmax(X, axis=0)
+        data_range = data_max - data_min
+        data_bi_max = np.nanmax(abs(X), axis=0)
+        self.scale_ = 1 / data_bi_max
+        self.data_min_ = data_min
+        self.data_max_ = data_max
+        self.data_range_ = data_range
+        return self
+
+    def transform(self, X):
+        X *= self.scale_
+        return X
 
 
 def data_filter(data, cut_off_fre, sampling_fre, filter_order=4):

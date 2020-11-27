@@ -14,7 +14,6 @@ from keras.callbacks import Callback, ReduceLROnPlateau
 from base_kam_model import BaseModel
 from const import DATA_PATH, SENSOR_LIST, VIDEO_LIST, TARGETS_LIST, SUBJECT_WEIGHT, SUBJECT_HEIGHT, PHASE, RKAM_COLUMN
 from const import SUBJECTS
-import numpy as np
 
 gpus = tf.config.experimental.list_physical_devices('GPU')
 for gpu in gpus:
@@ -34,7 +33,7 @@ class DXKamModel(BaseModel):
             callbacks.append(ErrorVisualization(self, x_validation, y_validation, validation_weight))
             callbacks.append(ReduceLROnPlateau('val_loss', factor=0.5, patience=5))
         model.fit(x=x_train, y=y_train, validation_data=validation_data, shuffle=True, batch_size=30,
-                  epochs=30, verbose=1, callbacks=callbacks)
+                  epochs=1, verbose=1, callbacks=callbacks)
         return model
 
     @staticmethod
@@ -45,24 +44,32 @@ class DXKamModel(BaseModel):
         return prediction_dict
 
     def get_all_scores(self, y_true, y_pred, weights=None):
-        y_true = self.get_scaled_data(y_true, self._scalars, 'inverse_transform')
-        y_pred = self.get_scaled_data(y_pred, self._scalars, 'inverse_transform')
+        y_true = self.normalize_data(y_true, self._data_scalar, 'inverse_transform', 'by_each_column')
+        y_pred = self.normalize_data(y_pred, self._data_scalar, 'inverse_transform', 'by_each_column')
         return BaseModel.get_all_scores(self, y_true, y_pred, weights)
 
     def preprocess_train_data(self, x, y):
         # KAM_index = self._y_fields['main_output'].index(RKAM_COLUMN)
         # height_index = self._x_fields['aux_input'].index(SUBJECT_HEIGHT)
         # y['main_output'][:, :, KAM_index] *= x['aux_input'][:, :, height_index]
-        x = self.get_scaled_data(x, self._scalars, 'fit_transform')
-        y = self.get_scaled_data(y, self._scalars, 'fit_transform')
+        x1 = {'main_input_acc': x['main_input_acc'], 'main_input_gyr': x['main_input_gyr']}
+        x2 = {'aux_input': x['aux_input']}
+        x1 = self.normalize_data(x1, self._data_scalar, 'fit_transform', 'by_all_columns')
+        x2 = self.normalize_data(x2, self._data_scalar, 'fit_transform', 'by_each_column')
+        x = {**x1, **x2}
+        y = self.normalize_data(y, self._data_scalar, 'fit_transform', 'by_each_column')
         return x, y
 
     def preprocess_validation_test_data(self, x, y):
         # KAM_index = self._y_fields['main_output'].index(RKAM_COLUMN)
         # height_index = self._x_fields['aux_input'].index(SUBJECT_HEIGHT)
         # y['main_output'][:, :, KAM_index] *= x['aux_input'][:, :, height_index]
-        x = self.get_scaled_data(x, self._scalars, 'transform')
-        y = self.get_scaled_data(y, self._scalars, 'transform')
+        x1 = {'main_input_acc': x['main_input_acc'], 'main_input_gyr': x['main_input_gyr']}
+        x2 = {'aux_input': x['aux_input']}
+        x1 = self.normalize_data(x1, self._data_scalar, 'transform', 'by_all_columns')
+        x2 = self.normalize_data(x2, self._data_scalar, 'transform', 'by_each_column')
+        x = {**x1, **x2}
+        y = self.normalize_data(y, self._data_scalar, 'transform', 'by_each_column')
         return x, y
     # def preprocess_train_data(self, x_train, y_train):
     #     x_train, y_train = BaseModel.preprocess_train_data(self, x_train, y_train)
@@ -95,9 +102,12 @@ class ErrorVisualization(Callback):
 
 # baseline model
 def rnn_model(x_train, y_train, rnn_layer):
-    main_input_shape = x_train['main_input'].shape[1:]
-    main_input = Input(shape=main_input_shape, name='main_input')
-    x = Masking(mask_value=0.)(main_input)
+    main_input_acc_shape = x_train['main_input_acc'].shape[1:]
+    main_input_gyr_shape = x_train['main_input_gyr'].shape[1:]
+    main_input_acc = Input(shape=main_input_acc_shape, name='main_input_acc')
+    main_input_gyr = Input(shape=main_input_gyr_shape, name='main_input_gyr')
+    x = concatenate([main_input_acc, main_input_gyr])
+    x = Masking(mask_value=0.)(x)
     # x = GaussianNoise(0.1)(x)
     x = Bidirectional(rnn_layer(90, dropout=0.2, return_sequences=True))(x)
     # x = Bidirectional(rnn_layer(30, dropout=0.2, return_sequences=True))(x)
@@ -108,7 +118,7 @@ def rnn_model(x_train, y_train, rnn_layer):
     x = Dense(15, use_bias=True)(x)
     output_shape = y_train['main_output'].shape[2]
     output = Dense(output_shape, use_bias=True, name='main_output')(x)
-    model = Model(inputs=[main_input, aux_input], outputs=[output])
+    model = Model(inputs=[main_input_acc, main_input_gyr, aux_input], outputs=[output])
 
     def custom_loss(y_true, y_pred):
         temp = K.cast(y_true >= 0, 'float32')
@@ -150,17 +160,21 @@ def autoencoder(input_shape):
 
 
 if __name__ == "__main__":
-    IMU_FIELDS = ['AccelX', 'AccelY', 'AccelZ', 'GyroX', 'GyroY', 'GyroZ']
-    IMU_DATA_FIELDS = [IMU_FIELD + "_" + SENSOR for SENSOR in SENSOR_LIST for IMU_FIELD in IMU_FIELDS]
+    IMU_FIELDS_ACC = ['AccelX', 'AccelY', 'AccelZ']
+    IMU_FIELDS_GYR = ['GyroX', 'GyroY', 'GyroZ']
+    IMU_DATA_FIELDS_ACC = [IMU_FIELD + "_" + SENSOR for SENSOR in SENSOR_LIST for IMU_FIELD in IMU_FIELDS_ACC]
+    IMU_DATA_FIELDS_GYR = [IMU_FIELD + "_" + SENSOR for SENSOR in SENSOR_LIST for IMU_FIELD in IMU_FIELDS_GYR]
     VIDEO_DATA_FIELDS = [VIDEO + "_" + position + "_" + angle for VIDEO in VIDEO_LIST
                          for position in ["x", "y"] for angle in ["90", "180"]]
 
-    x_fields = {'main_input': IMU_DATA_FIELDS, 'aux_input': [SUBJECT_WEIGHT, SUBJECT_HEIGHT]}
+    x_fields = {'main_input_acc': IMU_DATA_FIELDS_ACC,
+                'main_input_gyr': IMU_DATA_FIELDS_ACC,
+                'aux_input':      [SUBJECT_WEIGHT, SUBJECT_HEIGHT]}
     # TARGETS_LIST = [RKAM_COLUMN]
     y_fields = {'main_output': TARGETS_LIST}
     y_weights = {'main_output': [PHASE] * len(TARGETS_LIST)}
     dx_model = DXKamModel('40samples+stance_swing+padding_zero.h5', x_fields, y_fields, y_weights)
     subject_list = list(range(len(SUBJECTS)))
     shuffle(subject_list)
-    # dx_model.preprocess_train_evaluation(subject_list[3:], subject_list[:3], subject_list[:3])
-    dx_model.cross_validation(subject_list)
+    dx_model.preprocess_train_evaluation(subject_list[3:], subject_list[:3], subject_list[:3])
+    # dx_model.cross_validation(subject_list)
