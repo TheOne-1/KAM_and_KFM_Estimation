@@ -16,16 +16,18 @@ USE_GPU = True
 
 
 class TianCNN(nn.Module):
-    def __init__(self, x_dim, y_dim, nlayer=2):
+    def __init__(self, x_dim, y_dim):
         super().__init__()
-        self.conv1 = nn.Conv1d(x_dim, 10, kernel_size=3, stride=1)
-        self.pooling1 = nn.MaxPool1d(10)
+        # self.conv1 = nn.Conv1d(x_dim, 30, kernel_size=3, stride=1)
+
+        self.conv1 = nn.Conv2d(1, 50, kernel_size=(5, 1), stride=1)
+        self.pooling1 = nn.MaxPool2d((221, 50))
         self.flatten = nn.Flatten()
-        self.conv2output = nn.Linear(220, y_dim * 230)
+        self.conv2output = nn.Linear(50, y_dim * 230)
         self.y_dim = y_dim
 
     def forward(self, sequence):
-        sequence.transpose_(1, 2)
+        sequence = sequence.unsqueeze(1)
         sequence = self.conv1(sequence)
         sequence = self.pooling1(sequence)
         sequence = self.flatten(sequence)
@@ -123,18 +125,20 @@ class TianModel(BaseModel):
         y_train = torch.from_numpy(y_train).float()
         train_step_lens = torch.from_numpy(self.train_step_lens)
         nn_model = TianCNN(x_train.shape[2], y_train.shape[2])
+        pytorch_total_params = sum(p.numel() for p in nn_model.parameters() if p.requires_grad)
+        logging.info('Model has {} parameters.'.format(pytorch_total_params))
 
         if USE_GPU:
             # x_train = x_train.cuda()
             # y_train = y_train.cuda()
             nn_model = nn_model.cuda()
         loss_fn = torch.nn.MSELoss(reduction='sum')
-        optimizer = torch.optim.Adam(nn_model.parameters(), lr=2e-4, weight_decay=0e-5)
+        optimizer = torch.optim.Adam(nn_model.parameters(), lr=2e-5, weight_decay=1e-5)
         # optimizer = torch.optim.Adam(nn_model.parameters())
 
         batch_size = 20
         train_ds = TensorDataset(x_train, y_train, train_step_lens)
-        train_size = int(0.95 * len(train_ds))
+        train_size = int(0.98 * len(train_ds))
         vali_from_train_size = len(train_ds) - train_size
         train_ds, vali_from_train_ds = torch.utils.data.dataset.random_split(train_ds, [train_size, vali_from_train_size])
         train_dl = DataLoader(train_ds, batch_size=batch_size)
@@ -147,12 +151,12 @@ class TianModel(BaseModel):
             y_validation = y_validation.cuda()
         vali_step_lens = torch.from_numpy(self.validation_step_lens)
         vali_from_test_ds = TensorDataset(x_validation, y_validation, vali_step_lens)
-        num_of_step_for_peek = int(0.2 * len(x_validation))
+        num_of_step_for_peek = int(0.05 * len(x_validation))
         vali_from_test_ds, _ = torch.utils.data.dataset.random_split(vali_from_test_ds, [num_of_step_for_peek, len(x_validation) - num_of_step_for_peek])
         vali_from_test_dl = DataLoader(vali_from_test_ds, batch_size=len(vali_from_test_ds))
 
         logging.info('\tEpoch\t\tTrain_Loss\tVali_train_Loss\tVali_test_Loss\t\tDuration\t\t')
-        for epoch in range(5):
+        for epoch in range(10):
             epoch_start_time = time.time()
             for i_batch, (xb, yb, lens) in enumerate(train_dl):
                 if USE_GPU:
@@ -229,10 +233,9 @@ class TianModel(BaseModel):
         :return:
         """
         data_the_feature = data[input_cate][:, :, feature_col_num]
-        nan_loc = np.isnan(data_the_feature)
-        data_len = np.sum(~nan_loc, axis=1)
+        zero_loc = data_the_feature == 0.
+        data_len = np.sum(~zero_loc, axis=1)
         return data_len
-        # TODO: needs to be updated
 
 
 if __name__ == "__main__":
@@ -248,7 +251,7 @@ if __name__ == "__main__":
 
     x_fields = {'main_input_acc': IMU_DATA_FIELDS_ACC,
                 'main_input_gyr': IMU_DATA_FIELDS_GYR,
-                'main_input_vid': video_cols,
+                # 'main_input_vid': video_cols,
                 'aux_input': [SUBJECT_WEIGHT, SUBJECT_HEIGHT]}
     y_fields = {'output': output_cols}
     weights = {'output': [PHASE]*len(output_cols)}
