@@ -8,6 +8,7 @@ Read v3d exported csv data, sage csv data, vicon exported csv data and openPose 
 Synchronize vicon data and sage data.
 
 """
+import copy
 import csv
 import numpy as np
 import math
@@ -564,14 +565,14 @@ class DataScalar:
             modal_original_shape = input_data[:, col].shape
             input_data[:, col] = getattr(scalars[input_name], method)(input_data[:, col].reshape([-1, 1])).reshape(modal_original_shape)
             input_data.reshape(original_shape)
+        scaled_data = copy.deepcopy(data)
         acc_col = [i for i, x in enumerate(self._x_fields['main_input']) if 'Accel' in x]
         gyr_col = [i for i, x in enumerate(self._x_fields['main_input']) if 'Gyr' in x]
         vid_col = [i for i, x in enumerate(self._x_fields['main_input']) if '0' in x]
-        transform(data, acc_col, 'acc')
-        transform(data, gyr_col, 'gyr')
+        transform(scaled_data, acc_col, 'acc')
+        transform(scaled_data, gyr_col, 'gyr')
         if len(vid_col) > 0:
-            transform(data, vid_col, 'vid')
-        scaled_data = data
+            transform(scaled_data, vid_col, 'vid')
         return scaled_data
 
 

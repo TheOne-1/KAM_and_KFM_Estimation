@@ -33,11 +33,6 @@ class BaseModel:
         self._y_fields = y_fields
         self._weights = {} if weights is None else weights
         self._data_scalar = DataScalar(base_scalar, x_fields, y_fields, INPUT_NORM_EACH_MODAL)
-        # self._base_scalar = scalar
-        # self._scalars = {input_name: scalar() for input_name in list(x_fields.keys()) + list(y_fields.keys())}
-        # if INPUT_NORM_EACH_MODAL:
-        #     self._scalars.update({modal_name: scalar() for modal_name in MODAL_FIELDS})
-        #     self._scalars.pop('main_input')
         with h5py.File(self._data_path, 'r') as hf:
             self._data_all_sub = {subject: hf[subject][:] for subject in SUBJECTS}
             self.data_columns = json.loads(hf.attrs['columns'])
@@ -141,64 +136,12 @@ class BaseModel:
             title = "{}, {}, {}, r2".format(subject, output, field, 'r2')
             self.representative_profile_curves(arr1, arr2, title, r2)
 
-    # @staticmethod
-    # def norm_each_channel(input_data, scalar, method):
-    #     input_data = input_data.copy()
-    #     original_shape = input_data.shape
-    #     input_data[(input_data == 0.).all(axis=2), :] = np.nan
-    #     input_data = input_data.reshape([-1, input_data.shape[2]])
-    #     scaled_data = getattr(scalar, method)(input_data)
-    #     scaled_data = scaled_data.reshape(original_shape)
-    #     scaled_data[np.isnan(scaled_data)] = 0.
-    #     return scaled_data
-    #
-    # def norm_each_modal(self, data, scalars, method):
-    #     def transform(input_data, col, input_name):
-    #         original_shape = input_data.shape
-    #         input_data = input_data.reshape([-1, input_data.shape[2]])
-    #         modal_original_shape = input_data[:, col].shape
-    #         input_data[:, col] = getattr(scalars[input_name], method)(input_data[:, col].reshape([-1, 1])).reshape(modal_original_shape)
-    #         input_data.reshape(original_shape)
-    #     acc_col = [i for i, x in enumerate(self._x_fields['main_input']) if 'Accel' in x]
-    #     gyr_col = [i for i, x in enumerate(self._x_fields['main_input']) if 'Gyr' in x]
-    #     vid_col = [i for i, x in enumerate(self._x_fields['main_input']) if '0' in x]
-    #     transform(data, acc_col, 'acc')
-    #     transform(data, gyr_col, 'gyr')
-    #     if len(vid_col) > 0:
-    #         transform(data, vid_col, 'vid')
-    #     scaled_data = data
-    #     return scaled_data
-
     def preprocess_train_data(self, x, y):
         self._data_scalar.scale_train_set(x)
-        # # plt.figure()
-        # # plt.plot(x['main_input'][10, :, 3:6] / 200, 'r')
-        #
-        # if not INPUT_NORM_EACH_MODAL:
-        #     for input_name, input_data in x.items():
-        #         x[input_name] = self.norm_each_channel(input_data, self._scalars[input_name], 'fit_transform')
-        # else:
-        #     for input_name, input_data in x.items():
-        #         if input_name == 'main_input':
-        #             x[input_name] = self.norm_each_modal(input_data, self._scalars, 'fit_transform')
-        #         else:
-        #             x[input_name] = self.norm_each_channel(input_data, self._scalars[input_name], 'fit_transform')
-        #
-        # # plt.plot(x['main_input'][10, :, 3:6])
-        # # plt.show()
         return x, y
 
     def preprocess_validation_test_data(self, x, y):
         self._data_scalar.scale_validation_test_set(x)
-        # if not INPUT_NORM_EACH_MODAL:
-        #     for input_name, input_data in x.items():
-        #         x[input_name] = self.norm_each_channel(input_data, self._scalars[input_name], 'transform')
-        # else:
-        #     for input_name, input_data in x.items():
-        #         if input_name == 'main_input':
-        #             x[input_name] = self.norm_each_modal(input_data, self._scalars, 'transform')
-        #         else:
-        #             x[input_name] = self.norm_each_channel(input_data, self._scalars[input_name], 'transform')
         return x, y
 
     @staticmethod

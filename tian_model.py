@@ -13,8 +13,6 @@ from torch.nn.utils.rnn import pack_padded_sequence, pad_packed_sequence
 from sklearn.preprocessing import MinMaxScaler, StandardScaler
 
 USE_GPU = True
-# INPUT_NORM_EACH_MODAL = True            # if true, norm each modal, if false, norm each channel
-# INPUT_NORM_DIVIDE_MAX = True            # if true, use customized scalar that divide the data by the max
 
 
 class TianRNN(nn.Module):
@@ -51,97 +49,6 @@ class TianModel(BaseModel):
     def __init__(self, data_path, x_fields, y_fields, weights, base_scalar):
         BaseModel.__init__(self, data_path, x_fields, y_fields, weights, base_scalar)
         self.train_step_lens, self.validation_step_lens, self.test_step_lens = [None] * 3
-
-    # """ Norm each axis """
-    # def preprocess_train_data(self, x, y):
-    #     self.train_step_lens = self._get_step_len(x)
-    #     if not INPUT_NORM_EACH_MODAL:
-    #         x, y = BaseModel.preprocess_train_data(self, x, y)
-    #         return x, y
-    #     else:   # Norm each type of data
-    #         def transform(input_data, col, input_name):
-    #             original_shape = input_data.shape
-    #             input_data = input_data.reshape([-1, input_data.shape[2]])
-    #             self._scalars[input_name] = self._base_scalar()
-    #             input_data[:, col] = self._scalars[input_name].fit_transform(input_data[:, col])
-    #             input_data.reshape(original_shape)
-    #         acc_col = [i for i, x in enumerate(self._x_fields['main_input']) if 'Accel' in x]
-    #         gyr_col = [i for i, x in enumerate(self._x_fields['main_input']) if 'Gyr' in x]
-    #         vid_col = [i for i, x in enumerate(self._x_fields['main_input']) if '0' in x]
-    #
-    #         input_data = x['main_input']
-    #         transform(input_data, acc_col, 'acc_col')
-    #         transform(input_data, gyr_col, 'gyr_col')
-    #         if len(vid_col) > 0:
-    #             transform(input_data, vid_col, 'vid_col')
-    #         return x, y
-    #
-    # def preprocess_validation_test_data(self, x, y):
-    #     self.test_step_lens = self._get_step_len(x)
-    #     if not INPUT_NORM_EACH_MODAL:
-    #         x, y = BaseModel.preprocess_validation_test_data(self, x, y)
-    #         return x, y
-    #     else:   # Norm each type of data
-    #         def transform(input_data, col, input_name):
-    #             original_shape = input_data.shape
-    #             input_data = input_data.reshape([-1, input_data.shape[2]])
-    #             input_data[:, col] = self._scalars[input_name].transform(input_data[:, col])
-    #             input_data.reshape(original_shape)
-    #         acc_col = [i for i, x in enumerate(self._x_fields['main_input']) if 'Accel' in x]
-    #         gyr_col = [i for i, x in enumerate(self._x_fields['main_input']) if 'Gyr' in x]
-    #         vid_col = [i for i, x in enumerate(self._x_fields['main_input']) if '0' in x]
-    #
-    #         # plt.figure()
-    #         # plt.plot(x['main_input'][10, :, 10] / 400)
-    #
-    #         input_data = x['main_input']
-    #         transform(input_data, acc_col, 'acc_col')
-    #         transform(input_data, gyr_col, 'gyr_col')
-    #         if len(vid_col) > 0:
-    #             transform(input_data, vid_col, 'vid_col')
-    #
-    #         # plt.plot(x['main_input'][10, :, 10])
-    #         # plt.show()
-    #
-    #         return x, y
-
-    # def preprocess_train_data(self, x_train, y_train):
-    #     def transform(input_data, col, input_name):
-    #         original_shape = input_data.shape
-    #         input_data = input_data.reshape([-1, input_data.shape[2]])
-    #         self._scalars[input_name] = MinMaxScaler()
-    #         input_data[:, col] = self._scalars[input_name].fit_transform(input_data[:, col])
-    #         input_data.reshape(original_shape)
-    #
-    #     acc_col = [i for i, x in enumerate(self._x_fields['main_input']) if 'Accel' in x]
-    #     gyr_col = [i for i, x in enumerate(self._x_fields['main_input']) if 'Gyr' in x]
-    #     vid_col = [i for i, x in enumerate(self._x_fields['main_input']) if '0' in x]
-    #
-    #     input_data = x_train['main_input']
-    #     transform(input_data, acc_col, 'acc_col')
-    #     transform(input_data, gyr_col, 'gyr_col')
-    #     if len(vid_col) > 0:
-    #         transform(input_data, vid_col, 'vid_col')
-    #     return x_train, y_train
-
-    # def preprocess_validation_test_data(self, x, y):
-    #     def transform(input_data, col, input_name):
-    #         original_shape = input_data.shape
-    #         input_data = input_data.reshape([-1, input_data.shape[2]])
-    #         input_data[:, col] = self._scalars[input_name].transform(input_data[:, col])
-    #         input_data.reshape(original_shape)
-    #
-    #     acc_col = [i for i, x in enumerate(self._x_fields['main_input']) if 'Accel' in x]
-    #     gyr_col = [i for i, x in enumerate(self._x_fields['main_input']) if 'Gyr' in x]
-    #     vid_col = [i for i, x in enumerate(self._x_fields['main_input']) if '0' in x]
-    #
-    #     input_data = x['main_input']
-    #     transform(input_data, acc_col, 'acc_col')
-    #     transform(input_data, gyr_col, 'gyr_col')
-    #     if len(vid_col) > 0:
-    #         transform(input_data, vid_col, 'vid_col')
-    #     return x, y
-
 
     @staticmethod
     def loss_fun_emphasize_peak(y_pred, y):
