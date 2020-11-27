@@ -16,7 +16,7 @@ from wearable_toolkit import DataScalar
 
 """To wdx: """
 CALI_VIA_GRAVITY = False     # by default, static_back is used for calibration
-INPUT_NORM_EACH_MODAL = False            # if true, norm each modal, if false, norm each channel
+INPUT_NORM_EACH_MODAL = True            # if true, norm each modal, if false, norm each channel
 # import DivideMaxScalar in dianxin_model and use it
 
 
