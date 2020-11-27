@@ -494,6 +494,10 @@ class SageCsvReader:
             plt.show()
 
 
+# class InputDataScaling:
+#     def __init__(self, scalar, norm_each_modal: bool, ):
+
+
 def data_filter(data, cut_off_fre, sampling_fre, filter_order=4):
     fre = cut_off_fre / (sampling_fre / 2)
     b, a = butter(filter_order, fre, 'lowpass')

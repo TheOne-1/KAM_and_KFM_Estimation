@@ -4,12 +4,36 @@ import h5py
 import numpy as np
 import prettytable as pt
 from customized_logger import logger as logging
-from const import SUBJECTS
+from const import SUBJECTS, SENSOR_LIST, DATA_PATH, MODAL_FIELDS
 import matplotlib.pyplot as plt
 from sklearn.preprocessing import MinMaxScaler  # , StandardScaler
 from sklearn.utils import shuffle
 from sklearn.metrics import r2_score, mean_squared_error as mse
 from scipy.stats import pearsonr
+import pandas as pd
+from transforms3d.euler import euler2mat
+
+"""To wdx: """
+CALI_VIA_GRAVITY = False     # by default, static_back is used for calibration
+INPUT_NORM_EACH_MODAL = True            # if true, norm each modal, if false, norm each channel
+# import DivideMaxScalar in dianxin_model and use it
+
+
+class DivideMaxScalar(MinMaxScaler):
+    def partial_fit(self, X, y=None):
+        data_min = np.nanmin(X, axis=0)
+        data_max = np.nanmax(X, axis=0)
+        data_range = data_max - data_min
+        data_bi_max = np.nanmax(abs(X), axis=0)
+        self.scale_ = 1 / data_bi_max
+        self.data_min_ = data_min
+        self.data_max_ = data_max
+        self.data_range_ = data_range
+        return self
+
+    def transform(self, X):
+        X *= self.scale_
+        return X
 
 
 class BaseModel:
@@ -24,10 +48,16 @@ class BaseModel:
         self._x_fields = x_fields
         self._y_fields = y_fields
         self._weights = {} if weights is None else weights
+        self._base_scalar = scalar
         self._scalars = {input_name: scalar() for input_name in list(x_fields.keys()) + list(y_fields.keys())}
+        if INPUT_NORM_EACH_MODAL:
+            self._scalars.update({modal_name: scalar() for modal_name in MODAL_FIELDS})
+            self._scalars.pop('main_input')
         with h5py.File(self._data_path, 'r') as hf:
             self._data_all_sub = {subject: hf[subject][:] for subject in SUBJECTS}
             self.data_columns = json.loads(hf.attrs['columns'])
+        if CALI_VIA_GRAVITY:
+            self.cali_via_gravity()
 
     def _get_raw_data_dict(self, data, fields_dict):
         data_dict = {}
@@ -127,25 +157,62 @@ class BaseModel:
             self.representative_profile_curves(arr1, arr2, title, r2)
 
     @staticmethod
-    def get_scaled_data(data, scalars, method):
-        scaled_date = {}
-        for input_name, input_data in data.items():
-            input_data = input_data.copy()
+    def norm_each_channel(input_data, scalar, method):
+        input_data = input_data.copy()
+        original_shape = input_data.shape
+        input_data[(input_data == 0.).all(axis=2), :] = np.nan
+        input_data = input_data.reshape([-1, input_data.shape[2]])
+        scaled_data = getattr(scalar, method)(input_data)
+        scaled_data = scaled_data.reshape(original_shape)
+        scaled_data[np.isnan(scaled_data)] = 0.
+        return scaled_data
+
+    def norm_each_modal(self, data, scalars, method):
+        def transform(input_data, col, input_name):
             original_shape = input_data.shape
-            input_data[(input_data == 0.).all(axis=2), :] = np.nan
             input_data = input_data.reshape([-1, input_data.shape[2]])
-            input_data = getattr(scalars[input_name], method)(input_data)
-            input_data = input_data.reshape(original_shape)
-            input_data[np.isnan(input_data)] = 0.
-            scaled_date[input_name] = input_data
-        return scaled_date
+            modal_original_shape = input_data[:, col].shape
+            input_data[:, col] = getattr(scalars[input_name], method)(input_data[:, col].reshape([-1, 1])).reshape(modal_original_shape)
+            input_data.reshape(original_shape)
+        acc_col = [i for i, x in enumerate(self._x_fields['main_input']) if 'Accel' in x]
+        gyr_col = [i for i, x in enumerate(self._x_fields['main_input']) if 'Gyr' in x]
+        vid_col = [i for i, x in enumerate(self._x_fields['main_input']) if '0' in x]
+        transform(data, acc_col, 'acc')
+        transform(data, gyr_col, 'gyr')
+        if len(vid_col) > 0:
+            transform(data, vid_col, 'vid')
+        scaled_data = data
+        return scaled_data
 
     def preprocess_train_data(self, x, y):
-        x = self.get_scaled_data(x, self._scalars, 'fit_transform')
+
+        # plt.figure()
+        # plt.plot(x['main_input'][10, :, 3:6] / 200, 'r')
+
+        if not INPUT_NORM_EACH_MODAL:
+            for input_name, input_data in x.items():
+                x[input_name] = self.norm_each_channel(input_data, self._scalars[input_name], 'fit_transform')
+        else:
+            for input_name, input_data in x.items():
+                if input_name == 'main_input':
+                    x[input_name] = self.norm_each_modal(input_data, self._scalars, 'fit_transform')
+                else:
+                    x[input_name] = self.norm_each_channel(input_data, self._scalars[input_name], 'fit_transform')
+
+        # plt.plot(x['main_input'][10, :, 3:6])
+        # plt.show()
         return x, y
 
     def preprocess_validation_test_data(self, x, y):
-        x = self.get_scaled_data(x, self._scalars, 'transform')
+        if not INPUT_NORM_EACH_MODAL:
+            for input_name, input_data in x.items():
+                x[input_name] = self.norm_each_channel(input_data, self._scalars[input_name], 'transform')
+        else:
+            for input_name, input_data in x.items():
+                if input_name == 'main_input':
+                    x[input_name] = self.norm_each_modal(input_data, self._scalars, 'transform')
+                else:
+                    x[input_name] = self.norm_each_channel(input_data, self._scalars[input_name], 'transform')
         return x, y
 
     @staticmethod
@@ -169,10 +236,10 @@ class BaseModel:
                 r_rmse[i] = rmse[i] / (arr_true_i.max() + arr_pred_i.max() - arr_true_i.min() - arr_pred_i.min()) / 2
                 cor_value[i] = pearsonr(arr_true_i, arr_pred_i)[0]
 
-            locs = np.where(w.ravel() != 0.)[0]
+            locs = np.where(w.ravel() == 1.)[0]
             r2_all = r2_score(arr_true.ravel()[locs], arr_pred.ravel()[locs])
             r2_all = np.full(r2.shape, r2_all)
-            return {'r2': r2, 'rmse': rmse, 'mae': mae, 'r2_all': r2_all, 'r_rmse': r_rmse,
+            return {'r2': r2, 'r2_all': r2_all, 'rmse': rmse, 'mae': mae, 'r_rmse': r_rmse,
                     'cor_value': cor_value}
 
         scores = []
@@ -241,3 +308,33 @@ class BaseModel:
             tb.add_row([np.round(np.mean(value), 3) if isinstance(value, np.ndarray) else value
                         for value in test_result.values()])
         print(tb)
+
+    def cali_via_gravity(self):
+        for subject in SUBJECTS:
+            logging.info("Rotating {}'s data".format(subject))
+            transform_mat_dict = self.get_static_calibration(subject)
+            for sensor in SENSOR_LIST:
+                transform_mat = transform_mat_dict[sensor]
+                rotation_fun = lambda data: np.matmul(transform_mat, data)
+                acc_cols = ['Accel' + axis + sensor for axis in ['X_', 'Y_', 'Z_']]
+                acc_col_locs = [self.data_columns.index(col) for col in acc_cols]
+                self._data_all_sub[subject][:, :, acc_col_locs] = np.apply_along_axis(
+                    rotation_fun, 2, self._data_all_sub[subject][:, :, acc_col_locs])
+                gyr_cols = ['Gyro' + axis + sensor for axis in ['X_', 'Y_', 'Z_']]
+                gyr_col_locs = [self.data_columns.index(col) for col in gyr_cols]
+                self._data_all_sub[subject][:, :, gyr_col_locs] = np.apply_along_axis(
+                    rotation_fun, 2, self._data_all_sub[subject][:, :, gyr_col_locs])
+
+    @staticmethod
+    def get_static_calibration(subject_name, trial_name='static_back'):
+        data_path = DATA_PATH + '/' + subject_name + '/combined/' + trial_name + '.csv'
+        static_data = pd.read_csv(data_path, index_col=0)
+        transform_mat_dict = {}
+        for sensor in SENSOR_LIST:
+            acc_cols = ['Accel' + axis + sensor for axis in ['X_', 'Y_', 'Z_']]
+            acc_mean = np.mean(static_data[acc_cols], axis=0)
+            roll = np.arctan2(acc_mean[1], acc_mean[2])
+            pitch = np.arctan2(-acc_mean[0], np.sqrt(acc_mean[1] ** 2 + acc_mean[2] ** 2))
+            # print(np.rad2deg(roll), np.rad2deg(pitch))
+            transform_mat_dict[sensor] = euler2mat(roll, pitch, 0)
+        return transform_mat_dict

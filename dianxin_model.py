@@ -45,24 +45,24 @@ class DXKamModel(BaseModel):
         return prediction_dict
 
     def get_all_scores(self, y_true, y_pred, weights=None):
-        y_true = self.get_scaled_data(y_true, self._scalars, 'inverse_transform')
-        y_pred = self.get_scaled_data(y_pred, self._scalars, 'inverse_transform')
+        y_true = self.norm_each_channel(y_true, self._scalars, 'inverse_transform')
+        y_pred = self.norm_each_channel(y_pred, self._scalars, 'inverse_transform')
         return BaseModel.get_all_scores(self, y_true, y_pred, weights)
 
     def preprocess_train_data(self, x, y):
         # KAM_index = self._y_fields['main_output'].index(RKAM_COLUMN)
         # height_index = self._x_fields['aux_input'].index(SUBJECT_HEIGHT)
         # y['main_output'][:, :, KAM_index] *= x['aux_input'][:, :, height_index]
-        x = self.get_scaled_data(x, self._scalars, 'fit_transform')
-        y = self.get_scaled_data(y, self._scalars, 'fit_transform')
+        x = self.norm_each_channel(x, self._scalars, 'fit_transform')
+        y = self.norm_each_channel(y, self._scalars, 'fit_transform')
         return x, y
 
     def preprocess_validation_test_data(self, x, y):
         # KAM_index = self._y_fields['main_output'].index(RKAM_COLUMN)
         # height_index = self._x_fields['aux_input'].index(SUBJECT_HEIGHT)
         # y['main_output'][:, :, KAM_index] *= x['aux_input'][:, :, height_index]
-        x = self.get_scaled_data(x, self._scalars, 'transform')
-        y = self.get_scaled_data(y, self._scalars, 'transform')
+        x = self.norm_each_channel(x, self._scalars, 'transform')
+        y = self.norm_each_channel(y, self._scalars, 'transform')
         return x, y
     # def preprocess_train_data(self, x_train, y_train):
     #     x_train, y_train = BaseModel.preprocess_train_data(self, x_train, y_train)
