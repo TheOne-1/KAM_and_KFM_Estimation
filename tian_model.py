@@ -68,8 +68,8 @@ class TianModel(BaseModel):
 
     def train_model(self, x_train, y_train, x_validation=None, y_validation=None, validation_weight=None):
         self.train_step_lens, self.validation_step_lens = self._get_step_len(x_train), self._get_step_len(x_validation)
-        x_train, y_train = x_train['main_input'], y_train['output']
-        x_validation, y_validation = x_validation['main_input'], y_validation['output']
+        x_train, y_train = np.concatenate(x_train.values()), y_train['output']
+        x_validation, y_validation = np.concatenate(x_validation.values()), y_validation['output']
         N_step, D_in, D_hidden, N_layer, D_out = x_train.shape[0], x_train.shape[2], 30, 1, y_train.shape[2]
         x_train = torch.from_numpy(x_train).float()
         y_train = torch.from_numpy(y_train).float()
@@ -148,7 +148,7 @@ class TianModel(BaseModel):
 
     def predict(self, nn_model, x_test):
         self.test_step_lens = self._get_step_len(x_test)
-        x_test = x_test['main_input']
+        x_test = np.concatenate(x_test.values())
         x_test = torch.from_numpy(x_test)
         if USE_GPU:
             x_test = x_test.cuda()
@@ -176,12 +176,18 @@ class TianModel(BaseModel):
 if __name__ == "__main__":
 
     data_path = DATA_PATH + '/40samples+stance_swing+padding_zero.h5'
-    inertial_cols = [inertial_field + '_' + sensor for sensor in SENSOR_LIST for inertial_field in IMU_FIELDS[:6]]
+    IMU_FIELDS_ACC = ['AccelX', 'AccelY', 'AccelZ']
+    IMU_FIELDS_GYR = ['GyroX', 'GyroY', 'GyroZ']
+    IMU_DATA_FIELDS_ACC = [IMU_FIELD + "_" + SENSOR for SENSOR in SENSOR_LIST for IMU_FIELD in IMU_FIELDS_ACC]
+    IMU_DATA_FIELDS_GYR = [IMU_FIELD + "_" + SENSOR for SENSOR in SENSOR_LIST for IMU_FIELD in IMU_FIELDS_GYR]
     video_cols = [loc + '_' + axis + '_' + angle for loc in ['RHip', 'LHip', 'RKnee', 'LKnee']
                   for angle in ['90', '180'] for axis in ['x', 'y']]
     output_cols = ['RIGHT_KNEE_ADDUCTION_MOMENT']
 
-    x_fields = {'main_input': inertial_cols+video_cols, 'aux_input': [SUBJECT_WEIGHT, SUBJECT_HEIGHT]}
+    x_fields = {'main_input_acc': IMU_DATA_FIELDS_ACC,
+                'main_input_gyr': IMU_DATA_FIELDS_GYR,
+                'main_input_vid': video_cols,
+                'aux_input': [SUBJECT_WEIGHT, SUBJECT_HEIGHT]}
     y_fields = {'output': output_cols}
     weights = {'output': [PHASE]*len(output_cols)}
 

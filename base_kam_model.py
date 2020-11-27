@@ -4,7 +4,7 @@ import h5py
 import numpy as np
 import prettytable as pt
 from customized_logger import logger as logging
-from const import SUBJECTS, SENSOR_LIST, DATA_PATH, MODAL_FIELDS
+from const import SUBJECTS, SENSOR_LIST, DATA_PATH
 import matplotlib.pyplot as plt
 from sklearn.preprocessing import MinMaxScaler  # , StandardScaler
 from sklearn.utils import shuffle
@@ -12,12 +12,9 @@ from sklearn.metrics import r2_score, mean_squared_error as mse
 from scipy.stats import pearsonr
 import pandas as pd
 from transforms3d.euler import euler2mat
-from wearable_toolkit import DataScalar
 
-"""To wdx: """
-CALI_VIA_GRAVITY = False     # by default, static_back is used for calibration
-INPUT_NORM_EACH_MODAL = True            # if true, norm each modal, if false, norm each channel
-# import DivideMaxScalar in dianxin_model and use it
+CALI_VIA_GRAVITY = True     # by default, static_back is used for calibration
+# TODO：Calibrate via gravity should be place in generate_combined_data in the future, if it indeed shows better result.
 
 
 class BaseModel:
@@ -32,7 +29,7 @@ class BaseModel:
         self._x_fields = x_fields
         self._y_fields = y_fields
         self._weights = {} if weights is None else weights
-        self._data_scalar = DataScalar(base_scalar, x_fields, y_fields, INPUT_NORM_EACH_MODAL)
+        self._data_scalar = {input_name: base_scalar() for input_name in list(x_fields.keys()) + list(y_fields.keys())}
         with h5py.File(self._data_path, 'r') as hf:
             self._data_all_sub = {subject: hf[subject][:] for subject in SUBJECTS}
             self.data_columns = json.loads(hf.attrs['columns'])
@@ -136,12 +133,28 @@ class BaseModel:
             title = "{}, {}, {}, r2".format(subject, output, field, 'r2')
             self.representative_profile_curves(arr1, arr2, title, r2)
 
+    @staticmethod
+    def normalize_data(data, scalars, method, scalar_mode='by_column'):
+        assert(scalar_mode in ['by_column', 'by_sample'])
+        scaled_date = {}
+        for input_name, input_data in data.items():
+            input_data = input_data.copy()
+            original_shape = input_data.shape
+            target_shape = [-1, input_data.shape[2]] if scalar_mode == 'by_column' else [-1, 1]
+            input_data[(input_data == 0.).all(axis=2), :] = np.nan
+            input_data = input_data.reshape(target_shape)
+            input_data = getattr(scalars[input_name], method)(input_data)
+            input_data = input_data.reshape(original_shape)
+            input_data[np.isnan(input_data)] = 0.
+            scaled_date[input_name] = input_data
+        return scaled_date
+
     def preprocess_train_data(self, x, y):
-        self._data_scalar.scale_train_set(x)
+        self.normalize_data(x, self._data_scalar, 'fit_transform')
         return x, y
 
     def preprocess_validation_test_data(self, x, y):
-        self._data_scalar.scale_validation_test_set(x)
+        self.normalize_data(x, self._data_scalar, 'transform')
         return x, y
 
     @staticmethod

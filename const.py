@@ -19,7 +19,6 @@ SEGMENT_DEFITIONS = {
     'CHEST': ['MAI', 'SXS', 'SJN', 'CV7', 'LAC', 'RAC']
 }
 SENSOR_LIST = ['L_FOOT', 'R_FOOT', 'R_SHANK', 'R_THIGH', 'WAIST', 'CHEST', 'L_SHANK', 'L_THIGH']
-MODAL_FIELDS = ['acc', 'gyr', 'vid']
 IMU_FIELDS = ['AccelX', 'AccelY', 'AccelZ', 'GyroX', 'GyroY', 'GyroZ', 'MagX', 'MagY', 'MagZ', 'Quat1', 'Quat2',
               'Quat3', 'Quat4']
 IMU_DATA_FIELDS = [IMU_FIELD + "_" + SENSOR for SENSOR in SENSOR_LIST for IMU_FIELD in IMU_FIELDS]

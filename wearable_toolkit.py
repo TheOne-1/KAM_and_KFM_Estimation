@@ -18,8 +18,7 @@ import matplotlib.pyplot as plt
 from scipy import linalg
 from sklearn.preprocessing import MinMaxScaler
 
-from const import SENSOR_LIST, IMU_FIELDS, FORCE_DATA_FIELDS, EXT_KNEE_MOMENT, TARGETS_LIST, SUBJECT_HEIGHT, \
-    MODAL_FIELDS
+from const import SENSOR_LIST, IMU_FIELDS, FORCE_DATA_FIELDS, EXT_KNEE_MOMENT, TARGETS_LIST, SUBJECT_HEIGHT
 from const import SUBJECT_WEIGHT
 import wearable_math
 
@@ -513,67 +512,6 @@ class DivideMaxScalar(MinMaxScaler):
     def transform(self, X):
         X *= self.scale_
         return X
-
-
-class DataScalar:
-    def __init__(self, base_scalar, x_fields, y_fields, NORM_EACH_MODAL: bool):
-        self._base_scalar = base_scalar
-        self._NORM_EACH_MODAL = NORM_EACH_MODAL
-        self._scalars = {input_name: base_scalar() for input_name in list(x_fields.keys()) + list(y_fields.keys())}
-        self._x_fields = x_fields
-        if NORM_EACH_MODAL:
-            self._scalars.update({modal_name: base_scalar() for modal_name in MODAL_FIELDS})
-            self._scalars.pop('main_input')
-
-    def scale_train_set(self, x):
-        if not self._NORM_EACH_MODAL:
-            for input_name, input_data in x.items():
-                x[input_name] = self._norm_each_channel(input_data, self._scalars[input_name], 'fit_transform')
-        else:
-            for input_name, input_data in x.items():
-                if input_name == 'main_input':
-                    x[input_name] = self._norm_each_modal(input_data, self._scalars, 'fit_transform')
-                else:
-                    x[input_name] = self._norm_each_channel(input_data, self._scalars[input_name], 'fit_transform')
-
-    def scale_validation_test_set(self, x):
-        if not self._NORM_EACH_MODAL:
-            for input_name, input_data in x.items():
-                x[input_name] = self._norm_each_channel(input_data, self._scalars[input_name], 'transform')
-        else:
-            for input_name, input_data in x.items():
-                if input_name == 'main_input':
-                    x[input_name] = self._norm_each_modal(input_data, self._scalars, 'transform')
-                else:
-                    x[input_name] = self._norm_each_channel(input_data, self._scalars[input_name], 'transform')
-
-    @staticmethod
-    def _norm_each_channel(input_data, scalar, method):
-        input_data = input_data.copy()
-        original_shape = input_data.shape
-        input_data[(input_data == 0.).all(axis=2), :] = np.nan
-        input_data = input_data.reshape([-1, input_data.shape[2]])
-        scaled_data = getattr(scalar, method)(input_data)
-        scaled_data = scaled_data.reshape(original_shape)
-        scaled_data[np.isnan(scaled_data)] = 0.
-        return scaled_data
-
-    def _norm_each_modal(self, data, scalars, method):
-        def transform(input_data, col, input_name):
-            original_shape = input_data.shape
-            input_data = input_data.reshape([-1, input_data.shape[2]])
-            modal_original_shape = input_data[:, col].shape
-            input_data[:, col] = getattr(scalars[input_name], method)(input_data[:, col].reshape([-1, 1])).reshape(modal_original_shape)
-            input_data.reshape(original_shape)
-        scaled_data = copy.deepcopy(data)
-        acc_col = [i for i, x in enumerate(self._x_fields['main_input']) if 'Accel' in x]
-        gyr_col = [i for i, x in enumerate(self._x_fields['main_input']) if 'Gyr' in x]
-        vid_col = [i for i, x in enumerate(self._x_fields['main_input']) if '0' in x]
-        transform(scaled_data, acc_col, 'acc')
-        transform(scaled_data, gyr_col, 'gyr')
-        if len(vid_col) > 0:
-            transform(scaled_data, vid_col, 'vid')
-        return scaled_data
 
 
 def data_filter(data, cut_off_fre, sampling_fre, filter_order=4):
