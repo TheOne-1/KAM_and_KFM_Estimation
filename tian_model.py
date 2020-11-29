@@ -18,19 +18,37 @@ USE_GPU = True
 class TianCNN(nn.Module):
     def __init__(self, x_dim, y_dim):
         super().__init__()
-        # self.conv1 = nn.Conv1d(x_dim, 30, kernel_size=3, stride=1)
+        self.conv1 = [nn.Conv1d(1, 1, kernel_size=3, stride=1).cuda() for _ in range(x_dim)]
+        self.pooling1 = [nn.MaxPool1d(231 - 3) for _ in range(x_dim)]
+        self.conv2 = [nn.Conv1d(1, 1, kernel_size=6, stride=1).cuda() for _ in range(x_dim)]
+        self.pooling2 = [nn.MaxPool1d(231 - 6) for _ in range(x_dim)]
+        self.conv3 = [nn.Conv1d(1, 1, kernel_size=12, stride=1).cuda() for _ in range(x_dim)]
+        self.pooling3 = [nn.MaxPool1d(231 - 12) for _ in range(x_dim)]
 
-        self.conv1 = nn.Conv2d(1, 50, kernel_size=(5, 1), stride=1)
-        self.pooling1 = nn.MaxPool2d((221, 50))
         self.flatten = nn.Flatten()
-        self.conv2output = nn.Linear(50, y_dim * 230)
+        self.conv2output = nn.Linear(150, y_dim * 230)
         self.y_dim = y_dim
+        self.x_dim = x_dim
 
     def forward(self, sequence):
-        sequence = sequence.unsqueeze(1)
-        sequence = self.conv1(sequence)
-        sequence = self.pooling1(sequence)
-        sequence = self.flatten(sequence)
+        feature_outputs = []
+        sequence.transpose_(1, 2)
+        for i_feature in range(self.x_dim):
+            narrowed = sequence.narrow(1, i_feature, 1)
+            feature_output = self.conv1[i_feature](narrowed)
+            feature_output = self.pooling1[i_feature](feature_output)
+            feature_outputs.append(feature_output)
+            feature_output = self.conv2[i_feature](narrowed)
+            feature_output = self.pooling2[i_feature](feature_output)
+            feature_outputs.append(feature_output)
+            feature_output = self.conv3[i_feature](narrowed)
+            feature_output = self.pooling3[i_feature](feature_output)
+            feature_outputs.append(feature_output)
+        feature_outputs = torch.cat(feature_outputs, dim=1)
+
+        # sequence = self.conv1(sequence)
+        # sequence = self.pooling1(sequence)
+        sequence = self.flatten(feature_outputs)
         output = self.conv2output(sequence)
         output = torch.reshape(output, (-1, 230, self.y_dim))
         return output
@@ -133,7 +151,7 @@ class TianModel(BaseModel):
             # y_train = y_train.cuda()
             nn_model = nn_model.cuda()
         loss_fn = torch.nn.MSELoss(reduction='sum')
-        optimizer = torch.optim.Adam(nn_model.parameters(), lr=2e-5, weight_decay=1e-5)
+        optimizer = torch.optim.Adam(nn_model.parameters(), lr=1e-5, weight_decay=0e-5)
         # optimizer = torch.optim.Adam(nn_model.parameters())
 
         batch_size = 20
@@ -156,7 +174,7 @@ class TianModel(BaseModel):
         vali_from_test_dl = DataLoader(vali_from_test_ds, batch_size=len(vali_from_test_ds))
 
         logging.info('\tEpoch\t\tTrain_Loss\tVali_train_Loss\tVali_test_Loss\t\tDuration\t\t')
-        for epoch in range(10):
+        for epoch in range(5):
             epoch_start_time = time.time()
             for i_batch, (xb, yb, lens) in enumerate(train_dl):
                 if USE_GPU:
