@@ -24,7 +24,7 @@ class DXKamModel(BaseModel):
         BaseModel.__init__(self, os.path.join(DATA_PATH, data_file), input_fields, output_fields, output_weights, StandardScaler)
 
     def train_model(self, x_train, y_train, x_validation=None, y_validation=None, validation_weight=None):
-        model = rnn_model(x_train, y_train, LSTM)
+        model = rnn_model(x_train, y_train, GRU)
         validation_data = None
         callbacks = []
         if x_validation is not None:
