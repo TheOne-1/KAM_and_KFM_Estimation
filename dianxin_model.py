@@ -33,7 +33,7 @@ class DXKamModel(BaseModel):
             # callbacks.append(ErrorVisualization(self, x_validation, y_validation, validation_weight))
             callbacks.append(ReduceLROnPlateau('val_loss', factor=0.5, patience=5))
         model.fit(x=x_train, y=y_train, validation_data=validation_data, shuffle=True, batch_size=30,
-                  epochs=20, verbose=1, callbacks=callbacks)
+                  epochs=20, verbose=0, callbacks=callbacks)
         return model
 
     @staticmethod
@@ -115,16 +115,20 @@ def rnn_model(x_train, y_train, rnn_layer):
     aux_input_shape = x_train['aux_input'].shape[1:]
     aux_input = Input(shape=aux_input_shape, name='aux_input')
     x = concatenate([x, aux_input])
+    aux_output_shape = y_train['aux_output'].shape[2]
+    aux_output = Dense(aux_output_shape, use_bias=True, name='aux_output')(x)
+    x = concatenate([x, aux_output])
     x = Dense(15, use_bias=True)(x)
     output_shape = y_train['main_output'].shape[2]
-    output = Dense(output_shape, use_bias=True, name='main_output')(x)
-    model = Model(inputs=[main_input_acc, main_input_gyr, aux_input], outputs=[output])
+    main_output = Dense(output_shape, use_bias=True, name='main_output')(x)
+    model = Model(inputs=[main_input_acc, main_input_gyr, aux_input], outputs=[main_output, aux_output])
 
     def custom_loss(y_true, y_pred):
         temp = K.cast(y_true >= 0, 'float32')
         return K.sum(K.abs(y_true - y_pred) * (1. + K.log(temp * y_true + 1.)))
 
     # opt = Adam(lr=0.001, beta_1=0.9, beta_2=0.999, epsilon=1e-08, decay=0.0)
+    model.summary()
     model.compile(loss='mse', optimizer='adam', metrics=['mae'])
     return model
 
@@ -159,6 +163,10 @@ def autoencoder(input_shape):
     return convolutional_autoencoder
 
 
+def execute_cmd(cmd):
+    return os.popen(cmd).read()
+
+
 if __name__ == "__main__":
     IMU_FIELDS_ACC = ['AccelX', 'AccelY', 'AccelZ']
     IMU_FIELDS_GYR = ['GyroX', 'GyroY', 'GyroZ']
@@ -171,10 +179,12 @@ if __name__ == "__main__":
                 'main_input_gyr': IMU_DATA_FIELDS_ACC,
                 'aux_input':      [SUBJECT_WEIGHT, SUBJECT_HEIGHT]}
     # TARGETS_LIST = [RKAM_COLUMN]
-    y_fields = {'main_output': TARGETS_LIST}
-    y_weights = {'main_output': [PHASE] * len(TARGETS_LIST)}
+    MAIN_TARGETS_LIST = ['RIGHT_KNEE_ADDUCTION_MOMENT', "RIGHT_KNEE_FLEXION_MOMENT"]
+    AUX_TARGETS_LIST = ["RIGHT_KNEE_ADDUCTION_ANGLE", "RIGHT_KNEE_ADDUCTION_VELOCITY"]
+    y_fields = {'main_output': MAIN_TARGETS_LIST, 'aux_output': AUX_TARGETS_LIST}
+    y_weights = {'main_output': [PHASE] * len(MAIN_TARGETS_LIST), 'aux_output': [PHASE] * len(AUX_TARGETS_LIST)}
     dx_model = DXKamModel('40samples+stance_swing+padding_zero.h5', x_fields, y_fields, y_weights)
-    dx_model.cali_via_gravity()
+    # dx_model.cali_via_gravity()
     subject_list = dx_model.get_all_subjects()
     shuffle(subject_list)
     # dx_model.preprocess_train_evaluation(subject_list[3:], subject_list[:3], subject_list[:3])

@@ -160,11 +160,11 @@ class BaseModel:
         raise RuntimeError('Method not implemented')
 
     def get_all_scores(self, y_true, y_pred, weights=None):
-        def get_column_score(arr_true, arr_pred, w=None):
+        def get_column_score(arr_true, arr_pred, w):
             r2, rmse, mae, r_rmse, cor_value = [np.zeros(arr_true.shape[0]) for _ in range(5)]
             for i in range(arr_true.shape[0]):
-                arr_true_i = arr_true[i, :] if w is None else arr_true[i, w[i, :] == 1.]
-                arr_pred_i = arr_pred[i, :] if w is None else arr_pred[i, w[i, :] == 1.]
+                arr_true_i = arr_true[i, w[i, :]]
+                arr_pred_i = arr_pred[i, w[i, :]]
 
                 r2[i] = r2_score(arr_true_i, arr_pred_i)
                 rmse[i] = np.sqrt(mse(arr_true_i, arr_pred_i))
@@ -172,7 +172,7 @@ class BaseModel:
                 r_rmse[i] = rmse[i] / (arr_true_i.max() + arr_pred_i.max() - arr_true_i.min() - arr_pred_i.min()) / 2
                 cor_value[i] = pearsonr(arr_true_i, arr_pred_i)[0]
 
-            locs = np.where(w.ravel() == 1.)[0]
+            locs = np.where(w.ravel())[0]
             r2_all = r2_score(arr_true.ravel()[locs], arr_pred.ravel()[locs])
             r2_all = np.full(r2.shape, r2_all)
             return {'r2': r2, 'r2_all': r2_all, 'rmse': rmse, 'mae': mae, 'r_rmse': r_rmse,
@@ -185,9 +185,10 @@ class BaseModel:
                 y_true_one_field = y_true[output_name][:, :, col]
                 y_pred_one_field = y_pred[output_name][:, :, col]
                 try:
-                    weight_one_field = weights[output_name][:, :, col]
+                    weight_one_field = weights[output_name][:, :, col] == 1.
                 except KeyError:
-                    weight_one_field = None
+                    weight_one_field = np.full(y_true_one_field.shape, True)
+                    logging.warning("Use default all true value for {}".format(output_name))
                 score_one_field = {'output': output_name, 'field': field}
                 score_one_field.update(get_column_score(y_true_one_field, y_pred_one_field, weight_one_field))
                 scores.append(score_one_field)
