@@ -8,12 +8,11 @@ from keras.layers import UpSampling1D, concatenate
 from random import shuffle
 import keras.backend as K
 import keras.losses as Kloss
-from keras.optimizers import Adam
 from sklearn.preprocessing import StandardScaler  # MinMaxScaler,
 from keras.callbacks import Callback, ReduceLROnPlateau
 from base_kam_model import BaseModel
-from const import DATA_PATH, SENSOR_LIST, VIDEO_LIST, TARGETS_LIST, SUBJECT_WEIGHT, SUBJECT_HEIGHT, PHASE, RKAM_COLUMN
-from const import SUBJECTS
+from customized_logger import logger as logging
+from const import DATA_PATH, SENSOR_LIST, VIDEO_LIST, SUBJECT_WEIGHT, SUBJECT_HEIGHT, PHASE
 
 gpus = tf.config.experimental.list_physical_devices('GPU')
 for gpu in gpus:
@@ -168,6 +167,7 @@ def execute_cmd(cmd):
 
 
 if __name__ == "__main__":
+    logging.info("{}".format(execute_cmd("git rev-parse HEAD")))
     IMU_FIELDS_ACC = ['AccelX', 'AccelY', 'AccelZ']
     IMU_FIELDS_GYR = ['GyroX', 'GyroY', 'GyroZ']
     IMU_DATA_FIELDS_ACC = [IMU_FIELD + "_" + SENSOR for SENSOR in SENSOR_LIST for IMU_FIELD in IMU_FIELDS_ACC]
@@ -184,7 +184,7 @@ if __name__ == "__main__":
     y_fields = {'main_output': MAIN_TARGETS_LIST, 'aux_output': AUX_TARGETS_LIST}
     y_weights = {'main_output': [PHASE] * len(MAIN_TARGETS_LIST), 'aux_output': [PHASE] * len(AUX_TARGETS_LIST)}
     dx_model = DXKamModel('40samples+stance_swing+padding_zero.h5', x_fields, y_fields, y_weights)
-    # dx_model.cali_via_gravity()
+    dx_model.cali_via_gravity()
     subject_list = dx_model.get_all_subjects()
     shuffle(subject_list)
     # dx_model.preprocess_train_evaluation(subject_list[3:], subject_list[:3], subject_list[:3])
