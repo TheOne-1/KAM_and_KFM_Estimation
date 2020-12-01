@@ -1,5 +1,6 @@
 import logging
 
+
 class CustomFormatter(logging.Formatter):
     """Logging Formatter to add colors and count warning / errors"""
 
@@ -24,8 +25,9 @@ class CustomFormatter(logging.Formatter):
         formatter = logging.Formatter(log_fmt)
         return formatter.format(record)
 
+
 # create logger with 'spam_application'
-logger = logging.getLogger("My_app")
+logger = logging.getLogger("kam_estimation")
 logger.setLevel(logging.INFO)
 
 # create console handler with a higher log level
@@ -35,3 +37,9 @@ ch.setLevel(logging.INFO)
 ch.setFormatter(CustomFormatter())
 
 logger.addHandler(ch)
+
+
+def add_file_handler(logger_, file_name):
+    fh = logging.FileHandler(file_name)
+    fh.setLevel(logging.DEBUG)
+    logger_.addHandler(fh)
