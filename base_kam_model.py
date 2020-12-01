@@ -1,11 +1,13 @@
+import os
 import json
 import h5py
+import datetime
 import numpy as np
 import pandas as pd
 import prettytable as pt
 import matplotlib.pyplot as plt
 from typing import List
-from customized_logger import logger as logging
+from customized_logger import logger as logging, add_file_handler
 from sklearn.preprocessing import MinMaxScaler  # , StandardScaler
 from sklearn.utils import shuffle
 from sklearn.metrics import r2_score, mean_squared_error as mse
@@ -15,6 +17,13 @@ from transforms3d.euler import euler2mat
 from const import SENSOR_LIST, DATA_PATH
 # TODO：Calibrate via gravity should be place in generate_combined_data in the future, if it indeed shows better result.
 
+SAVING_DIR = os.path.join(DATA_PATH, 'training_results', str(datetime.datetime.now()))
+os.mkdir(SAVING_DIR)
+
+
+def execute_cmd(cmd):
+    return os.popen(cmd).read()
+
 
 class BaseModel:
     def __init__(self, data_path, x_fields, y_fields, weights=None, base_scalar=MinMaxScaler):
@@ -22,6 +31,9 @@ class BaseModel:
         x_fileds: a dict contains input names and input fields
         y_fileds: a dict contains output names and output fields
         """
+        # log to file
+        add_file_handler(logging, os.path.join(SAVING_DIR, 'training_log'))
+        logging.info("Current commit is {}".format(execute_cmd("git rev-parse HEAD")))
         logging.info("Load data from h5 file {}".format(data_path))
         logging.debug("Load data with input fields {}, output fields {}".format(x_fields, y_fields))
         self._x_fields = x_fields
@@ -230,6 +242,7 @@ class BaseModel:
         axs[1, 1].text(0.4, 0.9, np.round(np.mean(metric), 3), transform=axs[1, 1].transAxes)
         axs[1, 1].set_title('general performance')
         plt.tight_layout()
+        plt.savefig(os.path.join(SAVING_DIR, title))
         plt.show(block=False)
 
     @staticmethod
@@ -239,7 +252,7 @@ class BaseModel:
             tb.field_names = test_result.keys()
             tb.add_row([np.round(np.mean(value), 3) if isinstance(value, np.ndarray) else value
                         for value in test_result.values()])
-        print(tb)
+        logging.info(tb)
 
     def cali_via_gravity(self):
         for subject in self.get_all_subjects():
@@ -267,6 +280,5 @@ class BaseModel:
             acc_mean = np.mean(static_data[acc_cols], axis=0)
             roll = np.arctan2(acc_mean[1], acc_mean[2])
             pitch = np.arctan2(-acc_mean[0], np.sqrt(acc_mean[1] ** 2 + acc_mean[2] ** 2))
-            # print(np.rad2deg(roll), np.rad2deg(pitch))
             transform_mat_dict[sensor] = euler2mat(roll, pitch, 0)
         return transform_mat_dict

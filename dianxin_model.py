@@ -127,7 +127,7 @@ def rnn_model(x_train, y_train, rnn_layer):
         return K.sum(K.abs(y_true - y_pred) * (1. + K.log(temp * y_true + 1.)))
 
     # opt = Adam(lr=0.001, beta_1=0.9, beta_2=0.999, epsilon=1e-08, decay=0.0)
-    model.summary()
+    model.summary(print_fn=logging.info)
     model.compile(loss='mse', optimizer='adam', metrics=['mae'])
     return model
 
@@ -162,12 +162,7 @@ def autoencoder(input_shape):
     return convolutional_autoencoder
 
 
-def execute_cmd(cmd):
-    return os.popen(cmd).read()
-
-
 if __name__ == "__main__":
-    logging.info("{}".format(execute_cmd("git rev-parse HEAD")))
     IMU_FIELDS_ACC = ['AccelX', 'AccelY', 'AccelZ']
     IMU_FIELDS_GYR = ['GyroX', 'GyroY', 'GyroZ']
     IMU_DATA_FIELDS_ACC = [IMU_FIELD + "_" + SENSOR for SENSOR in SENSOR_LIST for IMU_FIELD in IMU_FIELDS_ACC]
@@ -184,7 +179,7 @@ if __name__ == "__main__":
     y_fields = {'main_output': MAIN_TARGETS_LIST, 'aux_output': AUX_TARGETS_LIST}
     y_weights = {'main_output': [PHASE] * len(MAIN_TARGETS_LIST), 'aux_output': [PHASE] * len(AUX_TARGETS_LIST)}
     dx_model = DXKamModel('40samples+stance_swing+padding_zero.h5', x_fields, y_fields, y_weights)
-    dx_model.cali_via_gravity()
+    # dx_model.cali_via_gravity()
     subject_list = dx_model.get_all_subjects()
     shuffle(subject_list)
     # dx_model.preprocess_train_evaluation(subject_list[3:], subject_list[:3], subject_list[:3])
