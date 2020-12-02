@@ -111,8 +111,8 @@ def rnn_model(x_train, y_train, rnn_layer):
     x = concatenate([main_input_acc, main_input_gyr])
     x = Masking(mask_value=0.)(x)
     # x = GaussianNoise(0.1)(x)
+    x = rnn_layer(90, dropout=0.2, return_sequences=True)(x)
     x = rnn_layer(15, dropout=0.2, return_sequences=True)(x)
-    x = rnn_layer(7, dropout=0.2, return_sequences=True)(x)
 
     aux_input_shape = x_train['aux_input'].shape[1:]
     aux_input = Input(shape=aux_input_shape, name='aux_input')
@@ -120,7 +120,7 @@ def rnn_model(x_train, y_train, rnn_layer):
     aux_output_shape = y_train['aux_output'].shape[2]
     aux_output = Dense(aux_output_shape, use_bias=True, name='aux_output')(x)
     x = concatenate([x, aux_output])
-    x = Dense(3, use_bias=True)(x)
+    x = Dense(15, use_bias=True)(x)
     output_shape = y_train['main_output'].shape[2]
     main_output = Dense(output_shape, use_bias=True, name='main_output')(x)
     model = Model(inputs=[main_input_acc, main_input_gyr, aux_input], outputs=[main_output, aux_output])
@@ -181,7 +181,7 @@ if __name__ == "__main__":
                 'aux_input':      [SUBJECT_WEIGHT, SUBJECT_HEIGHT]}
     # TARGETS_LIST = [RKAM_COLUMN]
     MAIN_TARGETS_LIST = ['RIGHT_KNEE_ADDUCTION_MOMENT', "RIGHT_KNEE_FLEXION_MOMENT"]
-    AUX_TARGETS_LIST = ["RIGHT_KNEE_ADDUCTION_ANGLE", "RIGHT_KNEE_ADDUCTION_VELOCITY"]
+    AUX_TARGETS_LIST = ["RIGHT_KNEE_ADDUCTION_VELOCITY"]
     y_fields = {'main_output': MAIN_TARGETS_LIST, 'aux_output': AUX_TARGETS_LIST}
     y_weights = {'main_output': [PHASE] * len(MAIN_TARGETS_LIST), 'aux_output': [PHASE] * len(AUX_TARGETS_LIST)}
     dx_model = DXKamModel('40samples+stance_swing+baseline_only.h5', x_fields, y_fields, y_weights)
