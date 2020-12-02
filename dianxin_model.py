@@ -12,7 +12,7 @@ from sklearn.preprocessing import StandardScaler  # MinMaxScaler,
 from keras.callbacks import Callback, ReduceLROnPlateau
 from base_kam_model import BaseModel
 from customized_logger import logger as logging
-from const import DATA_PATH, SENSOR_LIST, VIDEO_LIST, SUBJECT_WEIGHT, SUBJECT_HEIGHT, PHASE
+from const import DATA_PATH, SENSOR_LIST, VIDEO_LIST, SUBJECT_WEIGHT, SUBJECT_HEIGHT, PHASE, R_KAM_COLUMN
 
 gpus = tf.config.experimental.list_physical_devices('GPU')
 for gpu in gpus:
@@ -48,9 +48,9 @@ class DXKamModel(BaseModel):
         return BaseModel.get_all_scores(self, y_true, y_pred, weights)
 
     def preprocess_train_data(self, x, y):
-        # KAM_index = self._y_fields['main_output'].index(RKAM_COLUMN)
-        # height_index = self._x_fields['aux_input'].index(SUBJECT_HEIGHT)
-        # y['main_output'][:, :, KAM_index] *= x['aux_input'][:, :, height_index]
+        KAM_index = self._y_fields['main_output'].index(R_KAM_COLUMN)
+        height_index = self._x_fields['aux_input'].index(SUBJECT_HEIGHT)
+        y['main_output'][:, :, KAM_index] *= x['aux_input'][:, :, height_index]
         x1 = {'main_input_acc': x['main_input_acc'], 'main_input_gyr': x['main_input_gyr']}
         x2 = {'aux_input': x['aux_input']}
         x1 = self.normalize_data(x1, self._data_scalar, 'fit_transform', 'by_all_columns')
@@ -60,9 +60,9 @@ class DXKamModel(BaseModel):
         return x, y
 
     def preprocess_validation_test_data(self, x, y):
-        # KAM_index = self._y_fields['main_output'].index(RKAM_COLUMN)
-        # height_index = self._x_fields['aux_input'].index(SUBJECT_HEIGHT)
-        # y['main_output'][:, :, KAM_index] *= x['aux_input'][:, :, height_index]
+        KAM_index = self._y_fields['main_output'].index(R_KAM_COLUMN)
+        height_index = self._x_fields['aux_input'].index(SUBJECT_HEIGHT)
+        y['main_output'][:, :, KAM_index] *= x['aux_input'][:, :, height_index]
         x1 = {'main_input_acc': x['main_input_acc'], 'main_input_gyr': x['main_input_gyr']}
         x2 = {'aux_input': x['aux_input']}
         x1 = self.normalize_data(x1, self._data_scalar, 'transform', 'by_all_columns')
