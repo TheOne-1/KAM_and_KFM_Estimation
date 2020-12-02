@@ -254,31 +254,3 @@ class BaseModel:
                         for value in test_result.values()])
         logging.info(tb)
 
-    def cali_via_gravity(self):
-        for subject in self.get_all_subjects():
-            logging.info("Rotating {}'s data".format(subject))
-            transform_mat_dict = self.get_static_calibration(subject)
-            for sensor in SENSOR_LIST:
-                transform_mat = transform_mat_dict[sensor]
-                rotation_fun = lambda data: np.matmul(transform_mat, data)
-                acc_cols = ['Accel' + axis + sensor for axis in ['X_', 'Y_', 'Z_']]
-                acc_col_locs = [self._data_fields.index(col) for col in acc_cols]
-                self._data_all_sub[subject][:, :, acc_col_locs] = np.apply_along_axis(
-                    rotation_fun, 2, self._data_all_sub[subject][:, :, acc_col_locs])
-                gyr_cols = ['Gyro' + axis + sensor for axis in ['X_', 'Y_', 'Z_']]
-                gyr_col_locs = [self._data_fields.index(col) for col in gyr_cols]
-                self._data_all_sub[subject][:, :, gyr_col_locs] = np.apply_along_axis(
-                    rotation_fun, 2, self._data_all_sub[subject][:, :, gyr_col_locs])
-
-    @staticmethod
-    def get_static_calibration(subject_name, trial_name='static_back'):
-        data_path = DATA_PATH + '/' + subject_name + '/combined/' + trial_name + '.csv'
-        static_data = pd.read_csv(data_path, index_col=0)
-        transform_mat_dict = {}
-        for sensor in SENSOR_LIST:
-            acc_cols = ['Accel' + axis + sensor for axis in ['X_', 'Y_', 'Z_']]
-            acc_mean = np.mean(static_data[acc_cols], axis=0)
-            roll = np.arctan2(acc_mean[1], acc_mean[2])
-            pitch = np.arctan2(-acc_mean[0], np.sqrt(acc_mean[1] ** 2 + acc_mean[2] ** 2))
-            transform_mat_dict[sensor] = euler2mat(roll, pitch, 0)
-        return transform_mat_dict
