@@ -51,8 +51,7 @@ class DXKamModel(BaseModel):
         # KAM_index = self._y_fields['main_output'].index(RKAM_COLUMN)
         # height_index = self._x_fields['aux_input'].index(SUBJECT_HEIGHT)
         # y['main_output'][:, :, KAM_index] *= x['aux_input'][:, :, height_index]
-        x1 = {'main_input_acc': x['main_input_acc'], 'main_input_gyr': x['main_input_gyr'],
-              'main_input_video': x['main_input_video']}
+        x1 = {'main_input_acc': x['main_input_acc'], 'main_input_gyr': x['main_input_gyr']}
         x2 = {'aux_input': x['aux_input']}
         x1 = self.normalize_data(x1, self._data_scalar, 'fit_transform', 'by_all_columns')
         x2 = self.normalize_data(x2, self._data_scalar, 'fit_transform', 'by_each_column')
@@ -64,8 +63,7 @@ class DXKamModel(BaseModel):
         # KAM_index = self._y_fields['main_output'].index(RKAM_COLUMN)
         # height_index = self._x_fields['aux_input'].index(SUBJECT_HEIGHT)
         # y['main_output'][:, :, KAM_index] *= x['aux_input'][:, :, height_index]
-        x1 = {'main_input_acc': x['main_input_acc'], 'main_input_gyr': x['main_input_gyr'],
-              'main_input_video': x['main_input_video']}
+        x1 = {'main_input_acc': x['main_input_acc'], 'main_input_gyr': x['main_input_gyr']}
         x2 = {'aux_input': x['aux_input']}
         x1 = self.normalize_data(x1, self._data_scalar, 'transform', 'by_all_columns')
         x2 = self.normalize_data(x2, self._data_scalar, 'transform', 'by_each_column')
@@ -117,22 +115,16 @@ def rnn_model(x_train, y_train, rnn_layer):
     # x = Bidirectional(rnn_layer(30, dropout=0.2, return_sequences=True))(x)
     x = Bidirectional(rnn_layer(15, dropout=0.2, return_sequences=True))(x)
 
-    main_input_video_shape = x_train['main_input_video'].shape[1:]
-    main_input_video = Input(shape=main_input_video_shape, name='main_input_video')
-    x1 = Masking(mask_value=0.)(main_input_video)
-    x1 = Bidirectional(rnn_layer(90, dropout=0.2, return_sequences=True))(x)
-    x1 = Bidirectional(rnn_layer(15, dropout=0.2, return_sequences=True))(x)
-
     aux_input_shape = x_train['aux_input'].shape[1:]
     aux_input = Input(shape=aux_input_shape, name='aux_input')
-    x = concatenate([x, x1, aux_input])
+    x = concatenate([x, aux_input])
     aux_output_shape = y_train['aux_output'].shape[2]
     aux_output = Dense(aux_output_shape, use_bias=True, name='aux_output')(x)
     x = concatenate([x, aux_output])
     x = Dense(15, use_bias=True)(x)
     output_shape = y_train['main_output'].shape[2]
     main_output = Dense(output_shape, use_bias=True, name='main_output')(x)
-    model = Model(inputs=[main_input_acc, main_input_gyr, main_input_video, aux_input], outputs=[main_output, aux_output])
+    model = Model(inputs=[main_input_acc, main_input_gyr, aux_input], outputs=[main_output, aux_output])
 
     def custom_loss(y_true, y_pred):
         temp = K.cast(y_true >= 0, 'float32')
@@ -187,14 +179,13 @@ if __name__ == "__main__":
 
     x_fields = {'main_input_acc': IMU_DATA_FIELDS_ACC,
                 'main_input_gyr': IMU_DATA_FIELDS_ACC,
-                'main_input_video': VIDEO_DATA_FIELDS,
                 'aux_input':      [SUBJECT_WEIGHT, SUBJECT_HEIGHT]}
     # TARGETS_LIST = [RKAM_COLUMN]
     MAIN_TARGETS_LIST = ['RIGHT_KNEE_ADDUCTION_MOMENT', "RIGHT_KNEE_FLEXION_MOMENT"]
     AUX_TARGETS_LIST = ["RIGHT_KNEE_ADDUCTION_ANGLE", "RIGHT_KNEE_ADDUCTION_VELOCITY"]
     y_fields = {'main_output': MAIN_TARGETS_LIST, 'aux_output': AUX_TARGETS_LIST}
     y_weights = {'main_output': [PHASE] * len(MAIN_TARGETS_LIST), 'aux_output': [PHASE] * len(AUX_TARGETS_LIST)}
-    dx_model = DXKamModel('40samples+stance_swing+padding_zero.h5', x_fields, y_fields, y_weights)
+    dx_model = DXKamModel('40samples+stance_swing+baseline_only.h5', x_fields, y_fields, y_weights)
     subject_list = dx_model.get_all_subjects()
     shuffle(subject_list)
     # dx_model.preprocess_train_evaluation(subject_list[3:], subject_list[:3], subject_list[:3])

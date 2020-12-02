@@ -109,10 +109,13 @@ def generate_step_data(export_path):
 
 if __name__ == "__main__":
     is_verbose = False
-    PADDING_MODE = PADDING_ZERO
-    generate_step_data('40samples+stance_swing+padding_zero.h5')
+    # PADDING_MODE = PADDING_ZERO
+    # generate_step_data('40samples+stance_swing+padding_zero.h5')
     # PADDING_MODE = PADDING_NEXT_STEP
     # generate_step_data('40samples+stance_swing+padding_next_step.h5')
-    # PADDING_MODE = PADDING_ZERO
-    # TRIALS = ['baseline', 'fpa', 'step_width']
-    # generate_step_data('40samples+stance_swing+kick_out_trunksway.h5')
+    PADDING_MODE = PADDING_ZERO
+    TRIALS = ['baseline', 'fpa', 'step_width']
+    generate_step_data('40samples+stance_swing+kick_out_trunksway.h5')
+    PADDING_MODE = PADDING_ZERO
+    TRIALS = ['baseline']
+    generate_step_data('40samples+stance_swing+baseline_only.h5')
