@@ -195,7 +195,7 @@ if __name__ == "__main__":
     y_fields = {'main_output': MAIN_TARGETS_LIST, 'aux_output': AUX_TARGETS_LIST}
     y_weights = {'main_output': [PHASE] * len(MAIN_TARGETS_LIST), 'aux_output': [PHASE] * len(AUX_TARGETS_LIST)}
     dx_model = DXKamModel('40samples+stance_swing+padding_zero.h5', x_fields, y_fields, y_weights)
-    # dx_model.cali_via_gravity()
+    dx_model.cali_via_gravity()
     subject_list = dx_model.get_all_subjects()
     shuffle(subject_list)
     # dx_model.preprocess_train_evaluation(subject_list[3:], subject_list[:3], subject_list[:3])
