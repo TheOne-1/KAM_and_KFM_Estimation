@@ -30,6 +30,7 @@ class VideoCsvReader:
 
     def __init__(self, file_path):
         self.data_frame = pd.read_csv(file_path)
+        self.data_frame.loc[:, :] = data_filter(self.data_frame.values, 15, 100, 2)
 
     def get_column_position(self, marker_name):
         return self.data_frame[marker_name]
