@@ -55,35 +55,6 @@ class TianCNN(nn.Module):
         return output
 
 
-class WangRNN(nn.Module):
-    def __init__(self, x_dim, y_dim, nlayer=2):
-        super(WangRNN, self).__init__()
-        hidden_dim = 10
-        self.hidden_dim = hidden_dim
-        self.nlayer = nlayer
-        self.y_dim = y_dim
-        self.rnn_layer = nn.GRU(x_dim, hidden_dim, 2, dropout=0.5, batch_first=True, bidirectional=True)
-        self.hidden2output = nn.Linear(2 * hidden_dim, y_dim)
-        for layer in [self.hidden2dense, self.dense2output]:
-            nn.init.xavier_normal_(layer.weight)
-        for name, param in self.rnn_layer.named_parameters():
-            if 'bias' in name:
-                nn.init.constant_(param, 0.0)
-            elif 'weight' in name:
-                nn.init.xavier_normal_(param)
-
-    def forward(self, sequence, hidden, lens):
-        sequence = pack_padded_sequence(sequence, lens, batch_first=True, enforce_sorted=False)
-        gru_out, hidden = self.rnn_layer(sequence, hidden)
-        gru_out, _ = pad_packed_sequence(gru_out, batch_first=True, total_length=230)
-        output = self.hidden2output(gru_out)
-        return output, hidden
-
-    def init_hidden(self, batch_size):
-        weight = next(self.parameters())
-        return weight.new_zeros(self.nlayer * 2, batch_size, self.hidden_dim)
-
-
 class TianRNN(nn.Module):
     def __init__(self, x_dim, y_dim, hidden_dim=30, nlayer=2):
         super(TianRNN, self).__init__()
@@ -116,37 +87,43 @@ class TianRNN(nn.Module):
 
 
 class TianCLDNN(nn.Module):
-    def __init__(self):
+    def __init__(self, left, right):
+        self.left = left
+        self.right = right
         super(TianCLDNN, self).__init__()
         self.conv1 = nn.Conv2d(1, 10, kernel_size=(3, 3))
-        self.pool1 = nn.MaxPool2d(3)
         self.conv2 = nn.Conv2d(10, 10, kernel_size=(3, 3))
         self.pool2 = nn.MaxPool2d(3)
+        self.conv3 = nn.Conv2d(10, 10, kernel_size=(3, 3))
+        self.pool3 = nn.MaxPool2d(3)
+        self.conv4 = nn.Conv2d(10, 10, kernel_size=(3, 3))
         self.flatten1 = nn.Flatten()
-        # self.lstm = nn.LSTM(840, 20, 2, dropout=0, batch_first=True, bidirectional=False)
-        # self.lstm2dense = nn.Linear(50, 50)
-        self.dense2output = nn.Linear(120, 1)
+        self.rnn_layer_num = 2
+        self.rnn_hidden_dim = 10
+        self.cnn_out_dim = 20
+        self.rnn = nn.GRU(self.cnn_out_dim, self.rnn_hidden_dim, self.rnn_layer_num, dropout=0, batch_first=True, bidirectional=False)
+        self.lstm2output = nn.Linear(10, 1)
 
     def forward(self, sequence, hidden=None):
+        multi_time = sequence.shape[1] - self.left - self.right
+        cnn_output = torch.zeros([sequence.shape[0], sequence.shape[1], self.cnn_out_dim], device='cuda')
         sequence = torch.unsqueeze(sequence, 1)
-        output = self.conv1(sequence)
-        output = self.pool1(output)
-        output = self.conv2(output)
-        output = self.pool2(output)
-        output = self.flatten1(output)
-        output = self.dense2output(output)
-
-        # lstm_out, hidden = self.rnn_layer(sequence, hidden)
-        # lstm_out, _ = pad_packed_sequence(lstm_out, batch_first=True, total_length=230)
-        # relu_out = self.hidden2dense(lstm_out).clamp(min=0)
-        # output = self.dense2output(relu_out)
-        output = torch.unsqueeze(output, 1)
+        for i_time in range(multi_time):
+            i_output = self.conv1(sequence[:, :, i_time:i_time + self.left + self.right, :])
+            i_output = self.conv2(i_output)
+            i_output = self.pool2(i_output)
+            i_output = self.conv3(i_output)
+            i_output = self.pool3(i_output)
+            i_output = self.conv4(i_output)
+            i_output = self.flatten1(i_output)
+            cnn_output[:, i_time+self.left, :] = i_output
+        lstm_out, hidden = self.rnn(cnn_output, hidden)
+        output = self.lstm2output(lstm_out)
         return output, hidden
 
     def init_hidden(self, batch_size):
         weight = next(self.parameters())
-        return (weight.new_zeros(2, batch_size, 20),
-                weight.new_zeros(2, batch_size, 20))
+        return weight.new_zeros(self.rnn_layer_num, batch_size, self.rnn_hidden_dim)
 
 
 class DataTransformerCLDNN:
@@ -202,29 +179,32 @@ class TianModel(BaseModel):
         loss_positive = (y_pred_positive - y_positive).pow(2).sum()
         return loss_positive
 
+    @staticmethod
+    def loss_fun_valid_part(y_pred, y, left, right):
+        y_pred_valid = y_pred[:, left:-right]
+        y_valid = y[:, left:-right]
+        loss_positive = (y_pred_valid - y_valid).pow(2).sum()
+        return loss_positive
+
     def train_model(self, x_train, y_train, x_validation=None, y_validation=None, validation_weight=None):
         self.train_step_lens, self.validation_step_lens = self._get_step_len(x_train), self._get_step_len(x_validation)
         x_train, y_train = np.concatenate(list(x_train.values()), axis=2), y_train['output']
         x_validation, y_validation = np.concatenate(list(x_validation.values()), axis=2), y_validation['output']
 
-        train_transformer = DataTransformerCLDNN(20, 20, 5)
-        x_train, y_train = train_transformer.transform(x_train, y_train)
-
-        self.test_transformer = DataTransformerCLDNN(20, 20, 1)
-        x_validation, y_validation = self.test_transformer.transform(x_validation, y_validation)
+        # x_train, y_train = x_train[:5000], y_train[:5000]
 
         x_train = torch.from_numpy(x_train).float()
         y_train = torch.from_numpy(y_train).float()
         train_step_lens = torch.from_numpy(self.train_step_lens)
-        nn_model = TianCLDNN()
+        nn_model = TianCLDNN(20, 20)
         if USE_GPU:
             nn_model = nn_model.cuda()
+        summary(nn_model, x_train.shape[1:])
         pytorch_total_params = sum(p.numel() for p in nn_model.parameters() if p.requires_grad)
         logging.info('Model has {} parameters.'.format(pytorch_total_params))
-        summary(nn_model, x_train.shape[1:])
 
         loss_fn = torch.nn.MSELoss(reduction='sum')
-        optimizer = torch.optim.Adam(nn_model.parameters(), lr=1e-5, weight_decay=0e-5)
+        optimizer = torch.optim.Adam(nn_model.parameters(), lr=1e-4, weight_decay=0e-5)
         # optimizer = torch.optim.Adam(nn_model.parameters())
 
         batch_size = 20
@@ -234,7 +214,7 @@ class TianModel(BaseModel):
         train_ds, vali_from_train_ds = torch.utils.data.dataset.random_split(train_ds,
                                                                              [train_size, vali_from_train_size])
         train_dl = DataLoader(train_ds, batch_size=batch_size)
-        vali_from_train_dl = DataLoader(vali_from_train_ds, batch_size=vali_from_train_size)
+        vali_from_train_dl = DataLoader(vali_from_train_ds, batch_size=20)
 
         x_validation = torch.from_numpy(x_validation).float()
         y_validation = torch.from_numpy(y_validation).float()
@@ -243,10 +223,10 @@ class TianModel(BaseModel):
         num_of_step_for_peek = int(0.01 * len(x_validation))
         vali_from_test_ds, _ = torch.utils.data.dataset.random_split(vali_from_test_ds, [num_of_step_for_peek, len(
             x_validation) - num_of_step_for_peek])
-        vali_from_test_dl = DataLoader(vali_from_test_ds, batch_size=len(vali_from_test_ds))
+        vali_from_test_dl = DataLoader(vali_from_test_ds, batch_size=20)
 
         logging.info('\tEpoch\t\tTrain_Loss\tVali_train_Loss\tVali_test_Loss\t\tDuration\t\t')
-        for epoch in range(2):
+        for epoch in range(5):
             epoch_start_time = time.time()
             for i_batch, (xb, yb, lens) in enumerate(train_dl):
                 if USE_GPU:
@@ -256,7 +236,7 @@ class TianModel(BaseModel):
                 optimizer.zero_grad()
 
                 # # For RNN
-                # hidden = nn_model.init_hidden(xb.shape[0])
+                # hidden = nn_model.init_hidden(batch_size)
                 # y_pred, _ = nn_model(xb, hidden, lens)
 
                 # # For CNN
@@ -268,13 +248,14 @@ class TianModel(BaseModel):
 
                 # train_loss = self.loss_fun_emphasize_peak(y_pred, yb)
                 # train_loss = self.loss_fun_only_positive(y_pred, yb)
-                train_loss = loss_fn(y_pred, yb)
+                train_loss = self.loss_fun_valid_part(y_pred, yb, 20, 20)
+                # train_loss = loss_fn(y_pred, yb)
 
                 if epoch == 0 and i_batch == 0:
                     vali_from_train_loss = TianModel.evaluate_validation_set(nn_model, vali_from_train_dl, loss_fn,
-                                                                             batch_size)
+                                                                             100)
                     vali_from_test_loss = TianModel.evaluate_validation_set(nn_model, vali_from_test_dl, loss_fn,
-                                                                            batch_size)
+                                                                            100)
                     logging.info("\t{:3}\t{:15.2f}\t{:15.2f}\t{:15.2f}\t{:13.2f}s\t\t\t".format(
                         epoch, train_loss.item(), vali_from_train_loss, vali_from_test_loss,
                         time.time() - epoch_start_time))
@@ -291,6 +272,7 @@ class TianModel(BaseModel):
 
     @staticmethod
     def evaluate_validation_set(nn_model, validation_dl, loss_fn, batch_size):
+        validation_loss = []
         for x_validation, y_validation, lens in validation_dl:
             if USE_GPU:
                 x_validation = x_validation.cuda()
@@ -306,13 +288,12 @@ class TianModel(BaseModel):
             hidden = nn_model.init_hidden(x_validation.shape[0])
             y_validation_pred, _ = nn_model(x_validation, hidden)
 
-            validation_loss = loss_fn(y_validation_pred, y_validation) / len(y_validation) * batch_size
-            return validation_loss
+            validation_loss.append(loss_fn(y_validation_pred, y_validation).item())
+        return np.mean(validation_loss)
 
     def predict(self, nn_model, x_test):
         self.test_step_lens = self._get_step_len(x_test)
         x_test = np.concatenate(list(x_test.values()), axis=2)
-        x_test, _ = self.test_transformer.transform(x_test, None)
         x_test = torch.from_numpy(x_test).float()
         # if USE_GPU:
         #     x_test = x_test.cuda()
@@ -335,8 +316,6 @@ class TianModel(BaseModel):
         y_pred = torch.cat(y_pred_list)
 
         y_pred = y_pred.detach().cpu().numpy()
-
-        y_pred = self.test_transformer.inverse_transform_output(y_pred)
 
         return {'output': y_pred}
 
@@ -373,7 +352,6 @@ if __name__ == "__main__":
     weights = {'output': [PHASE] * len(output_cols)}
 
     model = TianModel(data_path, x_fields, y_fields, weights, DivideMaxScalar)
-    model.cali_via_gravity()
     subjects = model.get_all_subjects()
     model.preprocess_train_evaluation(subjects[:13], subjects[13:], subjects[13:])
     # model.cross_validation(subjects)
