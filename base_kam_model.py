@@ -181,7 +181,7 @@ class BaseModel:
                 r2[i] = r2_score(arr_true_i, arr_pred_i)
                 rmse[i] = np.sqrt(mse(arr_true_i, arr_pred_i))
                 mae[i] = np.mean(abs((arr_true_i - arr_pred_i)))
-                r_rmse[i] = rmse[i] / (arr_true_i.max() + arr_pred_i.max() - arr_true_i.min() - arr_pred_i.min()) / 2
+                r_rmse[i] = rmse[i] / (arr_true_i.max() - arr_true_i.min())
                 cor_value[i] = pearsonr(arr_true_i, arr_pred_i)[0]
 
             locs = np.where(w.ravel())[0]

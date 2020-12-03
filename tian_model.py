@@ -12,6 +12,7 @@ from const import IMU_FIELDS, SENSOR_LIST, DATA_PATH, PHASE, SUBJECT_WEIGHT, SUB
 from torch.nn.utils.rnn import pack_padded_sequence, pad_packed_sequence
 from sklearn.preprocessing import MinMaxScaler, StandardScaler
 from torchsummary import summary
+import torch.nn.functional as F
 
 USE_GPU = True
 
@@ -91,39 +92,43 @@ class TianCLDNN(nn.Module):
         self.left = left
         self.right = right
         super(TianCLDNN, self).__init__()
-        self.conv1 = nn.Conv2d(1, 10, kernel_size=(3, 3))
-        self.conv2 = nn.Conv2d(10, 10, kernel_size=(3, 3))
+        kernel_num = 10
+        self.kernel_num = kernel_num
+        self.conv1 = nn.Conv2d(1, 5, kernel_size=(6, 3), bias=False)
+        self.conv2 = nn.Conv2d(5, kernel_num, kernel_size=(3, 3), bias=False)
+        self.bn2 = nn.BatchNorm2d(kernel_num)
         self.pool2 = nn.MaxPool2d(3)
-        self.conv3 = nn.Conv2d(10, 10, kernel_size=(3, 3))
+        self.conv3 = nn.Conv2d(kernel_num, kernel_num, kernel_size=(3, 3), bias=False)
+        self.bn3 = nn.BatchNorm2d(kernel_num)
         self.pool3 = nn.MaxPool2d(3)
-        self.conv4 = nn.Conv2d(10, 10, kernel_size=(3, 3))
+        self.conv4 = nn.Conv2d(kernel_num, kernel_num, kernel_size=(3, 3), bias=False)
         self.flatten1 = nn.Flatten()
+        self.relu = nn.ReLU(inplace=True)
         self.rnn_layer_num = 2
         self.rnn_hidden_dim = 10
-        self.cnn_out_dim = 20
-        self.rnn = nn.GRU(self.cnn_out_dim, self.rnn_hidden_dim, self.rnn_layer_num, dropout=0, batch_first=True, bidirectional=False)
-        self.lstm2output = nn.Linear(10, 1)
+        self.rnn = nn.GRU(kernel_num*2, self.rnn_hidden_dim, self.rnn_layer_num, dropout=0.5, batch_first=True, bidirectional=True)
+        self.rnn2output = nn.Linear(self.rnn_hidden_dim*2, 1)
 
     def forward(self, sequence, hidden=None):
         multi_time = sequence.shape[1] - self.left - self.right
-        cnn_output = torch.zeros([sequence.shape[0], sequence.shape[1], self.cnn_out_dim], device='cuda')
+        cnn_output = torch.zeros([sequence.shape[0], sequence.shape[1], 2*self.kernel_num], device='cuda')
         sequence = torch.unsqueeze(sequence, 1)
         for i_time in range(multi_time):
             i_output = self.conv1(sequence[:, :, i_time:i_time + self.left + self.right, :])
-            i_output = self.conv2(i_output)
+            i_output = self.relu(i_output)
+            i_output = self.bn2(self.conv2(i_output))
+            i_output = self.relu(i_output)
             i_output = self.pool2(i_output)
-            i_output = self.conv3(i_output)
+            i_output = self.bn3(self.conv3(i_output))
+            i_output = self.relu(i_output)
             i_output = self.pool3(i_output)
             i_output = self.conv4(i_output)
+            i_output = self.relu(i_output)
             i_output = self.flatten1(i_output)
             cnn_output[:, i_time+self.left, :] = i_output
-        lstm_out, hidden = self.rnn(cnn_output, hidden)
-        output = self.lstm2output(lstm_out)
+        rnn_out, hidden = self.rnn(cnn_output, hidden)
+        output = self.rnn2output(rnn_out)
         return output, hidden
-
-    def init_hidden(self, batch_size):
-        weight = next(self.parameters())
-        return weight.new_zeros(self.rnn_layer_num, batch_size, self.rnn_hidden_dim)
 
 
 class DataTransformerCLDNN:
@@ -204,29 +209,29 @@ class TianModel(BaseModel):
         logging.info('Model has {} parameters.'.format(pytorch_total_params))
 
         loss_fn = torch.nn.MSELoss(reduction='sum')
-        optimizer = torch.optim.Adam(nn_model.parameters(), lr=1e-4, weight_decay=0e-5)
+        optimizer = torch.optim.Adam(nn_model.parameters(), lr=2e-4, weight_decay=0e-5)
         # optimizer = torch.optim.Adam(nn_model.parameters())
 
         batch_size = 20
         train_ds = TensorDataset(x_train, y_train, torch.from_numpy(np.zeros([x_train.shape[0]])))
-        train_size = int(0.99 * len(train_ds))
+        train_size = int(0.95 * len(train_ds))
         vali_from_train_size = len(train_ds) - train_size
         train_ds, vali_from_train_ds = torch.utils.data.dataset.random_split(train_ds,
                                                                              [train_size, vali_from_train_size])
         train_dl = DataLoader(train_ds, batch_size=batch_size)
-        vali_from_train_dl = DataLoader(vali_from_train_ds, batch_size=20)
+        vali_from_train_dl = DataLoader(vali_from_train_ds, batch_size=batch_size)
 
         x_validation = torch.from_numpy(x_validation).float()
         y_validation = torch.from_numpy(y_validation).float()
         vali_step_lens = torch.from_numpy(self.validation_step_lens)
         vali_from_test_ds = TensorDataset(x_validation, y_validation, torch.from_numpy(np.zeros([x_validation.shape[0]])))
-        num_of_step_for_peek = int(0.01 * len(x_validation))
+        num_of_step_for_peek = int(0.05 * len(x_validation))
         vali_from_test_ds, _ = torch.utils.data.dataset.random_split(vali_from_test_ds, [num_of_step_for_peek, len(
             x_validation) - num_of_step_for_peek])
-        vali_from_test_dl = DataLoader(vali_from_test_ds, batch_size=20)
+        vali_from_test_dl = DataLoader(vali_from_test_ds, batch_size=batch_size)
 
         logging.info('\tEpoch\t\tTrain_Loss\tVali_train_Loss\tVali_test_Loss\t\tDuration\t\t')
-        for epoch in range(5):
+        for epoch in range(2):
             epoch_start_time = time.time()
             for i_batch, (xb, yb, lens) in enumerate(train_dl):
                 if USE_GPU:
@@ -243,8 +248,7 @@ class TianModel(BaseModel):
                 # y_pred = nn_model(xb)
 
                 # For CLDNN
-                hidden = nn_model.init_hidden(xb.shape[0])
-                y_pred, _ = nn_model(xb, hidden)
+                y_pred, _ = nn_model(xb)
 
                 # train_loss = self.loss_fun_emphasize_peak(y_pred, yb)
                 # train_loss = self.loss_fun_only_positive(y_pred, yb)
@@ -252,14 +256,11 @@ class TianModel(BaseModel):
                 # train_loss = loss_fn(y_pred, yb)
 
                 if epoch == 0 and i_batch == 0:
-                    vali_from_train_loss = TianModel.evaluate_validation_set(nn_model, vali_from_train_dl, loss_fn,
-                                                                             100)
-                    vali_from_test_loss = TianModel.evaluate_validation_set(nn_model, vali_from_test_dl, loss_fn,
-                                                                            100)
+                    vali_from_train_loss = TianModel.evaluate_validation_set(nn_model, vali_from_train_dl, loss_fn, batch_size)
+                    vali_from_test_loss = TianModel.evaluate_validation_set(nn_model, vali_from_test_dl, loss_fn, batch_size)
                     logging.info("\t{:3}\t{:15.2f}\t{:15.2f}\t{:15.2f}\t{:13.2f}s\t\t\t".format(
                         epoch, train_loss.item(), vali_from_train_loss, vali_from_test_loss,
                         time.time() - epoch_start_time))
-                    # print(epoch, round(train_loss.item(), 2), round(0.0, 2), sep='\t\t')
                 train_loss.backward()
                 optimizer.step()
 
@@ -277,46 +278,37 @@ class TianModel(BaseModel):
             if USE_GPU:
                 x_validation = x_validation.cuda()
                 y_validation = y_validation.cuda()
-            # # For RNN
-            # hidden = nn_model.init_hidden(x_validation.shape[0])
-            # y_validation_pred, _ = nn_model(x_validation, hidden, lens)
 
-            # # For CNN
-            # y_validation_pred = nn_model(x_validation)
+            with torch.no_grad():
+                # # For RNN
+                # hidden = nn_model.init_hidden(x_validation.shape[0])
+                # y_validation_pred, _ = nn_model(x_validation, hidden, lens)
 
-            # For CLDNN
-            hidden = nn_model.init_hidden(x_validation.shape[0])
-            y_validation_pred, _ = nn_model(x_validation, hidden)
+                # # For CNN
+                # y_validation_pred = nn_model(x_validation)
 
-            validation_loss.append(loss_fn(y_validation_pred, y_validation).item())
+                # For CLDNN
+                y_validation_pred, _ = nn_model(x_validation)
+                validation_loss.append(loss_fn(y_validation_pred, y_validation).item())
         return np.mean(validation_loss)
 
     def predict(self, nn_model, x_test):
         self.test_step_lens = self._get_step_len(x_test)
         x_test = np.concatenate(list(x_test.values()), axis=2)
         x_test = torch.from_numpy(x_test).float()
-        # if USE_GPU:
-        #     x_test = x_test.cuda()
-        # # For RNN
-        # hidden = nn_model.init_hidden(x_test.shape[0])
-        # y_pred, _ = nn_model(x_test, hidden, self.test_step_lens)
+        if USE_GPU:
+            x_test = x_test.cuda()
+        with torch.no_grad():
+            # # For RNN
+            # hidden = nn_model.init_hidden(x_test.shape[0])
+            # y_pred, _ = nn_model(x_test, hidden, self.test_step_lens)
 
-        # # For CNN
-        # y_pred = nn_model(x_test)
+            # # For CNN
+            # y_pred = nn_model(x_test)
 
-        # For CLDNN
-        test_ds = TensorDataset(x_test)
-        test_dl = DataLoader(test_ds, batch_size=20)
-        y_pred_list = []
-        for i_batch, xb in enumerate(test_dl):
-            if USE_GPU:
-                xb[0] = xb[0].cuda()
-            y_pred_list.append(nn_model(xb[0], None)[0].detach().cpu())
-
-        y_pred = torch.cat(y_pred_list)
-
+            # For CLDNN
+            y_pred, _ = nn_model(x_test)
         y_pred = y_pred.detach().cpu().numpy()
-
         return {'output': y_pred}
 
     @staticmethod
@@ -351,7 +343,7 @@ if __name__ == "__main__":
     y_fields = {'output': output_cols}
     weights = {'output': [PHASE] * len(output_cols)}
 
-    model = TianModel(data_path, x_fields, y_fields, weights, DivideMaxScalar)
+    model = TianModel(data_path, x_fields, y_fields, weights, MinMaxScaler)
     subjects = model.get_all_subjects()
     model.preprocess_train_evaluation(subjects[:13], subjects[13:], subjects[13:])
     # model.cross_validation(subjects)
