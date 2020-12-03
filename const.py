@@ -8,7 +8,7 @@ SUBJECTS = ['s002_wangdianxin', 's004_ouyangjue', 's005_tangansheng', 's006_xuse
             's015_weihuan', 's017_tantian', 's018_wangmian', 's019_chenhongyuan', 's020_houjikang'
             # , 's003_linyuan', 's001_tantian', 's016_houjikang'
             ]
-SEGMENT_DEFITIONS = {
+SEGMENT_DEFINITIONS = {
     'L_FOOT': ['LFCC', 'LFM5', 'LFM2'],
     'R_FOOT': ['RFCC', 'RFM5', 'RFM2'],
     'L_SHANK': ['LTAM', 'LFAL', 'LSK', 'LTT'],
@@ -36,8 +36,8 @@ PADDING_MODE = PADDING_ZERO
 DATA_PATH = os.environ.get('KAM_DATA_PATH')
 EVENT_COLUMN = 'Event'
 LEFT_PLATE_FORCE_Z = 'plate_1_force_z'
-RKAM_COLUMN = 'RIGHT_KNEE_ADDUCTION_MOMENT'
-RFORCE_Z_COLUMN = 'plate_2_force_z'
+R_KAM_COLUMN = 'RIGHT_KNEE_ADDUCTION_MOMENT'
+R_FORCE_Z_COLUMN = 'plate_2_force_z'
 TARGETS_LIST = ["RIGHT_KNEE_ADDUCTION_MOMENT", "RIGHT_KNEE_FLEXION_MOMENT", "RIGHT_KNEE_ADDUCTION_ANGLE",
                 "RIGHT_KNEE_ADDUCTION_VELOCITY"]
 PHASE = 'phase'
