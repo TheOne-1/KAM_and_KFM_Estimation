@@ -249,8 +249,8 @@ class BaseModel:
         for sub_index, [sub_title, step_index] in enumerate(
                 [['low', low_index], ['median', median_index], ['high', high_index]]):
             sub_ax = axs[sub_index // 2, sub_index % 2]
-            sub_ax.plot(arr_true[step_index, :], 'g-', label='True_Value')
-            sub_ax.plot(arr_pred[step_index, :], 'y-', label='Pred_Value')
+            sub_ax.plot(arr_true[step_index, :], color='green', label='True_Value')
+            sub_ax.plot(arr_pred[step_index, :], color='peru', label='Pred_Value')
             sub_ax.legend(loc='upper right', fontsize=8)
             sub_ax.text(0.4, 0.9, np.round(metric[step_index], 3), transform=sub_ax.transAxes)
             sub_ax.set_title(sub_title)
@@ -259,12 +259,12 @@ class BaseModel:
         arr_true_mean, arr_true_std = arr_true.mean(axis=0), arr_true.std(axis=0)
         arr_pred_mean, arr_pred_std = arr_pred.mean(axis=0), arr_pred.std(axis=0)
         axis_x = range(arr_true_mean.shape[0])
-        axs[1, 1].plot(axis_x, arr_true_mean, 'g-', label='Real_Value')
+        axs[1, 1].plot(axis_x, arr_true_mean, color='green', label='Real_Value')
         axs[1, 1].fill_between(axis_x, arr_true_mean - arr_true_std, arr_true_mean + arr_true_std,
-                               facecolor='green', alpha=0.2)
-        axs[1, 1].plot(axis_x, arr_pred_mean, 'y-', label='Predict_Value')
+                               facecolor='green', alpha=0.3)
+        axs[1, 1].plot(axis_x, arr_pred_mean, color='peru', label='Predict_Value')
         axs[1, 1].fill_between(axis_x, arr_pred_mean - arr_pred_std, arr_pred_mean + arr_pred_std,
-                               facecolor='yellow', alpha=0.2)
+                               facecolor='peru', alpha=0.3)
         axs[1, 1].legend(loc='upper right', fontsize=8)
         axs[1, 1].text(0.4, 0.9, np.round(np.mean(metric), 3), transform=axs[1, 1].transAxes)
         axs[1, 1].set_title('general performance')

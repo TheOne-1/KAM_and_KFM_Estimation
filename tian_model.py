@@ -10,7 +10,7 @@ from torch.utils.data import DataLoader, TensorDataset
 import copy
 import numpy as np
 import time
-from const import IMU_FIELDS, SENSOR_LIST, DATA_PATH, PHASE, SUBJECT_WEIGHT, SUBJECT_HEIGHT
+from const import IMU_FIELDS, SENSOR_LIST, DATA_PATH, KAM_PHASE, SUBJECT_WEIGHT, SUBJECT_HEIGHT
 from torch.nn.utils.rnn import pack_padded_sequence, pad_packed_sequence
 from sklearn.preprocessing import MinMaxScaler, StandardScaler
 from torchsummary import summary
@@ -249,7 +249,7 @@ class TianModel(BaseModel):
         vali_from_test_dl = DataLoader(vali_from_test_ds, batch_size=batch_size)
 
         logging.info('\tEpoch\t\tTrain_Loss\tVali_train_Loss\tVali_test_Loss\t\tDuration\t\t')
-        for epoch in range(10):
+        for epoch in range(2):
             epoch_start_time = time.time()
             for i_batch, (xb, yb, lens) in enumerate(train_dl):
                 # if i_batch > 1:
@@ -355,7 +355,7 @@ if __name__ == "__main__":
                 'aux_input': [SUBJECT_WEIGHT, SUBJECT_HEIGHT]}
     MAIN_TARGETS_LIST = ['RIGHT_KNEE_ADDUCTION_MOMENT', "RIGHT_KNEE_FLEXION_MOMENT"]
     y_fields = {'main_output': MAIN_TARGETS_LIST}
-    weights = {'main_output': [PHASE] * len(output_cols)}
+    weights = {'main_output': [KAM_PHASE] * len(output_cols)}
 
     model = TianModel(data_path, x_fields, y_fields, weights, MinMaxScaler)
     subjects = model.get_all_subjects()

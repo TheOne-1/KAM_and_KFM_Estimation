@@ -40,7 +40,8 @@ R_KAM_COLUMN = 'RIGHT_KNEE_ADDUCTION_MOMENT'
 R_FORCE_Z_COLUMN = 'plate_2_force_z'
 TARGETS_LIST = ["RIGHT_KNEE_ADDUCTION_MOMENT", "RIGHT_KNEE_FLEXION_MOMENT", "RIGHT_KNEE_ADDUCTION_ANGLE",
                 "RIGHT_KNEE_ADDUCTION_VELOCITY"]
-PHASE = 'phase'
+KAM_PHASE = 'kam_phase'
+FORCE_PHASE = 'force_phase'
 # all the fields of combined data
 ALL_FIELDS = ["Event", "AccelX_L_FOOT", "AccelY_L_FOOT", "AccelZ_L_FOOT", "GyroX_L_FOOT", "GyroY_L_FOOT",
               "GyroZ_L_FOOT", "MagX_L_FOOT", "MagY_L_FOOT", "MagZ_L_FOOT", "Quat1_L_FOOT", "Quat2_L_FOOT",
@@ -100,5 +101,5 @@ ALL_FIELDS = ["Event", "AccelX_L_FOOT", "AccelY_L_FOOT", "AccelZ_L_FOOT", "GyroX
               "SXS_Z", "SJN_X", "SJN_Y", "SJN_Z", "CV7_X", "CV7_Y", "CV7_Z", "LAC_X", "LAC_Y", "LAC_Z", "RAC_X",
               "RAC_Y", "RAC_Z", 'plate_1_force_x', 'plate_1_force_y', 'plate_1_force_z', 'plate_2_force_x',
               'plate_2_force_y', 'plate_2_force_z', 'plate_1_cop_x', 'plate_1_cop_y', 'plate_1_cop_z',
-              'plate_2_cop_x', 'plate_2_cop_y', 'plate_2_cop_z', 'body weight', 'body height', 'phase',
-              'EXT_KM_X', 'EXT_KM_Y', 'EXT_KM_Z']
+              'plate_2_cop_x', 'plate_2_cop_y', 'plate_2_cop_z', 'body weight', 'body height',
+              'kam_phase', 'force_phase', 'EXT_KM_X', 'EXT_KM_Y', 'EXT_KM_Z']
