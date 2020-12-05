@@ -47,7 +47,7 @@ class DXKamModel(BaseModel):
         y_pred = self.normalize_data(y_pred, self._data_scalar, 'inverse_transform', 'by_each_column')
         return BaseModel.get_all_scores(self, y_true, y_pred, weights)
 
-    def preprocess_train_data(self, x, y):
+    def preprocess_train_data(self, x, y, weight):
         # KAM_index = self._y_fields['main_output'].index(RKAM_COLUMN)
         # height_index = self._x_fields['aux_input'].index(SUBJECT_HEIGHT)
         # y['main_output'][:, :, KAM_index] *= x['aux_input'][:, :, height_index]
@@ -58,9 +58,9 @@ class DXKamModel(BaseModel):
         x2 = self.normalize_data(x2, self._data_scalar, 'fit_transform', 'by_each_column')
         x = {**x1, **x2}
         y = self.normalize_data(y, self._data_scalar, 'fit_transform', 'by_each_column')
-        return x, y
+        return x, y, weight
 
-    def preprocess_validation_test_data(self, x, y):
+    def preprocess_validation_test_data(self, x, y, weight):
         # KAM_index = self._y_fields['main_output'].index(RKAM_COLUMN)
         # height_index = self._x_fields['aux_input'].index(SUBJECT_HEIGHT)
         # y['main_output'][:, :, KAM_index] *= x['aux_input'][:, :, height_index]
@@ -71,7 +71,7 @@ class DXKamModel(BaseModel):
         x2 = self.normalize_data(x2, self._data_scalar, 'transform', 'by_each_column')
         x = {**x1, **x2}
         y = self.normalize_data(y, self._data_scalar, 'transform', 'by_each_column')
-        return x, y
+        return x, y, weight
     # def preprocess_train_data(self, x_train, y_train):
     #     x_train, y_train = BaseModel.preprocess_train_data(self, x_train, y_train)
     #     input_shape = x_train.shape[1:]

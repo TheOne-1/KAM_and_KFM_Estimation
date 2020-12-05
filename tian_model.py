@@ -1,3 +1,5 @@
+import random
+
 from base_kam_model import BaseModel
 from wearable_toolkit import DivideMaxScalar
 import torch
@@ -13,46 +15,27 @@ from torch.nn.utils.rnn import pack_padded_sequence, pad_packed_sequence
 from sklearn.preprocessing import MinMaxScaler, StandardScaler
 from torchsummary import summary
 import torch.nn.functional as F
+import scipy.interpolate as interpo
 
 USE_GPU = True
 
 
 class TianCNN(nn.Module):
-    def __init__(self, x_dim, y_dim):
+    def __init__(self, x_dim, y_dim, nlayer=2):
         super().__init__()
-        self.conv1 = [nn.Conv1d(1, 1, kernel_size=3, stride=1).cuda() for _ in range(x_dim)]
-        self.pooling1 = [nn.MaxPool1d(231 - 3) for _ in range(x_dim)]
-        self.conv2 = [nn.Conv1d(1, 1, kernel_size=6, stride=1).cuda() for _ in range(x_dim)]
-        self.pooling2 = [nn.MaxPool1d(231 - 6) for _ in range(x_dim)]
-        self.conv3 = [nn.Conv1d(1, 1, kernel_size=12, stride=1).cuda() for _ in range(x_dim)]
-        self.pooling3 = [nn.MaxPool1d(231 - 12) for _ in range(x_dim)]
-
+        self.conv1 = nn.Conv1d(x_dim, 30, kernel_size=5, stride=1)
+        self.pooling1 = nn.MaxPool1d(10)
         self.flatten = nn.Flatten()
-        self.conv2output = nn.Linear(150, y_dim * 230)
+        self.conv2output = nn.Linear(660, y_dim * 50)
         self.y_dim = y_dim
-        self.x_dim = x_dim
 
     def forward(self, sequence):
-        feature_outputs = []
         sequence.transpose_(1, 2)
-        for i_feature in range(self.x_dim):
-            narrowed = sequence.narrow(1, i_feature, 1)
-            feature_output = self.conv1[i_feature](narrowed)
-            feature_output = self.pooling1[i_feature](feature_output)
-            feature_outputs.append(feature_output)
-            feature_output = self.conv2[i_feature](narrowed)
-            feature_output = self.pooling2[i_feature](feature_output)
-            feature_outputs.append(feature_output)
-            feature_output = self.conv3[i_feature](narrowed)
-            feature_output = self.pooling3[i_feature](feature_output)
-            feature_outputs.append(feature_output)
-        feature_outputs = torch.cat(feature_outputs, dim=1)
-
-        # sequence = self.conv1(sequence)
-        # sequence = self.pooling1(sequence)
-        sequence = self.flatten(feature_outputs)
+        sequence = self.conv1(sequence)
+        sequence = self.pooling1(sequence)
+        sequence = self.flatten(sequence)
         output = self.conv2output(sequence)
-        output = torch.reshape(output, (-1, 230, self.y_dim))
+        output = torch.reshape(output, (-1, 50, self.y_dim))
         return output
 
 
@@ -92,81 +75,113 @@ class TianCLDNN(nn.Module):
         self.left = left
         self.right = right
         super(TianCLDNN, self).__init__()
-        kernel_num = 10
+        kernel_num = 16
         self.kernel_num = kernel_num
-        self.conv1 = nn.Conv2d(1, 5, kernel_size=(6, 3), bias=False)
-        self.conv2 = nn.Conv2d(5, kernel_num, kernel_size=(3, 3), bias=False)
+        self.conv1 = nn.Conv2d(1, 2 * kernel_num, kernel_size=(8, 1), stride=(3, 1), bias=False)
+        # self.bn1 = nn.BatchNorm2d(3*kernel_num)
+        self.conv2 = nn.Conv2d(2 * kernel_num, kernel_num, kernel_size=(8, 1), stride=(3, 1), bias=False)
         self.bn2 = nn.BatchNorm2d(kernel_num)
-        self.pool2 = nn.MaxPool2d(3)
-        self.conv3 = nn.Conv2d(kernel_num, kernel_num, kernel_size=(3, 3), bias=False)
+        # self.pool2 = nn.MaxPool2d(3)
+        self.conv3 = nn.Conv2d(kernel_num, kernel_num, kernel_size=(1, 9), stride=(1, 3), bias=False)
         self.bn3 = nn.BatchNorm2d(kernel_num)
-        self.pool3 = nn.MaxPool2d(3)
-        self.conv4 = nn.Conv2d(kernel_num, kernel_num, kernel_size=(3, 3), bias=False)
+        # self.pool3 = nn.MaxPool2d(kernel_size=(23, 13))
+        self.conv4 = nn.Conv2d(kernel_num, kernel_num, kernel_size=(1, 6), stride=(1, 2), bias=False)
+        self.bn4 = nn.BatchNorm2d(kernel_num)
+        self.cnn2rnn = nn.Linear(80, kernel_num)
         self.flatten1 = nn.Flatten()
         self.relu = nn.ReLU(inplace=True)
         self.rnn_layer_num = 2
         self.rnn_hidden_dim = 10
-        self.rnn = nn.GRU(kernel_num*2, self.rnn_hidden_dim, self.rnn_layer_num, dropout=0.5, batch_first=True, bidirectional=True)
-        self.rnn2output = nn.Linear(self.rnn_hidden_dim*2, 1)
+        self.rnn_layer = nn.GRU(kernel_num, self.rnn_hidden_dim, self.rnn_layer_num, dropout=0.5, batch_first=True,
+                                bidirectional=True)
+        self.rnn2output = nn.Linear(self.rnn_hidden_dim * 2, 1)
+
+        for layer in [self.conv1, self.conv2, self.conv3, self.conv4, self.rnn_layer]:
+            for name, param in layer.named_parameters():
+                if 'bias' in name:
+                    nn.init.constant_(param, 0.0)
+                elif 'weight' in name:
+                    nn.init.xavier_normal_(param)
 
     def forward(self, sequence, hidden=None):
         multi_time = sequence.shape[1] - self.left - self.right
-        cnn_output = torch.zeros([sequence.shape[0], sequence.shape[1], 2*self.kernel_num], device='cuda')
+        cnn_output = torch.zeros([sequence.shape[0], sequence.shape[1], 5 * self.kernel_num], device='cuda')
         sequence = torch.unsqueeze(sequence, 1)
         for i_time in range(multi_time):
             i_output = self.conv1(sequence[:, :, i_time:i_time + self.left + self.right, :])
             i_output = self.relu(i_output)
             i_output = self.bn2(self.conv2(i_output))
             i_output = self.relu(i_output)
-            i_output = self.pool2(i_output)
+            # i_output = self.pool2(i_output)
             i_output = self.bn3(self.conv3(i_output))
-            i_output = self.relu(i_output)
-            i_output = self.pool3(i_output)
-            i_output = self.conv4(i_output)
-            i_output = self.relu(i_output)
+            i_output = self.bn4(self.conv4(i_output))
+            # i_output = self.relu(i_output)
+            # i_output = self.pool3(i_output)
+            # i_output = self.relu(i_output)
             i_output = self.flatten1(i_output)
-            cnn_output[:, i_time+self.left, :] = i_output
-        rnn_out, hidden = self.rnn(cnn_output, hidden)
+            cnn_output[:, i_time + self.left, :] = i_output
+        cnn_output = self.cnn2rnn(cnn_output)
+        cnn_output = self.relu(cnn_output)
+        rnn_out, hidden = self.rnn_layer(cnn_output, hidden)
         output = self.rnn2output(rnn_out)
-        return output, hidden
+        return output
 
 
-class DataTransformerCLDNN:
-    def __init__(self, left, right, step):
-        self.left = left
-        self.right = right
-        self.step = step
+class TianCNN2(nn.Module):
+    def __init__(self, x_dim, y_dim):
+        super().__init__()
+        kernel_num_1 = 8
+        self.conv1 = [nn.Conv1d(1, 2 * kernel_num_1, kernel_size=9, stride=3).cuda() for _ in range(x_dim)]
+        self.conv2 = [nn.Conv1d(2 * kernel_num_1, kernel_num_1, kernel_size=9, stride=3).cuda() for _ in range(x_dim)]
+        self.conv3 = [nn.Conv1d(kernel_num_1, kernel_num_1, kernel_size=9, stride=3).cuda() for _ in range(x_dim)]
 
-    def transform(self, input_ori, output_ori):
-        num_of_sample_ori = input_ori.shape[0]
-        multi_time = int(np.floor((input_ori.shape[1] - self.left - self.right) / self.step))
-        self.multi_time = multi_time
-        self.time_num_of_each_sample = input_ori.shape[1]
-        input_trans_shape = [num_of_sample_ori * multi_time, self.left + self.right, input_ori.shape[2]]
-        input_trans = np.zeros(input_trans_shape)
-        output_trans = np.zeros([num_of_sample_ori * multi_time, 1, 1])
-        for i_time in range(multi_time):
-            input_trans[i_time::multi_time, :, :] = input_ori[:, i_time * self.step:i_time * self.step + self.left + self.right, :]
-            if output_ori is not None:
-                output_trans[i_time::multi_time, 0, 0] = output_ori[:, i_time * self.step + self.left, 0]
-            # # try the average of several samples
-            # output_trans[i_time::multi_time, 0, 0] = np.mean(
-            #     output_ori[:, self.left + i_time: self.left + i_time + self.step, 0], axis=1)
-        return input_trans, output_trans
+        kernel_num_2 = 8
+        self.conv5 = nn.Conv1d(5, kernel_num_2, kernel_size=9, stride=3)
+        self.conv6 = nn.Conv1d(kernel_num_2, kernel_num_2, kernel_size=9, stride=3)
+        self.conv7 = nn.Conv1d(kernel_num_2, kernel_num_2, kernel_size=9, stride=3)
+        self.conv8 = nn.Conv1d(kernel_num_2, kernel_num_2, kernel_size=9, stride=3)
 
-    def inverse_transform_output(self, output_trans):
-        ori_sample_num = int(np.floor(output_trans.shape[0] / self.multi_time))
-        output_ori_shape = [ori_sample_num, self.time_num_of_each_sample, 1]
-        output_ori = np.zeros(output_ori_shape)
-        for i_time in range(self.multi_time):
-            output_ori[:, i_time * self.step + self.left, 0] = output_trans[i_time::self.multi_time, 0, 0]
-        return output_ori
+        self.flatten = nn.Flatten()
+        self.conv2output = nn.Linear(88, y_dim * 100)
+        self.y_dim = y_dim
+        self.x_dim = x_dim
+
+    def forward(self, sequence):
+        feature_outputs = []
+        sequence.transpose_(1, 2)
+        for i_feature in range(self.x_dim):
+            narrowed = sequence.narrow(1, i_feature, 1)
+            narrowed = self.conv1[i_feature](narrowed)
+            narrowed = self.conv2[i_feature](narrowed)
+            narrowed = self.conv3[i_feature](narrowed)
+            feature_outputs.append(narrowed)
+        feature_outputs = torch.cat(feature_outputs, dim=1)
+        feature_outputs = feature_outputs.transpose(1, 2)
+
+        feature_fused = self.conv5(feature_outputs)
+        feature_fused = self.conv6(feature_fused)
+        feature_fused = self.conv7(feature_fused)
+        sequence = self.flatten(feature_fused)
+        output = self.conv2output(sequence)
+        output = torch.reshape(output, (-1, 100, self.y_dim))
+        return output
 
 
 class TianModel(BaseModel):
     def __init__(self, data_path, x_fields, y_fields, weights, base_scalar):
         BaseModel.__init__(self, data_path, x_fields, y_fields, weights, base_scalar)
         self.train_step_lens, self.validation_step_lens, self.test_step_lens = [None] * 3
+
+
+    # def preprocess_train_data(self, x, y, weight):
+    #     x = self.normalize_data(x, self._data_scalar, 'fit_transform')
+    #     y['output'] = self.resample_stance_phase_kam(y['output'], weight['output'])
+    #     return x, y
+    #
+    # def preprocess_validation_test_data(self, x, y, weight):
+    #     x = self.normalize_data(x, self._data_scalar, 'transform')
+    #     y['output'] = self.resample_stance_phase_kam(y['output'], weight['output'])
+    #     return x, y
 
     @staticmethod
     def loss_fun_emphasize_peak(y_pred, y):
@@ -193,15 +208,17 @@ class TianModel(BaseModel):
 
     def train_model(self, x_train, y_train, x_validation=None, y_validation=None, validation_weight=None):
         self.train_step_lens, self.validation_step_lens = self._get_step_len(x_train), self._get_step_len(x_validation)
-        x_train, y_train = np.concatenate(list(x_train.values()), axis=2), y_train['output']
-        x_validation, y_validation = np.concatenate(list(x_validation.values()), axis=2), y_validation['output']
+        x_train, y_train = np.concatenate(list(x_train.values()), axis=2), y_train['main_output']
+        x_validation, y_validation = np.concatenate(list(x_validation.values()), axis=2), y_validation['main_output']
 
         # x_train, y_train = x_train[:5000], y_train[:5000]
 
         x_train = torch.from_numpy(x_train).float()
         y_train = torch.from_numpy(y_train).float()
         train_step_lens = torch.from_numpy(self.train_step_lens)
-        nn_model = TianCLDNN(20, 20)
+        left, right = 15, 15
+        nn_model = TianCNN(50, 2)
+
         if USE_GPU:
             nn_model = nn_model.cuda()
         summary(nn_model, x_train.shape[1:])
@@ -209,7 +226,7 @@ class TianModel(BaseModel):
         logging.info('Model has {} parameters.'.format(pytorch_total_params))
 
         loss_fn = torch.nn.MSELoss(reduction='sum')
-        optimizer = torch.optim.Adam(nn_model.parameters(), lr=2e-4, weight_decay=0e-5)
+        optimizer = torch.optim.Adam(nn_model.parameters(), lr=1e-6, weight_decay=0e-5)
         # optimizer = torch.optim.Adam(nn_model.parameters())
 
         batch_size = 20
@@ -224,16 +241,22 @@ class TianModel(BaseModel):
         x_validation = torch.from_numpy(x_validation).float()
         y_validation = torch.from_numpy(y_validation).float()
         vali_step_lens = torch.from_numpy(self.validation_step_lens)
-        vali_from_test_ds = TensorDataset(x_validation, y_validation, torch.from_numpy(np.zeros([x_validation.shape[0]])))
+        vali_from_test_ds = TensorDataset(x_validation, y_validation,
+                                          torch.from_numpy(np.zeros([x_validation.shape[0]])))
         num_of_step_for_peek = int(0.05 * len(x_validation))
         vali_from_test_ds, _ = torch.utils.data.dataset.random_split(vali_from_test_ds, [num_of_step_for_peek, len(
             x_validation) - num_of_step_for_peek])
         vali_from_test_dl = DataLoader(vali_from_test_ds, batch_size=batch_size)
 
         logging.info('\tEpoch\t\tTrain_Loss\tVali_train_Loss\tVali_test_Loss\t\tDuration\t\t')
-        for epoch in range(2):
+        for epoch in range(10):
             epoch_start_time = time.time()
             for i_batch, (xb, yb, lens) in enumerate(train_dl):
+                # if i_batch > 1:
+                #     n = random.randint(1, 100)
+                #     if n > 20:
+                #         continue        # increase the speed of epoch
+
                 if USE_GPU:
                     xb = xb.cuda()
                     yb = yb.cuda()
@@ -244,20 +267,17 @@ class TianModel(BaseModel):
                 # hidden = nn_model.init_hidden(batch_size)
                 # y_pred, _ = nn_model(xb, hidden, lens)
 
-                # # For CNN
-                # y_pred = nn_model(xb)
-
-                # For CLDNN
-                y_pred, _ = nn_model(xb)
+                y_pred = nn_model(xb)
 
                 # train_loss = self.loss_fun_emphasize_peak(y_pred, yb)
                 # train_loss = self.loss_fun_only_positive(y_pred, yb)
-                train_loss = self.loss_fun_valid_part(y_pred, yb, 20, 20)
-                # train_loss = loss_fn(y_pred, yb)
+                train_loss = loss_fn(y_pred, yb)
 
                 if epoch == 0 and i_batch == 0:
-                    vali_from_train_loss = TianModel.evaluate_validation_set(nn_model, vali_from_train_dl, loss_fn, batch_size)
-                    vali_from_test_loss = TianModel.evaluate_validation_set(nn_model, vali_from_test_dl, loss_fn, batch_size)
+                    vali_from_train_loss = TianModel.evaluate_validation_set(nn_model, vali_from_train_dl, loss_fn,
+                                                                             batch_size)
+                    vali_from_test_loss = TianModel.evaluate_validation_set(nn_model, vali_from_test_dl, loss_fn,
+                                                                            batch_size)
                     logging.info("\t{:3}\t{:15.2f}\t{:15.2f}\t{:15.2f}\t{:13.2f}s\t\t\t".format(
                         epoch, train_loss.item(), vali_from_train_loss, vali_from_test_loss,
                         time.time() - epoch_start_time))
@@ -284,11 +304,8 @@ class TianModel(BaseModel):
                 # hidden = nn_model.init_hidden(x_validation.shape[0])
                 # y_validation_pred, _ = nn_model(x_validation, hidden, lens)
 
-                # # For CNN
-                # y_validation_pred = nn_model(x_validation)
+                y_validation_pred = nn_model(x_validation)
 
-                # For CLDNN
-                y_validation_pred, _ = nn_model(x_validation)
                 validation_loss.append(loss_fn(y_validation_pred, y_validation).item())
         return np.mean(validation_loss)
 
@@ -303,13 +320,9 @@ class TianModel(BaseModel):
             # hidden = nn_model.init_hidden(x_test.shape[0])
             # y_pred, _ = nn_model(x_test, hidden, self.test_step_lens)
 
-            # # For CNN
-            # y_pred = nn_model(x_test)
-
-            # For CLDNN
-            y_pred, _ = nn_model(x_test)
+            y_pred = nn_model(x_test)
         y_pred = y_pred.detach().cpu().numpy()
-        return {'output': y_pred}
+        return {'main_output': y_pred}
 
     @staticmethod
     def _get_step_len(data, input_cate='main_input_acc', feature_col_num=0):
@@ -334,14 +347,15 @@ if __name__ == "__main__":
     IMU_DATA_FIELDS_GYR = [IMU_FIELD + "_" + SENSOR for SENSOR in SENSOR_LIST for IMU_FIELD in IMU_FIELDS_GYR]
     video_cols = [loc + '_' + axis + '_' + angle for loc in ['RHip', 'LHip', 'RKnee', 'LKnee']
                   for angle in ['90', '180'] for axis in ['x', 'y']]
-    output_cols = ['RIGHT_KNEE_ADDUCTION_MOMENT']
+    output_cols = ['RIGHT_KNEE_ADDUCTION_MOMENT', 'EXT_KM_Y']
 
     x_fields = {'main_input_acc': IMU_DATA_FIELDS_ACC,
                 'main_input_gyr': IMU_DATA_FIELDS_GYR,
                 # 'main_input_vid': video_cols,
                 'aux_input': [SUBJECT_WEIGHT, SUBJECT_HEIGHT]}
-    y_fields = {'output': output_cols}
-    weights = {'output': [PHASE] * len(output_cols)}
+    MAIN_TARGETS_LIST = ['RIGHT_KNEE_ADDUCTION_MOMENT', "RIGHT_KNEE_FLEXION_MOMENT"]
+    y_fields = {'main_output': MAIN_TARGETS_LIST}
+    weights = {'main_output': [PHASE] * len(output_cols)}
 
     model = TianModel(data_path, x_fields, y_fields, weights, MinMaxScaler)
     subjects = model.get_all_subjects()

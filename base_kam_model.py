@@ -15,6 +15,7 @@ from scipy.stats import pearsonr
 from transforms3d.euler import euler2mat
 
 from const import SENSOR_LIST, DATA_PATH
+import scipy.interpolate as interpo
 # TODO：Calibrate via gravity should be place in generate_combined_data in the future, if it indeed shows better result.
 
 SAVING_DIR = os.path.join(DATA_PATH, 'training_results', str(datetime.datetime.now()))
@@ -98,7 +99,8 @@ class BaseModel:
         train_data = shuffle(train_data, random_state=0)
         x_train = self._get_raw_data_dict(train_data, self._x_fields)
         y_train = self._get_raw_data_dict(train_data, self._y_fields)
-        x_train, y_train = self.preprocess_train_data(x_train, y_train)
+        train_weight = self._get_raw_data_dict(train_data, self._weights)
+        x_train, y_train, train_weight = self.preprocess_train_data(x_train, y_train, train_weight)
 
         validation_data_list = [self._data_all_sub[sub] for sub in validate_sub_ids]
         validation_data = np.concatenate(validation_data_list, axis=0) if validation_data_list else None
@@ -107,7 +109,7 @@ class BaseModel:
             x_validation = self._get_raw_data_dict(validation_data, self._x_fields)
             y_validation = self._get_raw_data_dict(validation_data, self._y_fields)
             validation_weight = self._get_raw_data_dict(validation_data, self._weights)
-            x_validation, y_validation = self.preprocess_validation_test_data(x_validation, y_validation)
+            x_validation, y_validation, validation_weight = self.preprocess_validation_test_data(x_validation, y_validation, validation_weight)
 
         model = self.train_model(x_train, y_train, x_validation, y_validation, validation_weight)
         return model
@@ -120,7 +122,7 @@ class BaseModel:
             test_sub_x = self._get_raw_data_dict(test_sub_data, self._x_fields)
             test_sub_y = self._get_raw_data_dict(test_sub_data, self._y_fields)
             test_sub_weight = self._get_raw_data_dict(test_sub_data, self._weights)
-            test_sub_x, test_sub_y = self.preprocess_validation_test_data(test_sub_x, test_sub_y)
+            test_sub_x, test_sub_y, test_sub_weight = self.preprocess_validation_test_data(test_sub_x, test_sub_y, test_sub_weight)
             pred_sub_y = self.predict(model, test_sub_x)
             all_scores = self.get_all_scores(test_sub_y, pred_sub_y, test_sub_weight)
             all_scores = [{'subject': test_sub_name, **scores} for scores in all_scores]
@@ -155,13 +157,38 @@ class BaseModel:
             scaled_date[input_name] = input_data
         return scaled_date
 
-    def preprocess_train_data(self, x, y):
+    def preprocess_train_data(self, x, y, weight):
         x = self.normalize_data(x, self._data_scalar, 'fit_transform')
-        return x, y
+        for output_name, fields in self._y_fields.items():
+            y[output_name], weight[output_name] = self.keep_stance_then_resample(y[output_name], weight[output_name])
+        return x, y, weight
 
-    def preprocess_validation_test_data(self, x, y):
+    def preprocess_validation_test_data(self, x, y, weight):
         x = self.normalize_data(x, self._data_scalar, 'transform')
-        return x, y
+        for output_name, fields in self._y_fields.items():
+            y[output_name], weight[output_name] = self.keep_stance_then_resample(y[output_name], weight[output_name])
+        return x, y, weight
+
+    @staticmethod
+    def keep_stance_then_resample(y, weight, resampled_len=50):
+        y_resampled = np.zeros([y.shape[0], resampled_len, y.shape[2]])
+        for i_output in range(y.shape[2]):
+            for j_row in range(y.shape[0]):
+                data_array = y[j_row, weight[j_row, :, i_output] == 1, i_output]
+                y_resampled[j_row, :, i_output] = BaseModel.resample_one_array(data_array, resampled_len)
+        return y_resampled, np.full(y_resampled.shape, 1)
+
+    @staticmethod
+    def resample_one_array(data_array, resampled_len):
+        if len(data_array.shape) == 1:
+            data_array = data_array.reshape(1, -1)
+        data_len = data_array.shape[1]
+        data_step = np.arange(0, data_len)
+        resampled_step = np.linspace(0, data_len-1+1e-10, resampled_len)
+        tck, data_step = interpo.splprep(data_array, u=data_step, s=0)
+        data_resampled = interpo.splev(resampled_step, tck, der=0)[0]
+
+        return data_resampled
 
     @staticmethod
     def train_model(x_train, y_train, x_validation=None, y_validation=None, validation_weight=None):
