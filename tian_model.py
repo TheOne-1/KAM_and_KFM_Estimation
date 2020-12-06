@@ -157,17 +157,21 @@ class TianCNN4(nn.Module):
         super().__init__()
         kernel_num = 32
         self.conv1 = nn.Conv1d(x_dim, 8 * kernel_num, kernel_size=3, stride=1, bias=False)
+        self.drop1 = nn.Dropout(p=0.2)
         self.pool1 = nn.MaxPool1d(2)
         self.conv2 = nn.Conv1d(8 * kernel_num, 2 * kernel_num, kernel_size=3, stride=1, bias=False)
+        self.drop2 = nn.Dropout(p=0.2)
         self.pool2 = nn.MaxPool1d(2)
         self.conv3 = nn.Conv1d(2 * kernel_num, kernel_num, kernel_size=3, stride=1, bias=False)
-        self.pool3 = nn.MaxPool1d(2)
+        self.drop3 = nn.Dropout(p=0.2)
+        self.pool3 = nn.AvgPool1d(2)
         self.conv4 = nn.Conv1d(kernel_num, kernel_num, kernel_size=3, stride=1, bias=False)
-        self.pool4 = nn.MaxPool1d(2)
+        self.drop4 = nn.Dropout(p=0.2)
+        self.pool4 = nn.AvgPool1d(2)
         self.relu = nn.ReLU()
         self.flatten = nn.Flatten()
         self.conv2output = nn.Linear(64, y_dim * 100, bias=False)
-        self.drop = nn.Dropout(p=0.2)
+        self.drop = nn.Dropout(p=0.1)
         self.y_dim = y_dim
         self.x_dim = x_dim
 
@@ -175,16 +179,16 @@ class TianCNN4(nn.Module):
         sequence = sequence[:, 30:100, :]       # take part of the data
         sequence.transpose_(1, 2)
         sequence = self.relu(self.conv1(sequence))
-        sequence = self.drop(sequence)
+        sequence = self.drop1(sequence)
         sequence = self.pool1(sequence)
         sequence = self.relu(self.conv2(sequence))
-        sequence = self.drop(sequence)
+        sequence = self.drop2(sequence)
         sequence = self.pool2(sequence)
         sequence = self.relu(self.conv3(sequence))
-        sequence = self.drop(sequence)
+        sequence = self.drop3(sequence)
         sequence = self.pool3(sequence)
         sequence = self.relu(self.conv4(sequence))
-        sequence = self.drop(sequence)
+        sequence = self.drop4(sequence)
         sequence = self.pool4(sequence)
         sequence = self.flatten(sequence)
         output = self.conv2output(sequence)
@@ -338,7 +342,7 @@ class TianModel(BaseModel):
         logging.info('Model has {} parameters.'.format(pytorch_total_params))
 
         loss_fn = torch.nn.MSELoss(reduction='sum')
-        optimizer = torch.optim.Adam(nn_model.parameters(), lr=2e-5, weight_decay=2e-6)
+        optimizer = torch.optim.Adam(nn_model.parameters(), lr=1e-5, weight_decay=2e-6)
         # optimizer = torch.optim.Adam(nn_model.parameters())
 
         batch_size = 20
@@ -361,7 +365,7 @@ class TianModel(BaseModel):
         vali_from_test_dl = DataLoader(vali_from_test_ds, batch_size=batch_size)
 
         logging.info('\tEpoch\t\tTrain_Loss\tVali_train_Loss\tVali_test_Loss\t\tDuration\t\t')
-        for epoch in range(30):
+        for epoch in range(10):
             epoch_start_time = time.time()
             for i_batch, (xb, yb, lens) in enumerate(train_dl):
                 # if i_batch > 1:
