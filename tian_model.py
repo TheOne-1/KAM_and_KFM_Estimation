@@ -43,24 +43,25 @@ class TianCNN1(nn.Module):
         self.pooling4 = nn.MaxPool2d((2, 2))
 
         self.flatten = nn.Flatten()
-        self.conv2fc = nn.Linear(192, 100)
-        self.fc2output = nn.Linear(100, y_dim * 50)
+        self.conv2fc = nn.Linear(448, 100, bias=False)
+        self.fc2output = nn.Linear(100, y_dim * 50, bias=False)
         self.y_dim = y_dim
 
     def forward(self, sequence):
+        sequence = sequence[:, 30:100, :]       # take part of the data
         sequence = sequence.unsqueeze(1)
         sequence = self.relu(self.conv1(sequence))
-        sequence = self.bn1(sequence)
+        # sequence = self.bn1(sequence)
         sequence = self.pooling1(sequence)
         sequence = self.relu(self.conv2(sequence))
-        sequence = self.bn2(sequence)
+        # sequence = self.bn2(sequence)
         sequence = self.pooling2(sequence)
         sequence = self.relu(self.conv3(sequence))
-        sequence = self.bn3(sequence)
+        # sequence = self.bn3(sequence)
         sequence = self.pooling3(sequence)
-        sequence = self.relu(self.conv4(sequence))
-        sequence = self.bn4(sequence)
-        sequence = self.pooling4(sequence)
+        # sequence = self.relu(self.conv4(sequence))
+        # sequence = self.bn4(sequence)
+        # sequence = self.pooling4(sequence)
         sequence = self.flatten(sequence)
         output = self.relu(self.conv2fc(sequence))
         output = self.fc2output(output)
@@ -69,6 +70,7 @@ class TianCNN1(nn.Module):
 
 
 class TianCNN2(nn.Module):
+    """time 1d CNN, then channel 1d CNN"""
     def __init__(self, x_dim, y_dim):
         super().__init__()
         kernel_num_1 = 8
@@ -86,7 +88,7 @@ class TianCNN2(nn.Module):
 
         self.relu = nn.ReLU()
         self.flatten = nn.Flatten()
-        self.conv2output = nn.Linear(88, y_dim * 50)
+        self.conv2output = nn.Linear(88, y_dim * 50, bias=False)
         self.y_dim = y_dim
         self.x_dim = x_dim
 
@@ -116,33 +118,77 @@ class TianCNN3(nn.Module):
 
     def __init__(self, x_dim, y_dim):
         super().__init__()
-        self.conv1 = nn.Conv2d(1, 32, kernel_size=(9, 1), stride=1, bias=False)
-        self.relu = nn.ReLU()
-        self.bn1 = nn.BatchNorm2d(32, eps=1e-5)
-        self.pooling1 = nn.MaxPool2d((3, 3))
-
-        self.conv2 = nn.Conv2d(32, 16, kernel_size=(3, 3), stride=1, bias=False)
-        self.relu = nn.ReLU()
-        self.bn2 = nn.BatchNorm2d(16, eps=1e-5)
-        self.pooling2 = nn.MaxPool2d((3, 3))
-
+        # self.conv1 = nn.Conv2d(1, 256, kernel_size=(30, 1), stride=1, bias=False)
+        self.kernel_num = 1
+        self.x_dim = x_dim
+        self.conv1 = [nn.Conv1d(1, self.kernel_num, kernel_size=50, stride=1, bias=False).cuda() for _ in range(x_dim)]
+        self.bn1 = [nn.BatchNorm1d(1, self.kernel_num).cuda() for _ in range(x_dim)]
         self.flatten = nn.Flatten()
-        self.conv2fc = nn.Linear(1536, 100)
-        self.fc2output = nn.Linear(100, y_dim * 50)
+        self.conv2fc = nn.Linear(self.kernel_num*x_dim, y_dim * 50, bias=False)
         self.y_dim = y_dim
+        for layer in self.conv1:
+            for name, param in layer.named_parameters():
+                if 'bias' in name:
+                    nn.init.constant_(param, 0.0)
+                elif 'weight' in name:
+                    nn.init.xavier_normal_(param)
 
     def forward(self, sequence):
-        sequence = sequence.unsqueeze(1)
-        sequence = self.relu(self.conv1(sequence))
-        sequence = self.bn1(sequence)
-        sequence = self.pooling1(sequence)
-        sequence = self.relu(self.conv2(sequence))
-        sequence = self.bn2(sequence)
-        sequence = self.pooling2(sequence)
-        sequence = self.flatten(sequence)
-        output = self.relu(self.conv2fc(sequence))
-        output = self.fc2output(output)
+        # sequence = pack_padded_sequence(sequence, lens, batch_first=True, enforce_sorted=False)
+        sequence = sequence[:, 30:100, :]       # take part of the data
+        sequence.transpose_(1, 2)
+        feature_outputs = []
+        for i_feature in range(self.x_dim):
+            narrowed = sequence.narrow(1, i_feature, 1)
+            narrowed = self.conv1[i_feature](narrowed)
+            narrowed = F.relu(narrowed)
+            feature_output, _ = torch.max(narrowed, 2)
+            # feature_output = self.bn1[i_feature](feature_output)
+            feature_outputs.append(feature_output)
+        feature_outputs = torch.cat(feature_outputs, dim=1)
+        sequence = self.flatten(feature_outputs)
+        output = self.conv2fc(sequence)
         output = torch.reshape(output, (-1, 50, self.y_dim))
+        return output
+
+
+class TianCNN4(nn.Module):
+    def __init__(self, x_dim, y_dim):
+        super().__init__()
+        kernel_num = 32
+        self.conv1 = nn.Conv1d(x_dim, 8 * kernel_num, kernel_size=3, stride=1, bias=False)
+        self.pool1 = nn.MaxPool1d(2)
+        self.conv2 = nn.Conv1d(8 * kernel_num, 2 * kernel_num, kernel_size=3, stride=1, bias=False)
+        self.pool2 = nn.MaxPool1d(2)
+        self.conv3 = nn.Conv1d(2 * kernel_num, kernel_num, kernel_size=3, stride=1, bias=False)
+        self.pool3 = nn.MaxPool1d(2)
+        self.conv4 = nn.Conv1d(kernel_num, kernel_num, kernel_size=3, stride=1, bias=False)
+        self.pool4 = nn.MaxPool1d(2)
+        self.relu = nn.ReLU()
+        self.flatten = nn.Flatten()
+        self.conv2output = nn.Linear(64, y_dim * 100, bias=False)
+        self.drop = nn.Dropout()
+        self.y_dim = y_dim
+        self.x_dim = x_dim
+
+    def forward(self, sequence):
+        sequence = sequence[:, 30:100, :]       # take part of the data
+        sequence.transpose_(1, 2)
+        sequence = self.relu(self.conv1(sequence))
+        sequence = self.drop(sequence)
+        sequence = self.pool1(sequence)
+        sequence = self.relu(self.conv2(sequence))
+        sequence = self.drop(sequence)
+        sequence = self.pool2(sequence)
+        sequence = self.relu(self.conv3(sequence))
+        sequence = self.drop(sequence)
+        sequence = self.pool3(sequence)
+        sequence = self.relu(self.conv4(sequence))
+        # sequence = self.drop(sequence)
+        sequence = self.pool4(sequence)
+        sequence = self.flatten(sequence)
+        output = self.conv2output(sequence)
+        output = torch.reshape(output, (-1, 100, self.y_dim))
         return output
 
 
@@ -283,7 +329,7 @@ class TianModel(BaseModel):
         y_train = torch.from_numpy(y_train).float()
         train_step_lens = torch.from_numpy(self.train_step_lens)
         left, right = 15, 15
-        nn_model = TianCNN1(50, 1)
+        nn_model = TianCNN4(48, 1)
 
         if USE_GPU:
             nn_model = nn_model.cuda()
@@ -292,7 +338,7 @@ class TianModel(BaseModel):
         logging.info('Model has {} parameters.'.format(pytorch_total_params))
 
         loss_fn = torch.nn.MSELoss(reduction='sum')
-        optimizer = torch.optim.Adam(nn_model.parameters(), lr=1e-5, weight_decay=0e-5)
+        optimizer = torch.optim.Adam(nn_model.parameters(), lr=2e-5, weight_decay=0e-6)
         # optimizer = torch.optim.Adam(nn_model.parameters())
 
         batch_size = 20
@@ -386,7 +432,7 @@ class TianModel(BaseModel):
             # hidden = nn_model.init_hidden(x_test.shape[0])
             # y_pred, _ = nn_model(x_test, hidden, self.test_step_lens)
 
-            # y_pred = nn_model(torch.zeros(x_test.shape, device='cuda'))
+            # x_test = torch.zeros(x_test.shape, device='cuda')
 
             test_ds = TensorDataset(x_test)
             test_dl = DataLoader(test_ds, batch_size=50)
@@ -425,12 +471,13 @@ if __name__ == "__main__":
     x_fields = {'main_input_acc': IMU_DATA_FIELDS_ACC,
                 'main_input_gyr': IMU_DATA_FIELDS_GYR,
                 # 'main_input_vid': video_cols,
-                'aux_input': [SUBJECT_WEIGHT, SUBJECT_HEIGHT]}
+                # 'aux_input': [SUBJECT_WEIGHT, SUBJECT_HEIGHT]
+                }
     MAIN_TARGETS_LIST = ['RIGHT_KNEE_ADDUCTION_MOMENT']
     y_fields = {'main_output': MAIN_TARGETS_LIST}
     weights = {'main_output': [FORCE_PHASE] * len(output_cols)}
-    model = TianModel(data_path, x_fields, y_fields, weights, lambda: MinMaxScaler(feature_range=(5, 10)))
+    model = TianModel(data_path, x_fields, y_fields, weights, lambda: MinMaxScaler(feature_range=(-3, 3)))
     subjects = model.get_all_subjects()
-    # model.preprocess_train_evaluation(subjects[:13], subjects[13:], subjects[13:])
-    model.cross_validation(subjects)
+    model.preprocess_train_evaluation(subjects[:13], subjects[13:], subjects[13:])
+    # model.cross_validation(subjects)
     plt.show()

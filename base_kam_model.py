@@ -170,7 +170,7 @@ class BaseModel:
         return x, y, weight
 
     @staticmethod
-    def keep_stance_then_resample(y, weight, resampled_len=50):
+    def keep_stance_then_resample(y, weight, resampled_len=100):
         y_resampled = np.zeros([y.shape[0], resampled_len, y.shape[2]])
         for i_output in range(y.shape[2]):
             for j_row in range(y.shape[0]):
