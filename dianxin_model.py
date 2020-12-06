@@ -12,7 +12,7 @@ from sklearn.preprocessing import StandardScaler  # MinMaxScaler,
 from keras.callbacks import Callback, ReduceLROnPlateau
 from base_kam_model import BaseModel
 from customized_logger import logger as logging
-from const import DATA_PATH, SENSOR_LIST, VIDEO_LIST, SUBJECT_WEIGHT, SUBJECT_HEIGHT, PHASE, R_KAM_COLUMN
+from const import DATA_PATH, SENSOR_LIST, VIDEO_LIST, SUBJECT_WEIGHT, SUBJECT_HEIGHT, KAM_PHASE, R_KAM_COLUMN
 
 gpus = tf.config.experimental.list_physical_devices('GPU')
 for gpu in gpus:
@@ -47,29 +47,29 @@ class DXKamModel(BaseModel):
         y_pred = self.normalize_data(y_pred, self._data_scalar, 'inverse_transform', 'by_each_column')
         return BaseModel.get_all_scores(self, y_true, y_pred, weights)
 
-    def preprocess_train_data(self, x, y):
-        KAM_index = self._y_fields['main_output'].index(R_KAM_COLUMN)
-        height_index = self._x_fields['aux_input'].index(SUBJECT_HEIGHT)
-        y['main_output'][:, :, KAM_index] *= x['aux_input'][:, :, height_index]
+    def preprocess_train_data(self, x, y, weight):
+        # KAM_index = self._y_fields['main_output'].index(R_KAM_COLUMN)
+        # height_index = self._x_fields['aux_input'].index(SUBJECT_HEIGHT)
+        # y['main_output'][:, :, KAM_index] *= x['aux_input'][:, :, height_index]
         x1 = {'main_input_acc': x['main_input_acc'], 'main_input_gyr': x['main_input_gyr']}
         x2 = {'aux_input': x['aux_input']}
         x1 = self.normalize_data(x1, self._data_scalar, 'fit_transform', 'by_all_columns')
         x2 = self.normalize_data(x2, self._data_scalar, 'fit_transform', 'by_each_column')
         x = {**x1, **x2}
         y = self.normalize_data(y, self._data_scalar, 'fit_transform', 'by_each_column')
-        return x, y
+        return x, y, weight
 
-    def preprocess_validation_test_data(self, x, y):
-        KAM_index = self._y_fields['main_output'].index(R_KAM_COLUMN)
-        height_index = self._x_fields['aux_input'].index(SUBJECT_HEIGHT)
-        y['main_output'][:, :, KAM_index] *= x['aux_input'][:, :, height_index]
+    def preprocess_validation_test_data(self, x, y, weight):
+        # KAM_index = self._y_fields['main_output'].index(R_KAM_COLUMN)
+        # height_index = self._x_fields['aux_input'].index(SUBJECT_HEIGHT)
+        # y['main_output'][:, :, KAM_index] *= x['aux_input'][:, :, height_index]
         x1 = {'main_input_acc': x['main_input_acc'], 'main_input_gyr': x['main_input_gyr']}
         x2 = {'aux_input': x['aux_input']}
         x1 = self.normalize_data(x1, self._data_scalar, 'transform', 'by_all_columns')
         x2 = self.normalize_data(x2, self._data_scalar, 'transform', 'by_each_column')
         x = {**x1, **x2}
         y = self.normalize_data(y, self._data_scalar, 'transform', 'by_each_column')
-        return x, y
+        return x, y, weight
     # def preprocess_train_data(self, x_train, y_train):
     #     x_train, y_train = BaseModel.preprocess_train_data(self, x_train, y_train)
     #     input_shape = x_train.shape[1:]
@@ -177,13 +177,13 @@ if __name__ == "__main__":
                          for position in ["x", "y"] for angle in ["90", "180"]]
 
     x_fields = {'main_input_acc': IMU_DATA_FIELDS_ACC,
-                'main_input_gyr': IMU_DATA_FIELDS_ACC,
+                'main_input_gyr': IMU_DATA_FIELDS_GYR,
                 'aux_input':      [SUBJECT_WEIGHT, SUBJECT_HEIGHT]}
     # TARGETS_LIST = [RKAM_COLUMN]
     MAIN_TARGETS_LIST = ['RIGHT_KNEE_ADDUCTION_MOMENT', "RIGHT_KNEE_FLEXION_MOMENT"]
     AUX_TARGETS_LIST = ["RIGHT_KNEE_ADDUCTION_VELOCITY"]
     y_fields = {'main_output': MAIN_TARGETS_LIST, 'aux_output': AUX_TARGETS_LIST}
-    y_weights = {'main_output': [PHASE] * len(MAIN_TARGETS_LIST), 'aux_output': [PHASE] * len(AUX_TARGETS_LIST)}
+    y_weights = {'main_output': [KAM_PHASE] * len(MAIN_TARGETS_LIST), 'aux_output': [KAM_PHASE] * len(AUX_TARGETS_LIST)}
     dx_model = DXKamModel('40samples+stance_swing+padding_zero.h5', x_fields, y_fields, y_weights)
     subject_list = dx_model.get_all_subjects()
     shuffle(subject_list)
