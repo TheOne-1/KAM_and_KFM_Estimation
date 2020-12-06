@@ -167,7 +167,7 @@ class TianCNN4(nn.Module):
         self.relu = nn.ReLU()
         self.flatten = nn.Flatten()
         self.conv2output = nn.Linear(64, y_dim * 100, bias=False)
-        self.drop = nn.Dropout()
+        self.drop = nn.Dropout(p=0.2)
         self.y_dim = y_dim
         self.x_dim = x_dim
 
@@ -184,7 +184,7 @@ class TianCNN4(nn.Module):
         sequence = self.drop(sequence)
         sequence = self.pool3(sequence)
         sequence = self.relu(self.conv4(sequence))
-        # sequence = self.drop(sequence)
+        sequence = self.drop(sequence)
         sequence = self.pool4(sequence)
         sequence = self.flatten(sequence)
         output = self.conv2output(sequence)
@@ -338,7 +338,7 @@ class TianModel(BaseModel):
         logging.info('Model has {} parameters.'.format(pytorch_total_params))
 
         loss_fn = torch.nn.MSELoss(reduction='sum')
-        optimizer = torch.optim.Adam(nn_model.parameters(), lr=2e-5, weight_decay=0e-6)
+        optimizer = torch.optim.Adam(nn_model.parameters(), lr=2e-5, weight_decay=2e-6)
         # optimizer = torch.optim.Adam(nn_model.parameters())
 
         batch_size = 20
@@ -361,7 +361,7 @@ class TianModel(BaseModel):
         vali_from_test_dl = DataLoader(vali_from_test_ds, batch_size=batch_size)
 
         logging.info('\tEpoch\t\tTrain_Loss\tVali_train_Loss\tVali_test_Loss\t\tDuration\t\t')
-        for epoch in range(10):
+        for epoch in range(30):
             epoch_start_time = time.time()
             for i_batch, (xb, yb, lens) in enumerate(train_dl):
                 # if i_batch > 1:
