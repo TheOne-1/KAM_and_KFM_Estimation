@@ -10,7 +10,7 @@ from torch.utils.data import DataLoader, TensorDataset
 import copy
 import numpy as np
 import time
-from const import IMU_FIELDS, SENSOR_LIST, DATA_PATH, KAM_PHASE, SUBJECT_WEIGHT, SUBJECT_HEIGHT
+from const import IMU_FIELDS, SENSOR_LIST, DATA_PATH, KAM_PHASE, SUBJECT_WEIGHT, SUBJECT_HEIGHT, FORCE_PHASE
 from torch.nn.utils.rnn import pack_padded_sequence, pad_packed_sequence
 from sklearn.preprocessing import MinMaxScaler, StandardScaler
 from torchsummary import summary
@@ -20,21 +20,47 @@ import scipy.interpolate as interpo
 USE_GPU = True
 
 
-class TianCNN(nn.Module):
+class TianCNN0(nn.Module):
     def __init__(self, x_dim, y_dim, nlayer=2):
         super().__init__()
-        self.conv1 = nn.Conv1d(x_dim, 30, kernel_size=5, stride=1)
-        self.pooling1 = nn.MaxPool1d(10)
+        self.conv1 = nn.Conv1d(x_dim, 20, kernel_size=5, stride=1, bias=False)
+        self.relu = nn.ReLU()
+        self.bn1 = nn.BatchNorm1d(20)
+        self.pooling1 = nn.MaxPool1d(226)
         self.flatten = nn.Flatten()
-        self.conv2output = nn.Linear(660, y_dim * 50)
+        self.conv2output = nn.Linear(20, y_dim * 50, bias=False)
         self.y_dim = y_dim
 
     def forward(self, sequence):
         sequence.transpose_(1, 2)
         sequence = self.conv1(sequence)
+        sequence = self.relu(sequence)
+        sequence = self.bn1(sequence)
         sequence = self.pooling1(sequence)
         sequence = self.flatten(sequence)
         output = self.conv2output(sequence)
+        output = torch.reshape(output, (-1, 50, self.y_dim))
+        return output
+
+
+class TianCNN1(nn.Module):
+    def __init__(self, x_dim, y_dim):
+        super().__init__()
+        self.conv1 = nn.Conv2d(1, 30, kernel_size=(10, 1), stride=1, bias=False)
+        self.relu = nn.ReLU()
+        self.pooling1 = nn.MaxPool2d((221, 50))
+        self.flatten = nn.Flatten()
+        self.conv2fc = nn.Linear(30, 30)
+        self.fc2output = nn.Linear(30, y_dim * 50)
+        self.y_dim = y_dim
+
+    def forward(self, sequence):
+        sequence = sequence.unsqueeze(1)
+        sequence = self.relu(self.conv1(sequence))
+        sequence = self.pooling1(sequence)
+        sequence = self.flatten(sequence)
+        output = self.conv2fc(sequence)
+        output = self.fc2output(output)
         output = torch.reshape(output, (-1, 50, self.y_dim))
         return output
 
@@ -131,18 +157,19 @@ class TianCNN2(nn.Module):
     def __init__(self, x_dim, y_dim):
         super().__init__()
         kernel_num_1 = 8
-        self.conv1 = [nn.Conv1d(1, 2 * kernel_num_1, kernel_size=9, stride=3).cuda() for _ in range(x_dim)]
-        self.conv2 = [nn.Conv1d(2 * kernel_num_1, kernel_num_1, kernel_size=9, stride=3).cuda() for _ in range(x_dim)]
-        self.conv3 = [nn.Conv1d(kernel_num_1, kernel_num_1, kernel_size=9, stride=3).cuda() for _ in range(x_dim)]
+        self.conv1 = [nn.Conv1d(1, 2 * kernel_num_1, kernel_size=9, stride=3, bias=False).cuda() for _ in range(x_dim)]
+        self.conv2 = [nn.Conv1d(2 * kernel_num_1, kernel_num_1, kernel_size=9, stride=3, bias=False).cuda() for _ in range(x_dim)]
+        self.conv3 = [nn.Conv1d(kernel_num_1, kernel_num_1, kernel_size=9, stride=3, bias=False).cuda() for _ in range(x_dim)]
 
         kernel_num_2 = 8
-        self.conv5 = nn.Conv1d(5, kernel_num_2, kernel_size=9, stride=3)
-        self.conv6 = nn.Conv1d(kernel_num_2, kernel_num_2, kernel_size=9, stride=3)
-        self.conv7 = nn.Conv1d(kernel_num_2, kernel_num_2, kernel_size=9, stride=3)
-        self.conv8 = nn.Conv1d(kernel_num_2, kernel_num_2, kernel_size=9, stride=3)
+        self.conv5 = nn.Conv1d(5, kernel_num_2, kernel_size=9, stride=3, bias=False)
+        self.conv6 = nn.Conv1d(kernel_num_2, kernel_num_2, kernel_size=9, stride=3, bias=False)
+        self.conv7 = nn.Conv1d(kernel_num_2, kernel_num_2, kernel_size=9, stride=3, bias=False)
+        self.conv8 = nn.Conv1d(kernel_num_2, kernel_num_2, kernel_size=9, stride=3, bias=False)
 
+        self.relu = nn.ReLU()
         self.flatten = nn.Flatten()
-        self.conv2output = nn.Linear(88, y_dim * 100)
+        self.conv2output = nn.Linear(88, y_dim * 50)
         self.y_dim = y_dim
         self.x_dim = x_dim
 
@@ -163,7 +190,40 @@ class TianCNN2(nn.Module):
         feature_fused = self.conv7(feature_fused)
         sequence = self.flatten(feature_fused)
         output = self.conv2output(sequence)
-        output = torch.reshape(output, (-1, 100, self.y_dim))
+        output = torch.reshape(output, (-1, 50, self.y_dim))
+        return output
+
+
+class TianCNN3(nn.Module):
+    def __init__(self, x_dim, y_dim):
+        super().__init__()
+        self.conv1 = nn.Conv2d(1, 32, kernel_size=(9, 1), stride=1, bias=False)
+        self.relu = nn.ReLU()
+        self.bn1 = nn.BatchNorm2d(32)
+        self.pooling1 = nn.MaxPool2d((3, 3))
+
+        self.conv2 = nn.Conv2d(32, 16, kernel_size=(3, 3), stride=1, bias=False)
+        self.relu = nn.ReLU()
+        self.bn2 = nn.BatchNorm2d(16)
+        self.pooling2 = nn.MaxPool2d((3, 3))
+
+        self.flatten = nn.Flatten()
+        self.conv2fc = nn.Linear(1536, 100)
+        self.fc2output = nn.Linear(100, y_dim * 50)
+        self.y_dim = y_dim
+
+    def forward(self, sequence):
+        sequence = sequence.unsqueeze(1)
+        sequence = self.relu(self.conv1(sequence))
+        sequence = self.bn1(sequence)
+        sequence = self.pooling1(sequence)
+        sequence = self.relu(self.conv2(sequence))
+        sequence = self.bn2(sequence)
+        sequence = self.pooling2(sequence)
+        sequence = self.flatten(sequence)
+        output = self.relu(self.conv2fc(sequence))
+        output = self.fc2output(output)
+        output = torch.reshape(output, (-1, 50, self.y_dim))
         return output
 
 
@@ -217,7 +277,7 @@ class TianModel(BaseModel):
         y_train = torch.from_numpy(y_train).float()
         train_step_lens = torch.from_numpy(self.train_step_lens)
         left, right = 15, 15
-        nn_model = TianCNN(50, 2)
+        nn_model = TianCNN3(50, 1)
 
         if USE_GPU:
             nn_model = nn_model.cuda()
@@ -226,7 +286,7 @@ class TianModel(BaseModel):
         logging.info('Model has {} parameters.'.format(pytorch_total_params))
 
         loss_fn = torch.nn.MSELoss(reduction='sum')
-        optimizer = torch.optim.Adam(nn_model.parameters(), lr=1e-6, weight_decay=0e-5)
+        optimizer = torch.optim.Adam(nn_model.parameters(), lr=5e-5, weight_decay=0e-5)
         # optimizer = torch.optim.Adam(nn_model.parameters())
 
         batch_size = 20
@@ -249,7 +309,7 @@ class TianModel(BaseModel):
         vali_from_test_dl = DataLoader(vali_from_test_ds, batch_size=batch_size)
 
         logging.info('\tEpoch\t\tTrain_Loss\tVali_train_Loss\tVali_test_Loss\t\tDuration\t\t')
-        for epoch in range(2):
+        for epoch in range(5):
             epoch_start_time = time.time()
             for i_batch, (xb, yb, lens) in enumerate(train_dl):
                 # if i_batch > 1:
@@ -320,6 +380,7 @@ class TianModel(BaseModel):
             # hidden = nn_model.init_hidden(x_test.shape[0])
             # y_pred, _ = nn_model(x_test, hidden, self.test_step_lens)
 
+            # y_pred = nn_model(torch.zeros(x_test.shape, device='cuda'))
             y_pred = nn_model(x_test)
         y_pred = y_pred.detach().cpu().numpy()
         return {'main_output': y_pred}
@@ -353,9 +414,9 @@ if __name__ == "__main__":
                 'main_input_gyr': IMU_DATA_FIELDS_GYR,
                 # 'main_input_vid': video_cols,
                 'aux_input': [SUBJECT_WEIGHT, SUBJECT_HEIGHT]}
-    MAIN_TARGETS_LIST = ['RIGHT_KNEE_ADDUCTION_MOMENT', "RIGHT_KNEE_FLEXION_MOMENT"]
+    MAIN_TARGETS_LIST = ['RIGHT_KNEE_ADDUCTION_MOMENT']
     y_fields = {'main_output': MAIN_TARGETS_LIST}
-    weights = {'main_output': [KAM_PHASE] * len(output_cols)}
+    weights = {'main_output': [FORCE_PHASE] * len(output_cols)}
 
     model = TianModel(data_path, x_fields, y_fields, weights, MinMaxScaler)
     subjects = model.get_all_subjects()
