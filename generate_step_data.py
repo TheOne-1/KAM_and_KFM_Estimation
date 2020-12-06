@@ -5,7 +5,7 @@ import h5py
 import json
 import matplotlib.pyplot as plt
 from customized_logger import logger as logging
-from const import TRIALS, SUBJECTS, ALL_FIELDS, PHASE
+from const import TRIALS, SUBJECTS, ALL_FIELDS, KAM_PHASE, FORCE_PHASE
 from const import SAMPLES_BEFORE_STEP, DATA_PATH, LEFT_PLATE_FORCE_Z
 from const import PADDING_MODE, PADDING_ZERO, PADDING_NEXT_STEP
 from const import R_FORCE_Z_COLUMN, R_KAM_COLUMN, EVENT_COLUMN
@@ -65,8 +65,10 @@ def filter_and_clip_data(middle_data, max_len):
             kam_keep_end = stance_phase_max_index
             if kam_keep_end - kam_keep_begin < 30:
                 continue
-            expected_step[PHASE] = 0.
-            expected_step.loc[kam_keep_begin:kam_keep_end, PHASE] = 1.
+            expected_step[KAM_PHASE] = 0.
+            expected_step[FORCE_PHASE] = 0.
+            expected_step.loc[kam_keep_begin:kam_keep_end, KAM_PHASE] = 1.
+            expected_step.loc[stance_phase_min_index:stance_phase_max_index, FORCE_PHASE] = 1.
             expected_step.index = range(expected_step.shape[0])
             expected_step = expected_step.reindex(range(max_len + SAMPLES_BEFORE_STEP))
             expected_step[np.isnan(expected_step)] = 0
