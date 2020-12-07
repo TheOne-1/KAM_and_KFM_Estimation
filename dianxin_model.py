@@ -12,7 +12,8 @@ from sklearn.preprocessing import StandardScaler  # MinMaxScaler,
 from keras.callbacks import Callback, ReduceLROnPlateau
 from base_kam_model import BaseModel
 from customized_logger import logger as logging
-from const import DATA_PATH, SENSOR_LIST, VIDEO_LIST, SUBJECT_WEIGHT, SUBJECT_HEIGHT, KAM_PHASE, R_KAM_COLUMN
+from const import DATA_PATH, SENSOR_LIST, SUBJECT_WEIGHT, SUBJECT_HEIGHT, KAM_PHASE, VIDEO_DATA_FIELDS
+from const import extract_imu_fields
 
 gpus = tf.config.experimental.list_physical_devices('GPU')
 for gpu in gpus:
@@ -20,11 +21,15 @@ for gpu in gpus:
 
 
 class DXKamModel(BaseModel):
-    def __init__(self, data_file, input_fields, output_fields, output_weights):
-        BaseModel.__init__(self, os.path.join(DATA_PATH, data_file), input_fields, output_fields, output_weights, StandardScaler)
+    def __init__(self, *args, **kwargs):
+        BaseModel.__init__(self, *args, **kwargs)
+        self.print_model = True
 
     def train_model(self, x_train, y_train, x_validation=None, y_validation=None, validation_weight=None):
         model = rnn_model(x_train, y_train, GRU)
+        if self.print_model:
+            model.summary(print_fn=logging.info)
+            self.print_model = False
         validation_data = None
         callbacks = []
         if x_validation is not None:
@@ -46,6 +51,11 @@ class DXKamModel(BaseModel):
         y_true = self.normalize_data(y_true, self._data_scalar, 'inverse_transform', 'by_each_column')
         y_pred = self.normalize_data(y_pred, self._data_scalar, 'inverse_transform', 'by_each_column')
         return BaseModel.get_all_scores(self, y_true, y_pred, weights)
+
+    def customized_analysis(self, sub_y_true, sub_y_pred, all_scores):
+        sub_y_true = self.normalize_data(sub_y_true, self._data_scalar, 'inverse_transform', 'by_each_column')
+        sub_y_pred = self.normalize_data(sub_y_pred, self._data_scalar, 'inverse_transform', 'by_each_column')
+        return BaseModel.customized_analysis(self, sub_y_true, sub_y_pred, all_scores)
 
     def preprocess_train_data(self, x, y, weight):
         # KAM_index = self._y_fields['main_output'].index(R_KAM_COLUMN)
@@ -70,18 +80,6 @@ class DXKamModel(BaseModel):
         x = {**x1, **x2}
         y = self.normalize_data(y, self._data_scalar, 'transform', 'by_each_column')
         return x, y, weight
-    # def preprocess_train_data(self, x_train, y_train):
-    #     x_train, y_train = BaseModel.preprocess_train_data(self, x_train, y_train)
-    #     input_shape = x_train.shape[1:]
-    #     self.imu_autoencoder = autoencoder(input_shape)
-    #     self.imu_autoencoder.fit(x_train, x_train, shuffle=True, batch_size=20, epochs=30, verbose=1)
-    #     x_train = np.multiply(self.imu_autoencoder.predict(x_train), (x_train != 0.).all(axis=2)[:, :, None])
-    #     return x_train, y_train
-    #
-    # def preprocess_validation_test_data(self, x_train, y_train):
-    #     x_train, y_train = BaseModel.preprocess_train_data(self, x_train, y_train)
-    #     x_train = np.multiply(self.imu_autoencoder.predict(x_train), (x_train != 0.).all(axis=2)[:, :, None])
-    #     return x_train, y_train
 
 
 class ErrorVisualization(Callback):
@@ -99,10 +97,6 @@ class ErrorVisualization(Callback):
         self.dx_model.customized_analysis(self.y_true, y_pred, all_scores)
 
 
-print_model = True
-
-
-# baseline model
 def rnn_model(x_train, y_train, rnn_layer):
     main_input_acc_shape = x_train['main_input_acc'].shape[1:]
     main_input_gyr_shape = x_train['main_input_gyr'].shape[1:]
@@ -110,9 +104,9 @@ def rnn_model(x_train, y_train, rnn_layer):
     main_input_gyr = Input(shape=main_input_gyr_shape, name='main_input_gyr')
     x = concatenate([main_input_acc, main_input_gyr])
     x = Masking(mask_value=0.)(x)
-    # x = GaussianNoise(0.1)(x)
+    x = GaussianNoise(0.1)(x)
+    x = rnn_layer(30, dropout=0.2, return_sequences=True)(x)
     x = rnn_layer(15, dropout=0.2, return_sequences=True)(x)
-    x = rnn_layer(7, dropout=0.2, return_sequences=True)(x)
 
     aux_input_shape = x_train['aux_input'].shape[1:]
     aux_input = Input(shape=aux_input_shape, name='aux_input')
@@ -123,69 +117,27 @@ def rnn_model(x_train, y_train, rnn_layer):
     x = Dense(7, use_bias=True)(x)
     output_shape = y_train['main_output'].shape[2]
     main_output = Dense(output_shape, use_bias=True, name='main_output')(x)
+
     model = Model(inputs=[main_input_acc, main_input_gyr, aux_input], outputs=[main_output, aux_output])
-
-    def custom_loss(y_true, y_pred):
-        temp = K.cast(y_true >= 0, 'float32')
-        return K.sum(K.abs(y_true - y_pred) * (1. + K.log(temp * y_true + 1.)))
-
-    # opt = Adam(lr=0.001, beta_1=0.9, beta_2=0.999, epsilon=1e-08, decay=0.0)
-    global print_model
-    if print_model:
-        model.summary(print_fn=logging.info)
-        print_model = False
     model.compile(loss='mse', optimizer='adam', metrics=['mae'])
     return model
 
 
-def autoencoder(input_shape):
-    input_ts = Input(shape=input_shape)
-    x = Conv1D(32, 5, activation="relu", padding="same")(input_ts)
-    x = MaxPooling1D(2, strides=2, padding="same")(x)
-    x = Conv1D(16, 5, activation="relu", padding="same")(x)
-    encoded = MaxPooling1D(2, strides=2, padding="same")(x)
-    # encoder = Model(input_ts, encoded)
-
-    x = Conv1D(16, 5, activation="relu", padding="same")(encoded)
-    x = UpSampling1D(2)(x)
-    x = Conv1D(32, 5, activation='relu', padding="same")(x)
-    x = UpSampling1D(2)(x)
-    decoded = Conv1D(input_shape[-1], 1, activation='tanh', padding='same')(x)
-
-    convolutional_autoencoder = Model(input_ts, decoded)
-
-    optimizer = "adam"
-
-    def custom_loss(y_true, y_pred):
-        temp = K.cast(y_true != 0, 'float32')
-        temp = K.flatten(temp)
-        y_true_f = K.flatten(y_true)
-        y_pred_f = K.flatten(y_pred)
-        y_pred_f = y_pred_f * temp
-        return Kloss.mean_absolute_error(y_true_f, y_pred_f)
-
-    convolutional_autoencoder.compile(optimizer=optimizer, loss=custom_loss)
-    return convolutional_autoencoder
-
-
 if __name__ == "__main__":
-    IMU_FIELDS_ACC = ['AccelX', 'AccelY', 'AccelZ']
-    IMU_FIELDS_GYR = ['GyroX', 'GyroY', 'GyroZ']
-    IMU_DATA_FIELDS_ACC = [IMU_FIELD + "_" + SENSOR for SENSOR in SENSOR_LIST for IMU_FIELD in IMU_FIELDS_ACC]
-    IMU_DATA_FIELDS_GYR = [IMU_FIELD + "_" + SENSOR for SENSOR in SENSOR_LIST for IMU_FIELD in IMU_FIELDS_GYR]
-    VIDEO_DATA_FIELDS = [VIDEO + "_" + position + "_" + angle for VIDEO in VIDEO_LIST
-                         for position in ["x", "y"] for angle in ["90", "180"]]
+    IMU_DATA_FIELDS_ACC = extract_imu_fields(SENSOR_LIST, ['AccelX', 'AccelY', 'AccelZ'])
+    IMU_DATA_FIELDS_GYR = extract_imu_fields(SENSOR_LIST, ['GyroX', 'GyroY', 'GyroZ'])
+    MAIN_TARGETS_LIST = ['RIGHT_KNEE_ADDUCTION_MOMENT', "RIGHT_KNEE_FLEXION_MOMENT"]
+    AUX_TARGETS_LIST = ["RIGHT_KNEE_ADDUCTION_VELOCITY"]
 
     x_fields = {'main_input_acc': IMU_DATA_FIELDS_ACC,
                 'main_input_gyr': IMU_DATA_FIELDS_GYR,
                 'aux_input':      [SUBJECT_WEIGHT, SUBJECT_HEIGHT]}
-    # TARGETS_LIST = [RKAM_COLUMN]
-    MAIN_TARGETS_LIST = ['RIGHT_KNEE_ADDUCTION_MOMENT', "RIGHT_KNEE_FLEXION_MOMENT"]
-    AUX_TARGETS_LIST = ["RIGHT_KNEE_ADDUCTION_VELOCITY"]
     y_fields = {'main_output': MAIN_TARGETS_LIST, 'aux_output': AUX_TARGETS_LIST}
     y_weights = {'main_output': [KAM_PHASE] * len(MAIN_TARGETS_LIST), 'aux_output': [KAM_PHASE] * len(AUX_TARGETS_LIST)}
-    dx_model = DXKamModel('40samples+stance_swing+padding_zero.h5', x_fields, y_fields, y_weights)
+    # y_weights = None
+
+    data_set = os.path.join(DATA_PATH, 'stance_resampled.h5')
+    dx_model = DXKamModel(data_set, x_fields, y_fields, y_weights, StandardScaler)
     subject_list = dx_model.get_all_subjects()
-    shuffle(subject_list)
     # dx_model.preprocess_train_evaluation(subject_list[3:], subject_list[:3], subject_list[:3])
     dx_model.cross_validation(subject_list)

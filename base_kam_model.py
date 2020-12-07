@@ -12,10 +12,10 @@ from sklearn.preprocessing import MinMaxScaler  # , StandardScaler
 from sklearn.utils import shuffle
 from sklearn.metrics import r2_score, mean_squared_error as mse
 from scipy.stats import pearsonr
+import scipy.interpolate as interpo
 from transforms3d.euler import euler2mat
 
 from const import SENSOR_LIST, DATA_PATH
-import scipy.interpolate as interpo
 # TODO：Calibrate via gravity should be place in generate_combined_data in the future, if it indeed shows better result.
 
 SAVING_DIR = os.path.join(DATA_PATH, 'training_results', str(datetime.datetime.now()))
@@ -131,13 +131,13 @@ class BaseModel:
         self.print_table(test_results)
         return test_results
 
-    def customized_analysis(self, test_sub_y, pred_sub_y, all_scores):
+    def customized_analysis(self, sub_y_true, sub_y_pred, all_scores):
         """ Customized data visualization"""
         for score in all_scores:
             subject, output, field, r_rmse = [score[f] for f in ['subject', 'output', 'field', 'r_rmse']]
             field_index = self._y_fields[output].index(field)
-            arr1 = test_sub_y[output][:, :, field_index]
-            arr2 = pred_sub_y[output][:, :, field_index]
+            arr1 = sub_y_true[output][:, :, field_index]
+            arr2 = sub_y_pred[output][:, :, field_index]
             title = "{}, {}, {}, r_rmse".format(subject, output, field, 'r_rmse')
             self.representative_profile_curves(arr1, arr2, title, r_rmse)
 
@@ -187,7 +187,6 @@ class BaseModel:
         resampled_step = np.linspace(0, data_len-1+1e-10, resampled_len)
         tck, data_step = interpo.splprep(data_array, u=data_step, s=0)
         data_resampled = interpo.splev(resampled_step, tck, der=0)[0]
-
         return data_resampled
 
     @staticmethod

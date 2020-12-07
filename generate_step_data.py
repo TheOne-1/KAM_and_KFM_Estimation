@@ -4,103 +4,109 @@ import numpy as np
 import h5py
 import json
 import matplotlib.pyplot as plt
+from scipy.interpolate import interp1d
 from customized_logger import logger as logging
-from const import TRIALS, SUBJECTS, ALL_FIELDS, KAM_PHASE, FORCE_PHASE
-from const import SAMPLES_BEFORE_STEP, DATA_PATH, LEFT_PLATE_FORCE_Z
+from const import TRIALS, SUBJECTS, ALL_FIELDS, KAM_PHASE, FORCE_PHASE, STEP_PHASE
+from const import SAMPLES_BEFORE_STEP, DATA_PATH, L_PLATE_FORCE_Z
 from const import PADDING_MODE, PADDING_ZERO, PADDING_NEXT_STEP
-from const import R_FORCE_Z_COLUMN, R_KAM_COLUMN, EVENT_COLUMN
+from const import R_PLATE_FORCE_Z, R_KAM_COLUMN, EVENT_COLUMN, CONTINUOUS_FIELDS, DISCRETE_FIELDS
 
 
-def filter_and_clip_data(middle_data, max_len):
-    # count the maximum time steps for each gati step
-    def form_array_list(array, abnormal_ids):
-        target_ids = array[EVENT_COLUMN].drop_duplicates().dropna()
-        skip_list = list(target_ids[target_ids < 0])
-        if skip_list:
-            logging.debug('Containing corrupted data in steps: {}. These will be dropped out'.format(skip_list))
-        for _id in target_ids:
-            if -abs(_id) in skip_list:
-                continue
-            # fetch data before a step
-            stance_swing_step = array[array[EVENT_COLUMN] == _id]
-            step_begin = stance_swing_step.index.min() - SAMPLES_BEFORE_STEP
-            if PADDING_MODE == PADDING_ZERO:
-                step_end = stance_swing_step.index.max()
-            elif PADDING_MODE == PADDING_NEXT_STEP:
-                step_end = stance_swing_step.index.min() + max_len
-            else:
-                raise RuntimeError("PADDING_MODE is not appropriate.")
-            if step_begin < array.index.min():
-                continue
-            expected_step = array.loc[step_begin:step_end, :].copy()
-            if (expected_step[EVENT_COLUMN] < 0).any():
-                continue
-            # -20: swing phase might contain stance phase of next step, in which case, force might be positive.
-            stance_swing_step_cliped = stance_swing_step.iloc[:-20]
-            stance_phase = stance_swing_step_cliped[stance_swing_step_cliped[R_FORCE_Z_COLUMN] < -20]
-            stance_phase_min_index = stance_phase.index.min()
-            stance_phase_max_index = stance_phase.index.max()
-            stance_phase_mid_index = (stance_phase_min_index + stance_phase_max_index) // 2
-            stance_phase_peak_index = stance_phase.loc[:stance_phase_mid_index, R_FORCE_Z_COLUMN].idxmin()
-            stance_phase = stance_swing_step_cliped.loc[stance_phase_min_index:stance_phase_max_index]
-            if np.mean(stance_phase.loc[
-                       int(0.7 * stance_phase_min_index + 0.3 * stance_phase_max_index):
-                       int(0.3 * stance_phase_min_index + 0.7 * stance_phase_max_index), LEFT_PLATE_FORCE_Z]) < -20:
-                if is_verbose:
-                    plt.figure()
-                    plt.plot(stance_phase[LEFT_PLATE_FORCE_Z].values)
-                    plt.show()
-                continue
-            if (stance_phase.loc[stance_phase_peak_index:stance_phase_mid_index, R_KAM_COLUMN] < 0.).any():
-                abnormal_ids.append(_id)
-                if is_verbose:
-                    plt.figure()
-                    plt.plot(stance_swing_step[R_KAM_COLUMN].values)
-                    plt.show()
-                continue
-            kam_keep_begin = stance_phase[stance_phase[R_KAM_COLUMN] < 0.].loc[:stance_phase_peak_index].index.max()
-            if np.isnan(kam_keep_begin):
-                kam_keep_begin = stance_phase[R_KAM_COLUMN].loc[:stance_phase_peak_index].idxmin()
-                assert stance_phase_min_index <= kam_keep_begin <= stance_phase_max_index
-            kam_keep_end = stance_phase_max_index
-            if kam_keep_end - kam_keep_begin < 30:
-                continue
-            expected_step[KAM_PHASE] = 0.
-            expected_step[FORCE_PHASE] = 0.
-            expected_step.loc[kam_keep_begin:kam_keep_end, KAM_PHASE] = 1.
-            expected_step.loc[stance_phase_min_index:stance_phase_max_index, FORCE_PHASE] = 1.
-            expected_step.index = range(expected_step.shape[0])
-            expected_step = expected_step.reindex(range(max_len + SAMPLES_BEFORE_STEP))
-            expected_step[np.isnan(expected_step)] = 0
-            yield expected_step
+def get_step_data(step_array):
+    def get_stance_swing_data(_id):
+        stance_swing_step = step_array[np.abs(step_array[EVENT_COLUMN]) == _id].copy()
+        stance_swing_step[STEP_PHASE] = 1.
+        min_index = stance_swing_step.index.min()
+        max_index = stance_swing_step.index.max()
+        pre_step = step_array[min_index - SAMPLES_BEFORE_STEP: min_index].copy()
+        pre_step[STEP_PHASE] = 0.
+        if PADDING_MODE == PADDING_NEXT_STEP:
+            post_step = step_array[max_index: max_step_length + min_index]
+        elif PADDING_MODE == PADDING_ZERO:
+            post_step_shape = [max_step_length + min_index - max_index, stance_swing_step.shape[1]]
+            post_step = pd.DataFrame(np.zeros(post_step_shape), columns=stance_swing_step.columns)
+        else:
+            raise RuntimeError("None implement")
 
-    ab_ids = []
-    step_list = list(form_array_list(middle_data, ab_ids))
-    return step_list, ab_ids
+        step_data = pd.concat([pre_step, stance_swing_step, post_step])
+        step_data[np.isnan(step_data)] = 0.
+        step_data.index = range(step_data.shape[0])
+        return step_data
+
+    target_ids = np.abs(step_array[EVENT_COLUMN]).drop_duplicates().dropna()
+    return map(get_stance_swing_data, target_ids)
 
 
-def generate_subject_data():
+def append_force_phase(one_step_array):
+    # -20: swing phase might contain stance phase of next step, in which case, there might be a force.
+    step_max_index = one_step_array[one_step_array[STEP_PHASE] == 1.].index.max() - 20
+    padding_size = one_step_array.shape[0] - step_max_index
+    one_step_array[FORCE_PHASE] = \
+        np.pad(np.where(one_step_array[R_PLATE_FORCE_Z][:step_max_index] < -20, 1., 0.), (0, padding_size)) \
+        * one_step_array[STEP_PHASE]
+    return one_step_array
+
+
+def append_kam_phase(one_step_array):
+    step_max_index = one_step_array[one_step_array[STEP_PHASE] == 1.].index.max() - 20
+    min_index, max_index = np.where(
+        (one_step_array[R_PLATE_FORCE_Z] * one_step_array[STEP_PHASE] < -20.)[:step_max_index])[0][[0, -1]]
+    mid_index = (min_index + max_index) // 2
+    peak_index = one_step_array[R_PLATE_FORCE_Z].loc[:mid_index].idxmin()
+    try:
+        min_index = np.where(one_step_array.loc[:peak_index, R_KAM_COLUMN] < 0.)[0][-1]
+    except IndexError:
+        pass
+    one_step_array[KAM_PHASE] = [0.] * min_index + [1.] * (max_index - min_index) + [0.] * (
+            one_step_array.shape[0] - max_index)
+    return one_step_array
+
+
+def is_step_data_corrupted(one_step_array):
+    return (one_step_array[EVENT_COLUMN] >= 0.).all()
+
+
+def is_foot_on_right_plate_alone(one_step_array):
+    min_index, max_index = one_step_array[one_step_array[FORCE_PHASE] == 1.].index[[0, -1]]
+    left, right = int(0.7 * min_index + 0.3 * max_index), int(0.3 * min_index + 0.7 * max_index)
+    return (one_step_array.loc[left:right, L_PLATE_FORCE_Z] > -20).any()
+
+
+def is_kam_positive(one_step_array):
+    min_index, max_index = one_step_array[one_step_array[FORCE_PHASE] == 1.].index[[0, -1]]
+    mid_index = (min_index + max_index) // 2
+    peak_index = one_step_array.loc[:mid_index, R_PLATE_FORCE_Z].idxmin()
+    return (one_step_array.loc[peak_index:mid_index, R_KAM_COLUMN] > 0.).all()
+
+
+def is_kam_length_reasonable(one_step_array):
+    return np.ptp(np.where(one_step_array[KAM_PHASE] == 1.)) > 30
+
+
+def keep_stance_data_only(one_step_array):
+    one_step_array = one_step_array.loc[one_step_array[FORCE_PHASE] == 1.]
+    return one_step_array
+
+
+def resample_to_100_sample(one_step_array):
+    x = np.linspace(0., 1., one_step_array.shape[0])
+    new_x = np.linspace(0., 1., 100)
+    f = interp1d(x, one_step_array[CONTINUOUS_FIELDS], axis=0, kind=3)
+    g = interp1d(x, one_step_array[DISCRETE_FIELDS], axis=0, kind='nearest')
+    return pd.DataFrame(np.concatenate([f(new_x), g(new_x)], axis=1), columns=ALL_FIELDS)
+
+
+def generate_step_data(export_path, processes):
+    export_path = os.path.join(DATA_PATH, export_path)
     # create training data and test data
-    logging.debug("Loading all csv data")
-    all_data_dict = {subject + " " + trial: pd.read_csv(os.path.join(DATA_PATH, subject, "combined", trial + ".csv"))
-                     for subject in SUBJECTS for trial in TRIALS}
-    max_step_length = max([trial_data[EVENT_COLUMN].value_counts().max() for trial_data in all_data_dict.values()])
     subject_trial_dict = {}
     for subject_trial, data in all_data_dict.items():
-        logging.debug("{} is now in filter and clip process".format(subject_trial))
-        subject_trial_dict[subject_trial], abnormal_steps = filter_and_clip_data(data, max_step_length)
-        if abnormal_steps:
-            logging.warning(
-                "In {}, Total count of abnormal gait ids with KAM is negative is: {}.The details is {}.".format(
-                    subject_trial, len(abnormal_steps), abnormal_steps))
-    subject_dict = {subject: [data for trial in TRIALS for data in subject_trial_dict[subject + " " + trial]]
-                    for subject in SUBJECTS}
-    return subject_dict
+        subject_trial_dict[subject_trial] = get_step_data(data)
+        for f in processes:
+            subject_trial_dict[subject_trial] = f(subject_trial_dict[subject_trial])
 
-
-def generate_step_data(export_path):
-    export_path = os.path.join(DATA_PATH, export_path)
-    subject_data_dict = generate_subject_data()
+    subject_data_dict = {subject: [data for trial in TRIALS for data in subject_trial_dict[subject + " " + trial]]
+                         for subject in SUBJECTS}
     with h5py.File(export_path, 'w') as hf:
         for subject, data_collections in subject_data_dict.items():
             subject_whole_trial = np.concatenate(
@@ -110,14 +116,29 @@ def generate_step_data(export_path):
 
 
 if __name__ == "__main__":
-    is_verbose = False
-    # PADDING_MODE = PADDING_ZERO
-    # generate_step_data('40samples+stance_swing+padding_zero.h5')
+    logging.debug("Loading all csv data")
+    all_data_dict = {subject + " " + trial: pd.read_csv(os.path.join(DATA_PATH, subject, "combined", trial + ".csv"))
+                     for subject in SUBJECTS for trial in TRIALS}
+    max_step_length = max([trial_data[EVENT_COLUMN].value_counts().max() for trial_data in all_data_dict.values()])
+
+    SAMPLES_BEFORE_STEP = 40
+    PADDING_MODE = PADDING_ZERO
+    custom_process = [
+        lambda step_data_list: map(append_force_phase, step_data_list),
+        lambda step_data_list: map(append_kam_phase, step_data_list),
+        lambda step_data_list: filter(is_step_data_corrupted, step_data_list),
+        lambda step_data_list: filter(is_foot_on_right_plate_alone, step_data_list),
+        lambda step_data_list: filter(is_kam_positive, step_data_list),
+        lambda step_data_list: filter(is_kam_length_reasonable, step_data_list)
+    ]
+    generate_step_data('40samples+stance_swing+padding_zero.h5', custom_process)
     # PADDING_MODE = PADDING_NEXT_STEP
     # generate_step_data('40samples+stance_swing+padding_next_step.h5')
+    # PADDING_MODE = PADDING_ZERO
+    # TRIALS = ['baseline', 'fpa', 'step_width']
+    # generate_step_data('40samples+stance_swing+kick_out_trunksway.h5')
+    SAMPLES_BEFORE_STEP = 0
     PADDING_MODE = PADDING_ZERO
-    TRIALS = ['baseline', 'fpa', 'step_width']
-    generate_step_data('40samples+stance_swing+kick_out_trunksway.h5')
-    PADDING_MODE = PADDING_ZERO
-    TRIALS = ['baseline']
-    generate_step_data('40samples+stance_swing+baseline_only.h5')
+    custom_process += [lambda step_data_list: map(keep_stance_data_only, step_data_list),
+                       lambda step_data_list: map(resample_to_100_sample, step_data_list)]
+    generate_step_data('stance_resampled.h5', custom_process)
