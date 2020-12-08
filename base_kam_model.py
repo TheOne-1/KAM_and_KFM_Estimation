@@ -16,7 +16,6 @@ import scipy.interpolate as interpo
 from transforms3d.euler import euler2mat
 
 from const import SENSOR_LIST, DATA_PATH
-# TODO：Calibrate via gravity should be place in generate_combined_data in the future, if it indeed shows better result.
 
 SAVING_DIR = os.path.join(DATA_PATH, 'training_results', str(datetime.datetime.now()))
 os.mkdir(SAVING_DIR)
@@ -73,6 +72,7 @@ class BaseModel:
             train_sub_ids = list(np.setdiff1d(sub_ids, test_sub_ids))
             logging.info('Cross validation: Subjects for test: {}'.format(test_sub_ids))
             results += self.preprocess_train_evaluation(train_sub_ids, test_sub_ids, test_sub_ids)
+        results = sorted(results, key=lambda x: (x['output'], x['field'], np.mean(x['r_rmse'])))
         self.print_table(results)
         # get mean results
         mean_results = []

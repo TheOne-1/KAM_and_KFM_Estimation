@@ -3,11 +3,9 @@ import os
 os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
 import tensorflow as tf
 from keras import Model, Input
-from keras.layers import LSTM, GRU, Dense, Masking, Conv1D, Bidirectional, GaussianNoise, MaxPooling1D
-from keras.layers import UpSampling1D, concatenate
+from keras.layers import LSTM, GRU, Dense, Masking, Bidirectional, GaussianNoise
+from keras.layers import concatenate
 from random import shuffle
-import keras.backend as K
-import keras.losses as Kloss
 from sklearn.preprocessing import StandardScaler  # MinMaxScaler,
 from keras.callbacks import Callback, ReduceLROnPlateau
 from base_kam_model import BaseModel
@@ -63,7 +61,7 @@ class DXKamModel(BaseModel):
         # y['main_output'][:, :, KAM_index] *= x['aux_input'][:, :, height_index]
         x1 = {'main_input_acc': x['main_input_acc'], 'main_input_gyr': x['main_input_gyr']}
         x2 = {'aux_input': x['aux_input']}
-        x1 = self.normalize_data(x1, self._data_scalar, 'fit_transform', 'by_all_columns')
+        x1 = self.normalize_data(x1, self._data_scalar, 'fit_transform', 'by_each_column')
         x2 = self.normalize_data(x2, self._data_scalar, 'fit_transform', 'by_each_column')
         x = {**x1, **x2}
         y = self.normalize_data(y, self._data_scalar, 'fit_transform', 'by_each_column')
@@ -75,7 +73,7 @@ class DXKamModel(BaseModel):
         # y['main_output'][:, :, KAM_index] *= x['aux_input'][:, :, height_index]
         x1 = {'main_input_acc': x['main_input_acc'], 'main_input_gyr': x['main_input_gyr']}
         x2 = {'aux_input': x['aux_input']}
-        x1 = self.normalize_data(x1, self._data_scalar, 'transform', 'by_all_columns')
+        x1 = self.normalize_data(x1, self._data_scalar, 'transform', 'by_each_column')
         x2 = self.normalize_data(x2, self._data_scalar, 'transform', 'by_each_column')
         x = {**x1, **x2}
         y = self.normalize_data(y, self._data_scalar, 'transform', 'by_each_column')
@@ -134,9 +132,9 @@ if __name__ == "__main__":
                 'aux_input':      [SUBJECT_WEIGHT, SUBJECT_HEIGHT]}
     y_fields = {'main_output': MAIN_TARGETS_LIST, 'aux_output': AUX_TARGETS_LIST}
     y_weights = {'main_output': [KAM_PHASE] * len(MAIN_TARGETS_LIST), 'aux_output': [KAM_PHASE] * len(AUX_TARGETS_LIST)}
-    # y_weights = None
 
-    data_set = os.path.join(DATA_PATH, 'stance_resampled.h5')
+    data_set = os.path.join(DATA_PATH, '40samples+stance_swing+padding_zero.h5')
+    # data_set = os.path.join(DATA_PATH, 'stance_resampled.h5')
     dx_model = DXKamModel(data_set, x_fields, y_fields, y_weights, StandardScaler)
     subject_list = dx_model.get_all_subjects()
     # dx_model.preprocess_train_evaluation(subject_list[3:], subject_list[:3], subject_list[:3])
