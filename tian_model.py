@@ -10,7 +10,8 @@ from torch.utils.data import DataLoader, TensorDataset
 import copy
 import numpy as np
 import time
-from const import IMU_FIELDS, SENSOR_LIST, DATA_PATH, KAM_PHASE, SUBJECT_WEIGHT, SUBJECT_HEIGHT, FORCE_PHASE
+from const import IMU_FIELDS, SENSOR_LIST, DATA_PATH, KAM_PHASE, SUBJECT_WEIGHT, SUBJECT_HEIGHT, FORCE_PHASE, \
+    FORCE_DATA_FIELDS, STATIC_DATA
 from torch.nn.utils.rnn import pack_padded_sequence, pad_packed_sequence
 from sklearn.preprocessing import MinMaxScaler
 
@@ -41,7 +42,7 @@ class TianCNN(nn.Module):
         self.x_dim = x_dim
 
     def forward(self, sequence):
-        sequence = sequence[:, 30:100, :]       # take part of the data
+        sequence = sequence[:, 30:100, :]  # take part of the data
         sequence.transpose_(1, 2)
         sequence = self.relu(self.conv1(sequence))
         sequence = self.drop1(sequence)
@@ -68,7 +69,7 @@ class TianRNN(nn.Module):
         self.nlayer = nlayer
         self.rnn_layer = nn.LSTM(x_dim, hidden_dim, nlayer, dropout=0, batch_first=True, bidirectional=True, bias=False)
         self.y_dim = y_dim
-        self.hidden2output = nn.Linear(2 * hidden_dim, y_dim)
+        self.hidden2output = nn.Linear(2 * hidden_dim, y_dim, bias=False)
         # self.hidden2dense = nn.Linear(2 * hidden_dim, hidden_dim)
         # self.dense2output = nn.Linear(hidden_dim, y_dim)
         # for layer in [self.hidden2dense, self.dense2output]:
@@ -90,20 +91,29 @@ class TianRNN(nn.Module):
         return output
 
 
+# class CrossProductModel(nn.Module):
+#     def __init__(self):
+#         super(CrossProductModel, self).__init__()
+
+
 class TianModel(BaseModel):
     def __init__(self, data_path, x_fields, y_fields, weights, base_scalar):
         BaseModel.__init__(self, data_path, x_fields, y_fields, weights, base_scalar)
         self.train_step_lens, self.validation_step_lens, self.test_step_lens = [None] * 3
 
     def preprocess_train_data(self, x, y, weight):
-        x['main_input_acc'] = x['main_input_acc'] / 10
-        marker_data = x['main_input_marker']
-        thigh_vector = marker_data[:, :, :3] - marker_data[:, :, 3:6]
-        shank_vector = marker_data[:, :, 3:6] - marker_data[:, :, 6:9]
-        normed_marker = np.concatenate([thigh_vector, shank_vector], axis=2) / 100
-        normed_marker[:, :, [0, 3]] *= 10
-        x['main_input_marker'] = normed_marker
-        # x = self.normalize_data(x, self._data_scalar, 'fit_transform')
+        # x['main_input_acc'] = x['main_input_acc'] / 10
+
+        # marker_data, force_data = x['main_input_marker'], x['main_input_force']
+        # knee_vector = force_data[:, :, 3:6] - (marker_data[:, :, :3] + marker_data[:, :, 3:6]) / 2
+        # kam = (knee_vector[:, :, 2] * force_data[:, :, 0] - knee_vector[:, :, 0] * force_data[:, :, 2]) / (
+        #             1000 * x['main_input_acc'][:, :, 0] * x['main_input_acc'][:, :, 1])
+        # plt.figure()
+        # plt.plot(-kam[:100, :].ravel())
+        # plt.plot(y['main_output'][:100, :, 0].ravel())
+        # plt.show()
+
+        x = self.normalize_data(x, self._data_scalar, 'fit_transform')
         # y['output'] = self.resample_stance_phase_kam(y['output'], weight['output'])
         return x, y, weight
 
@@ -145,7 +155,7 @@ class TianModel(BaseModel):
         y_train = torch.from_numpy(y_train).float()
         train_step_lens = torch.from_numpy(self.train_step_lens)
         # nn_model = TianCNN(14, 1)
-        nn_model = TianRNN(12, 1)
+        nn_model = TianRNN(14, 1)
 
         if USE_GPU:
             nn_model = nn_model.cuda()
@@ -154,7 +164,7 @@ class TianModel(BaseModel):
         logging.info('Model has {} parameters.'.format(pytorch_total_params))
 
         loss_fn = torch.nn.MSELoss(reduction='sum')
-        optimizer = torch.optim.Adam(nn_model.parameters(), lr=1e-4, weight_decay=2e-6)
+        optimizer = torch.optim.Adam(nn_model.parameters(), lr=5e-4, weight_decay=2e-6)
         # optimizer = torch.optim.Adam(nn_model.parameters())
 
         batch_size = 20
@@ -176,13 +186,13 @@ class TianModel(BaseModel):
         vali_from_test_dl = DataLoader(vali_from_test_ds, batch_size=batch_size)
 
         logging.info('\tEpoch\t\tTrain_Loss\tVali_train_Loss\tVali_test_Loss\t\tDuration\t\t')
-        for epoch in range(100):
+        for epoch in range(20):
             epoch_start_time = time.time()
             for i_batch, (xb, yb, lens) in enumerate(train_dl):
                 if i_batch > 1:
                     n = random.randint(1, 100)
                     if n > 10:
-                        continue        # increase the speed of epoch
+                        continue  # increase the speed of epoch
 
                 if USE_GPU:
                     xb = xb.cuda()
@@ -201,7 +211,7 @@ class TianModel(BaseModel):
                     vali_from_test_loss = TianModel.evaluate_validation_set(nn_model, vali_from_test_dl, loss_fn)
                     logging.info("\t{:3}\t{:15.2f}\t{:15.2f}\t{:15.2f}\t{:13.2f}s\t\t\t".format(
                         epoch, train_loss.item() / xb.shape[0], vali_from_train_loss, vali_from_test_loss,
-                        time.time() - epoch_start_time))
+                               time.time() - epoch_start_time))
                 train_loss.backward()
                 optimizer.step()
 
@@ -276,21 +286,26 @@ if __name__ == "__main__":
     output_cols = ['RIGHT_KNEE_ADDUCTION_MOMENT', 'EXT_KM_Y']
 
     R_LEG_ACC = [imu_field + "_" + sensor for sensor in ['R_SHANK', 'R_THIGH'] for imu_field in IMU_FIELDS_ACC]
+    R_LEG_GYR = [imu_field + "_" + sensor for sensor in ['R_SHANK', 'R_THIGH'] for imu_field in IMU_FIELDS_ACC]
     R_LEG_ORI = [ori_field + "_" + sensor for sensor in ['R_SHANK', 'R_THIGH'] for ori_field in IMU_FIELDS_ORI]
 
-    MARKER_FIELDS = [marker + axis for marker in ['RFT', 'RFLE', 'RFAL'] for axis in ['_X', '_Y', '_Z']]
-    # MARKER_FIELDS = [marker + axis for marker in ['RFT', 'RFME', 'RFLE', 'RFAL', 'RTAM'] for axis in ['_X', '_Y', '_Z']]
+    MARKER_FIELDS = [marker + axis for marker in ['RFME', 'RFLE'] for axis in ['_X', '_Y', '_Z']]
 
-    x_fields = {'main_input_acc': R_LEG_ACC,
-                # 'main_input_ori': R_LEG_ORI,
-                'main_input_marker': MARKER_FIELDS,
-                # 'main_input_vid': video_cols,
-                # 'aux_input': [SUBJECT_WEIGHT, SUBJECT_HEIGHT]
-                }
-    MAIN_TARGETS_LIST = ['RIGHT_KNEE_ADDUCTION_MOMENT']
-    y_fields = {'main_output': MAIN_TARGETS_LIST}
+    x_fields = {
+        'main_input_acc': R_LEG_ACC,
+        'main_input_gyr': R_LEG_GYR,
+        # 'main_input_ori': R_LEG_ORI,
+        'main_input_anthro': STATIC_DATA,
+        # 'main_input_vid': video_cols,
+        # 'aux_input': [SUBJECT_WEIGHT, SUBJECT_HEIGHT]
+    }
+    MAIN_OUTPUT_FIELDS = ['EXT_KM_Y']  # EXT_KM_Y RIGHT_KNEE_ADDUCTION_MOMENT
+    y_fields = {'main_output': MAIN_OUTPUT_FIELDS,
+                'mid_output_marker': MARKER_FIELDS,
+                'mid_output_force': FORCE_DATA_FIELDS[6:12]}
+
     weights = {'main_output': [FORCE_PHASE] * len(output_cols)}
-    model = TianModel(data_path, x_fields, y_fields, weights, lambda: MinMaxScaler(feature_range=(-3, 3)))
+    model = TianModel(data_path, x_fields, y_fields, weights, lambda: MinMaxScaler(feature_range=(0, 1)))
     subjects = model.get_all_subjects()
     model.preprocess_train_evaluation(subjects[:13], subjects[13:], subjects[13:])
     # model.cross_validation(subjects)
