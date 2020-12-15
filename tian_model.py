@@ -128,6 +128,21 @@ class TianModel(BaseModel):
         self._data_fields.extend(['KNEE_X', 'KNEE_Y', 'KNEE_Z'])
 
     def preprocess_train_data(self, x, y, weight):
+        marker_data, vid_data = x['main_input_marker'], x['main_input_vid']
+        knee_marker, ankle_marker = (marker_data[:, :, :3] + marker_data[:, :, 3:6]) / 2, (marker_data[:, :, 6:9] + marker_data[:, :, 9:12]) / 2
+        marker_vector = knee_marker - ankle_marker
+        vid_vector = vid_data[:, :, :2] - vid_data[:, :, 2:4]
+        marker_force_vector = y['mid_output_marker']
+        plt.figure()
+        plt.plot(marker_vector[:10, :, 0].ravel())
+        plt.plot(2*vid_vector[:10, :, 0].ravel())
+        plt.plot(marker_force_vector[:10, :, 0].ravel())
+        plt.figure()
+        plt.plot(marker_vector[:10, :, 2].ravel())
+        plt.plot(-0.75*marker_force_vector[:10, :, 2].ravel())
+        plt.plot(-2*vid_vector[:10, :, 1].ravel())
+        plt.show()
+
 
         x = self.normalize_data(x, self._data_scalar, 'fit_transform', scalar_mode='by_all_columns')
         y = self.normalize_data(y, self._data_scalar, 'fit_transform', scalar_mode='by_each_column')
