@@ -11,7 +11,7 @@ from keras.callbacks import Callback, ReduceLROnPlateau
 from base_kam_model import BaseModel
 from customized_logger import logger as logging
 from const import DATA_PATH, SENSOR_LIST, SUBJECT_WEIGHT, SUBJECT_HEIGHT, KAM_PHASE, VIDEO_DATA_FIELDS
-from const import extract_imu_fields
+from const import extract_imu_fields, extract_right_force_fields, SEGMENT_DATA_FIELDS
 
 gpus = tf.config.experimental.list_physical_devices('GPU')
 for gpu in gpus:
@@ -104,7 +104,7 @@ def rnn_model(x_train, y_train, rnn_layer):
     x = Masking(mask_value=0.)(x)
     x = GaussianNoise(0.1)(x)
     x = rnn_layer(30, dropout=0.2, return_sequences=True)(x)
-    x = rnn_layer(15, dropout=0.2, return_sequences=True)(x)
+    x = rnn_layer(40, dropout=0.2, return_sequences=True)(x)
 
     aux_input_shape = x_train['aux_input'].shape[1:]
     aux_input = Input(shape=aux_input_shape, name='aux_input')
@@ -122,13 +122,17 @@ def rnn_model(x_train, y_train, rnn_layer):
 
 
 if __name__ == "__main__":
-    IMU_DATA_FIELDS_ACC = extract_imu_fields(SENSOR_LIST, ['AccelX', 'AccelY', 'AccelZ'])
-    IMU_DATA_FIELDS_GYR = extract_imu_fields(SENSOR_LIST, ['GyroX', 'GyroY', 'GyroZ'])
+    # SENSOR_LIST = ['L_FOOT', 'R_FOOT', 'R_SHANK', 'R_THIGH', 'WAIST', 'CHEST', 'L_SHANK', 'L_THIGH']
+    SENSOR_LIST = ['L_THIGH']
+    ACC_FIELDS = extract_imu_fields(SENSOR_LIST, ['AccelX', 'AccelY', 'AccelZ'])
+    GYR_FIELDS = extract_imu_fields(SENSOR_LIST, ['GyroX', 'GyroY', 'GyroZ'])
+    FORCE_DATA = extract_right_force_fields(['force'], ['x', 'y', 'z'])
+
     MAIN_TARGETS_LIST = ['RIGHT_KNEE_ADDUCTION_MOMENT', "RIGHT_KNEE_FLEXION_MOMENT"]
     AUX_TARGETS_LIST = ["RIGHT_KNEE_ADDUCTION_VELOCITY"]
 
-    x_fields = {'main_input_acc': IMU_DATA_FIELDS_ACC,
-                'main_input_gyr': IMU_DATA_FIELDS_GYR,
+    x_fields = {'main_input_acc': ACC_FIELDS,
+                'main_input_gyr': GYR_FIELDS,
                 'aux_input':      [SUBJECT_WEIGHT, SUBJECT_HEIGHT]}
     y_fields = {'main_output': MAIN_TARGETS_LIST, 'aux_output': AUX_TARGETS_LIST}
     y_weights = {'main_output': [KAM_PHASE] * len(MAIN_TARGETS_LIST), 'aux_output': [KAM_PHASE] * len(AUX_TARGETS_LIST)}

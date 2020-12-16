@@ -3,16 +3,24 @@ import pandas as pd
 import numpy as np
 import h5py
 import json
-import matplotlib.pyplot as plt
 from scipy.interpolate import interp1d
 from customized_logger import logger as logging
 from const import TRIALS, SUBJECTS, ALL_FIELDS, KAM_PHASE, FORCE_PHASE, STEP_PHASE
 from const import SAMPLES_BEFORE_STEP, DATA_PATH, L_PLATE_FORCE_Z
 from const import PADDING_MODE, PADDING_ZERO, PADDING_NEXT_STEP
-from const import R_PLATE_FORCE_Z, R_KAM_COLUMN, EVENT_COLUMN, CONTINUOUS_FIELDS, DISCRETE_FIELDS
+from const import R_PLATE_FORCE_Z, R_KAM_COLUMN, EVENT_COLUMN, CONTINUOUS_FIELDS, DISCRETE_FIELDS, SEGMENT_DEFINITIONS
+from const import SEGMENT_DATA_FIELDS
 
 
 def get_step_data(step_array):
+    def get_segment_point(seg_axis):
+        seg_name, axis = seg_axis[:-2], seg_axis[-1:]
+        markers = SEGMENT_DEFINITIONS[seg_name]
+        markers_in_one_direction = list(map(lambda x: x + '_' + axis, markers))
+        return pd.DataFrame(step_array[markers_in_one_direction].mean(axis=1), columns=[seg_axis])
+
+    step_array = pd.concat([step_array]+list(map(get_segment_point, SEGMENT_DATA_FIELDS)), axis=1)
+
     def get_stance_swing_data(_id):
         stance_swing_step = step_array[np.abs(step_array[EVENT_COLUMN]) == _id].copy()
         stance_swing_step[STEP_PHASE] = 1.
@@ -120,7 +128,6 @@ if __name__ == "__main__":
     all_data_dict = {subject + " " + trial: pd.read_csv(os.path.join(DATA_PATH, subject, "combined", trial + ".csv"))
                      for subject in SUBJECTS for trial in TRIALS}
     max_step_length = max([trial_data[EVENT_COLUMN].value_counts().max() for trial_data in all_data_dict.values()])
-
     SAMPLES_BEFORE_STEP = 40
     PADDING_MODE = PADDING_ZERO
     custom_process = [

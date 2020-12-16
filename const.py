@@ -18,6 +18,7 @@ SEGMENT_DEFINITIONS = {
     'WAIST': ['LIPS', 'RIPS', 'LIAS', 'RIAS'],
     'CHEST': ['MAI', 'SXS', 'SJN', 'CV7', 'LAC', 'RAC']
 }
+SEGMENT_DATA_FIELDS = [seg_name + '_' + axis for axis in ['X', 'Y', 'Z'] for seg_name in SEGMENT_DEFINITIONS.keys()]
 SENSOR_LIST = ['L_FOOT', 'R_FOOT', 'R_SHANK', 'R_THIGH', 'WAIST', 'CHEST', 'L_SHANK', 'L_THIGH']
 IMU_FIELDS = ['AccelX', 'AccelY', 'AccelZ', 'GyroX', 'GyroY', 'GyroZ', 'MagX', 'MagY', 'MagZ', 'Quat1', 'Quat2',
               'Quat3', 'Quat4']
@@ -44,6 +45,8 @@ EXT_KFM, EXT_KAM, _ = EXT_KNEE_MOMENT = ['EXT_KM_X', 'EXT_KM_Y', 'EXT_KM_Z']
 
 JOINT_LIST = [marker + '_' + axis for axis in ['X', 'Y', 'Z'] for marker in sum(SEGMENT_DEFINITIONS.values(), [])]
 
+extract_right_force_fields = lambda types, axes: ['plate_2_' + data_type + '_' + axis
+                                                  for data_type in types for axis in axes]
 FORCE_DATA_FIELDS = ['plate_' + num + '_' + data_type + '_' + axis for num in ['1', '2']
                      for data_type in ['force', 'cop'] for axis in ['x', 'y', 'z']]
 
@@ -51,6 +54,7 @@ STATIC_DATA = SUBJECT_WEIGHT, SUBJECT_HEIGHT = ['body weight', 'body height']
 
 PHASE_LIST = [EVENT_COLUMN, KAM_PHASE, FORCE_PHASE, STEP_PHASE] = ['Event', 'kam_phase', 'force_phase', 'step_phase']
 # all the fields of combined data
-CONTINUOUS_FIELDS = IMU_DATA_FIELDS + VIDEO_DATA_FIELDS + FORCE_DATA_FIELDS + JOINT_LIST + TARGETS_LIST + EXT_KNEE_MOMENT
+CONTINUOUS_FIELDS = TARGETS_LIST + EXT_KNEE_MOMENT + IMU_DATA_FIELDS + VIDEO_DATA_FIELDS + FORCE_DATA_FIELDS +\
+                    JOINT_LIST + SEGMENT_DATA_FIELDS
 DISCRETE_FIELDS = STATIC_DATA + PHASE_LIST
-ALL_FIELDS = CONTINUOUS_FIELDS + DISCRETE_FIELDS
+ALL_FIELDS = DISCRETE_FIELDS + CONTINUOUS_FIELDS
