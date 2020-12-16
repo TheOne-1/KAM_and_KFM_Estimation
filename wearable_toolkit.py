@@ -8,7 +8,6 @@ Read v3d exported csv data, sage csv data, vicon exported csv data and openPose 
 Synchronize vicon data and sage data.
 
 """
-import copy
 import csv
 import numpy as np
 import math
@@ -19,7 +18,7 @@ from scipy import linalg
 from sklearn.preprocessing import MinMaxScaler
 
 from const import SENSOR_LIST, IMU_FIELDS, FORCE_DATA_FIELDS, EXT_KNEE_MOMENT, TARGETS_LIST, SUBJECT_HEIGHT
-from const import SUBJECT_WEIGHT
+from const import SUBJECT_WEIGHT, STANCE, STANCE_SWING, STEP_TYPE
 import wearable_math
 
 
@@ -204,7 +203,7 @@ class ViconCsvReader:
                 continue
             current_marker_matrix = next_marker_matrix
             next_marker_matrix = walking_data[i_frame, :].reshape([marker_number, 3])
-            R_one_sample, _ = rigid_transform_3D(current_marker_matrix, next_marker_matrix)
+            R_one_sample, _ = rigid_transform_3d(current_marker_matrix, next_marker_matrix)
             theta = np.math.acos((np.matrix.trace(R_one_sample) - 1) / 2)
 
             angular_velocity_theta[i_frame] = theta * sampling_rate / np.pi * 180
@@ -246,8 +245,8 @@ class ViconCsvReader:
                 next_marker_matrix[:, 1] = 0
             elif direction == 'Z':
                 next_marker_matrix[:, 2] = 0
-            R_one_sample, _ = rigid_transform_3D(current_marker_matrix, next_marker_matrix)
-            theta = rotationMatrixToEulerAngles(R_one_sample)
+            R_one_sample, _ = rigid_transform_3d(current_marker_matrix, next_marker_matrix)
+            theta = rotation_matrix_to_euler_angles(R_one_sample)
 
             angular_velocity[i_frame, :] = theta * sampling_rate / np.pi * 180
         angular_velocity = pd.DataFrame(angular_velocity)
@@ -477,11 +476,11 @@ class SageCsvReader:
         max_index = np.argmax(peak_heights)
         return peaks[max_index]
 
-    def create_step_id(self, step_type, verbose=False):
+    def create_step_id(self, verbose=False):
         max_step_length = self.sample_rate * 2
         [RON, ROFF] = self.get_walking_strike_off(0, 0, max_step_length, 10, verbose)
         events_dict = {'ROFF': ROFF, 'RON': RON}
-        foot_events = translate_step_event_to_step_id(events_dict, step_type, max_step_length)
+        foot_events = translate_step_event_to_step_id(events_dict, max_step_length)
         self.data_frame.insert(0, 'Event', np.nan)
         if verbose:
             plt.figure()
@@ -525,7 +524,7 @@ def data_filter(data, cut_off_fre, sampling_fre, filter_order=4):
     return data_filtered
 
 
-def rotationMatrixToEulerAngles(R):
+def rotation_matrix_to_euler_angles(R):
     sy = math.sqrt(R[0, 0] * R[0, 0] + R[1, 0] * R[1, 0])
     singular = sy < 1e-6
 
@@ -541,20 +540,21 @@ def rotationMatrixToEulerAngles(R):
     return np.array([x, y, z])
 
 
-def rigid_transform_3D(A, B):
-    '''
+def rigid_transform_3d(a, b):
+    """
     Get the Rotation Matrix and Translation array between A and B.
-    retval R: Rotation Matrix, 3*3
-    retval T: Translation Array, 1*3
-    '''
-    assert len(A) == len(B)
+    return:
+        R: Rotation Matrix, 3*3
+        T: Translation Array, 1*3
+    """
+    assert len(a) == len(b)
 
-    N = A.shape[0]  # total points
-    centroid_A = np.mean(A, axis=0)
-    centroid_B = np.mean(B, axis=0)
+    N = a.shape[0]  # total points
+    centroid_A = np.mean(a, axis=0)
+    centroid_B = np.mean(b, axis=0)
     # centre the points
-    AA = A - np.tile(centroid_A, (N, 1))
-    BB = B - np.tile(centroid_B, (N, 1))
+    AA = a - np.tile(centroid_A, (N, 1))
+    BB = b - np.tile(centroid_B, (N, 1))
     # dot is matrix multiplication for array
     H = np.dot(AA.T, BB)
     U, _, V_t = linalg.svd(np.nan_to_num(H))
@@ -585,31 +585,35 @@ def sync_via_correlation(data1, data2, verbose=False):
     return delay
 
 
-def translate_step_event_to_step_id(events_dict, step_type, max_step_length):
+def translate_step_event_to_step_id(events_dict, max_step_length):
     # FILTER EVENTS
-    r_steps = []
     event_list = sorted(
         [[i, event_type] for event_type in ['RON', 'ROFF'] for i in events_dict[event_type]], key=lambda x: x[0])
-    event_index_dict = {i: event_type for i, event_type in event_list}
-    event_list = [i[0] for i in event_list]
-    step_type_to_event = {'swing+stance': 'ROFF', 'stance+swing': 'RON'}
-    target_event = events_dict[step_type_to_event[step_type]]
-    for i in range(10, len(target_event) - 5):
-        event_index = event_list.index(target_event[i])
-        prev_event_type = event_index_dict[event_list[event_index - 1]]
-        current_event_type = event_index_dict[event_list[event_index]]
-        next_event_type = event_index_dict[event_list[event_index + 1]]
-        if current_event_type == prev_event_type or current_event_type == next_event_type:
-            continue
-        current_step_length = target_event[i] - target_event[i - 1]
-        prev_step_length = target_event[i - 1] - target_event[i - 2]
-        if 1.33 * prev_step_length > current_step_length > 0.75 * prev_step_length \
-                and 50 < current_step_length < max_step_length:
-            r_steps.append([target_event[i - 1], target_event[i]])
+    event_type_dict = {i: event_type for i, event_type in event_list}
+    event_ids = [i[0] for i in event_list]
+    RON_events = events_dict['RON']
 
-    right_events = pd.DataFrame(r_steps)
-    right_events.columns = ['begin', 'end']
-    return right_events
+    def is_qualified_ron_event(ron_i):
+        i = event_ids.index(RON_events[ron_i])
+        prev_event_type, curr_event_type, next_event_type = map(lambda x: event_type_dict[event_ids[x]], [i-1, i, i+1])
+        prev_step_length, current_step_length = np.diff(RON_events[ron_i - 2:ron_i+1])
+        if curr_event_type not in [prev_event_type, next_event_type]\
+                and 1.33 * prev_step_length > current_step_length > 0.75 * prev_step_length\
+                and 50 < current_step_length < max_step_length:
+            return True
+        return False
+
+    def transform_to_step_events(ron_i):
+        """return consecutive events: off, on, off, on"""
+        current_event_id_i = event_ids.index(RON_events[ron_i])
+        return map(lambda i: event_ids[i], range(current_event_id_i-3, current_event_id_i + 1))
+
+    r_steps = filter(is_qualified_ron_event, range(10, len(RON_events)))
+    r_steps = map(transform_to_step_events, r_steps)
+    r_steps = pd.DataFrame(r_steps)
+    r_steps.columns = ['off_3', 'on_2', 'off_1', 'on_0']
+    step_type_to_event_columns = {STANCE_SWING: ['on_2', 'on_0'], STANCE: ['on_2', 'off_1']}
+    return r_steps[step_type_to_event_columns[STEP_TYPE]]
 
 
 def calibrate_force_plate_center(file_path, plate_num):

@@ -3,17 +3,15 @@ import os
 os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
 import tensorflow as tf
 from keras import Model, Input
-from keras.layers import LSTM, GRU, Dense, Masking, Conv1D, Bidirectional, GaussianNoise, MaxPooling1D
-from keras.layers import UpSampling1D, concatenate
+from keras.layers import LSTM, GRU, Dense, Masking, Bidirectional, GaussianNoise
+from keras.layers import concatenate
 from random import shuffle
-import keras.backend as K
-import keras.losses as Kloss
 from sklearn.preprocessing import StandardScaler  # MinMaxScaler,
 from keras.callbacks import Callback, ReduceLROnPlateau
 from base_kam_model import BaseModel
 from customized_logger import logger as logging
 from const import DATA_PATH, SENSOR_LIST, SUBJECT_WEIGHT, SUBJECT_HEIGHT, KAM_PHASE, VIDEO_DATA_FIELDS
-from const import extract_imu_fields
+from const import extract_imu_fields, extract_right_force_fields, SEGMENT_DATA_FIELDS
 
 gpus = tf.config.experimental.list_physical_devices('GPU')
 for gpu in gpus:
@@ -63,7 +61,7 @@ class DXKamModel(BaseModel):
         # y['main_output'][:, :, KAM_index] *= x['aux_input'][:, :, height_index]
         x1 = {'main_input_acc': x['main_input_acc'], 'main_input_gyr': x['main_input_gyr']}
         x2 = {'aux_input': x['aux_input']}
-        x1 = self.normalize_data(x1, self._data_scalar, 'fit_transform', 'by_all_columns')
+        x1 = self.normalize_data(x1, self._data_scalar, 'fit_transform', 'by_each_column')
         x2 = self.normalize_data(x2, self._data_scalar, 'fit_transform', 'by_each_column')
         x = {**x1, **x2}
         y = self.normalize_data(y, self._data_scalar, 'fit_transform', 'by_each_column')
@@ -75,7 +73,7 @@ class DXKamModel(BaseModel):
         # y['main_output'][:, :, KAM_index] *= x['aux_input'][:, :, height_index]
         x1 = {'main_input_acc': x['main_input_acc'], 'main_input_gyr': x['main_input_gyr']}
         x2 = {'aux_input': x['aux_input']}
-        x1 = self.normalize_data(x1, self._data_scalar, 'transform', 'by_all_columns')
+        x1 = self.normalize_data(x1, self._data_scalar, 'transform', 'by_each_column')
         x2 = self.normalize_data(x2, self._data_scalar, 'transform', 'by_each_column')
         x = {**x1, **x2}
         y = self.normalize_data(y, self._data_scalar, 'transform', 'by_each_column')
@@ -106,7 +104,7 @@ def rnn_model(x_train, y_train, rnn_layer):
     x = Masking(mask_value=0.)(x)
     x = GaussianNoise(0.1)(x)
     x = rnn_layer(30, dropout=0.2, return_sequences=True)(x)
-    x = rnn_layer(15, dropout=0.2, return_sequences=True)(x)
+    x = rnn_layer(40, dropout=0.2, return_sequences=True)(x)
 
     aux_input_shape = x_train['aux_input'].shape[1:]
     aux_input = Input(shape=aux_input_shape, name='aux_input')
@@ -124,19 +122,23 @@ def rnn_model(x_train, y_train, rnn_layer):
 
 
 if __name__ == "__main__":
-    IMU_DATA_FIELDS_ACC = extract_imu_fields(SENSOR_LIST, ['AccelX', 'AccelY', 'AccelZ'])
-    IMU_DATA_FIELDS_GYR = extract_imu_fields(SENSOR_LIST, ['GyroX', 'GyroY', 'GyroZ'])
+    # SENSOR_LIST = ['L_FOOT', 'R_FOOT', 'R_SHANK', 'R_THIGH', 'WAIST', 'CHEST', 'L_SHANK', 'L_THIGH']
+    SENSOR_LIST = ['L_THIGH']
+    ACC_FIELDS = extract_imu_fields(SENSOR_LIST, ['AccelX', 'AccelY', 'AccelZ'])
+    GYR_FIELDS = extract_imu_fields(SENSOR_LIST, ['GyroX', 'GyroY', 'GyroZ'])
+    FORCE_DATA = extract_right_force_fields(['force'], ['x', 'y', 'z'])
+
     MAIN_TARGETS_LIST = ['RIGHT_KNEE_ADDUCTION_MOMENT', "RIGHT_KNEE_FLEXION_MOMENT"]
     AUX_TARGETS_LIST = ["RIGHT_KNEE_ADDUCTION_VELOCITY"]
 
-    x_fields = {'main_input_acc': IMU_DATA_FIELDS_ACC,
-                'main_input_gyr': IMU_DATA_FIELDS_GYR,
+    x_fields = {'main_input_acc': ACC_FIELDS,
+                'main_input_gyr': GYR_FIELDS,
                 'aux_input':      [SUBJECT_WEIGHT, SUBJECT_HEIGHT]}
     y_fields = {'main_output': MAIN_TARGETS_LIST, 'aux_output': AUX_TARGETS_LIST}
     y_weights = {'main_output': [KAM_PHASE] * len(MAIN_TARGETS_LIST), 'aux_output': [KAM_PHASE] * len(AUX_TARGETS_LIST)}
-    # y_weights = None
 
-    data_set = os.path.join(DATA_PATH, 'stance_resampled.h5')
+    data_set = os.path.join(DATA_PATH, '40samples+stance_swing+padding_zero.h5')
+    # data_set = os.path.join(DATA_PATH, 'stance_resampled.h5')
     dx_model = DXKamModel(data_set, x_fields, y_fields, y_weights, StandardScaler)
     subject_list = dx_model.get_all_subjects()
     # dx_model.preprocess_train_evaluation(subject_list[3:], subject_list[:3], subject_list[:3])
