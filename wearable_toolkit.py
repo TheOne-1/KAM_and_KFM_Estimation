@@ -8,7 +8,6 @@ Read v3d exported csv data, sage csv data, vicon exported csv data and openPose 
 Synchronize vicon data and sage data.
 
 """
-import copy
 import csv
 import numpy as np
 import math
@@ -19,7 +18,7 @@ from scipy import linalg
 from sklearn.preprocessing import MinMaxScaler
 
 from const import SENSOR_LIST, IMU_FIELDS, FORCE_DATA_FIELDS, EXT_KNEE_MOMENT, TARGETS_LIST, SUBJECT_HEIGHT
-from const import SUBJECT_WEIGHT
+from const import SUBJECT_WEIGHT, STANCE, STANCE_SWING, STEP_TYPE
 import wearable_math
 
 
@@ -477,11 +476,11 @@ class SageCsvReader:
         max_index = np.argmax(peak_heights)
         return peaks[max_index]
 
-    def create_step_id(self, step_type, verbose=False):
+    def create_step_id(self, verbose=False):
         max_step_length = self.sample_rate * 2
         [RON, ROFF] = self.get_walking_strike_off(0, 0, max_step_length, 10, verbose)
         events_dict = {'ROFF': ROFF, 'RON': RON}
-        foot_events = translate_step_event_to_step_id(events_dict, step_type, max_step_length)
+        foot_events = translate_step_event_to_step_id(events_dict, max_step_length)
         self.data_frame.insert(0, 'Event', np.nan)
         if verbose:
             plt.figure()
@@ -586,7 +585,7 @@ def sync_via_correlation(data1, data2, verbose=False):
     return delay
 
 
-def translate_step_event_to_step_id(events_dict, step_type, max_step_length):
+def translate_step_event_to_step_id(events_dict, max_step_length):
     # FILTER EVENTS
     event_list = sorted(
         [[i, event_type] for event_type in ['RON', 'ROFF'] for i in events_dict[event_type]], key=lambda x: x[0])
@@ -613,9 +612,8 @@ def translate_step_event_to_step_id(events_dict, step_type, max_step_length):
     r_steps = map(transform_to_step_events, r_steps)
     r_steps = pd.DataFrame(r_steps)
     r_steps.columns = ['off_3', 'on_2', 'off_1', 'on_0']
-    step_type_to_event_columns = {'swing+stance': ['off_3', 'off_1'], 'stance+swing': ['on_2', 'on_0'],
-                                  'stance': ['on_2', 'off_1'], 'swing': ['off_1', 'on_0']}
-    return r_steps[step_type_to_event_columns[step_type]]
+    step_type_to_event_columns = {STANCE_SWING: ['on_2', 'on_0'], STANCE: ['on_2', 'off_1']}
+    return r_steps[step_type_to_event_columns[STEP_TYPE]]
 
 
 def calibrate_force_plate_center(file_path, plate_num):

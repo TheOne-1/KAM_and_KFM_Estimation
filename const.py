@@ -8,6 +8,8 @@ SUBJECTS = ['s002_wangdianxin', 's004_ouyangjue', 's005_tangansheng', 's006_xuse
             's015_weihuan', 's017_tantian', 's018_wangmian', 's019_chenhongyuan', 's020_houjikang'
             # , 's003_linyuan', 's001_tantian', 's016_houjikang'
             ]
+STEP_TYPES = STANCE, STANCE_SWING = range(2)
+STEP_TYPE = STANCE
 SEGMENT_DEFINITIONS = {
     'L_FOOT': ['LFCC', 'LFM5', 'LFM2'],
     'R_FOOT': ['RFCC', 'RFM5', 'RFM2'],
@@ -33,9 +35,8 @@ VIDEO_ANGLES = ["90", "180"]
 VIDEO_DATA_FIELDS = extract_video_fields(VIDEO_LIST, VIDEO_ANGLES)
 IMU_DATA_FIELDS = extract_imu_fields(SENSOR_LIST, IMU_FIELDS)
 
-SAMPLES_BEFORE_STEP = 40
-PADDING_MODES = [PADDING_ZERO, PADDING_NEXT_STEP] = range(2)
-PADDING_MODE = PADDING_ZERO
+SAMPLES_BEFORE_STEP = 20
+SAMPLES_AFTER_STEP = 20
 
 L_PLATE_FORCE_Z, R_PLATE_FORCE_Z = ['plate_1_force_z', 'plate_2_force_z']
 
