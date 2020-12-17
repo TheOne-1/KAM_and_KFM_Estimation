@@ -43,7 +43,7 @@ class TianCNN(nn.Module):
         self.y_dim = y_dim
         self.x_dim = x_dim
 
-    def forward(self, sequence):
+    def forward(self, sequence, lens):
         sequence = sequence[:, 30:100, :]  # take part of the data
         sequence.transpose_(1, 2)
         sequence = self.relu(self.conv1(sequence))
@@ -86,24 +86,30 @@ class TianRNN(nn.Module):
     def forward(self, sequence, lens):
         sequence = pack_padded_sequence(sequence, lens, batch_first=True, enforce_sorted=False)
         lstm_out, _ = self.rnn_layer(sequence)
-        lstm_out, _ = pad_packed_sequence(lstm_out, batch_first=True, total_length=231)
+        lstm_out, _ = pad_packed_sequence(lstm_out, batch_first=True, total_length=250)
         output = self.hidden2output(lstm_out)
         # relu_out = self.hidden2dense(lstm_out).clamp(min=0)
         # output = self.dense2output(relu_out)
         return output
 
 
-class CrossProductModel(nn.Module):
+class FCModel(nn.Module):
     def __init__(self, x_dim, y_dim):
-        super(CrossProductModel, self).__init__()
+        super(FCModel, self).__init__()
         hidden_num = 20
         self.linear1 = nn.Linear(x_dim, hidden_num)
         self.linear2 = nn.Linear(hidden_num, hidden_num)
         self.linear3 = nn.Linear(hidden_num, hidden_num)
         self.linear4 = nn.Linear(hidden_num, hidden_num)
         self.hidden2output = nn.Linear(hidden_num, y_dim)
+        self.sigmoid = nn.Sigmoid()
 
     def forward(self, sequence, lens):
+        # sequence = self.sigmoid(self.linear1(sequence))
+        # sequence = self.sigmoid(self.linear2(sequence))
+        # sequence = self.sigmoid(self.linear3(sequence))
+        # sequence = self.sigmoid(self.linear4(sequence))
+
         sequence = self.linear1(sequence).clamp(min=0)
         sequence = self.linear2(sequence).clamp(min=0)
         sequence = self.linear3(sequence).clamp(min=0)
@@ -128,21 +134,20 @@ class TianModel(BaseModel):
         self._data_fields.extend(['KNEE_X', 'KNEE_Y', 'KNEE_Z'])
 
     def preprocess_train_data(self, x, y, weight):
-        marker_data, vid_data = x['main_input_marker'], x['main_input_vid']
-        knee_marker, ankle_marker = (marker_data[:, :, :3] + marker_data[:, :, 3:6]) / 2, (marker_data[:, :, 6:9] + marker_data[:, :, 9:12]) / 2
-        marker_vector = knee_marker - ankle_marker
-        vid_vector = vid_data[:, :, :2] - vid_data[:, :, 2:4]
-        marker_force_vector = y['mid_output_marker']
-        plt.figure()
-        plt.plot(marker_vector[:10, :, 0].ravel())
-        plt.plot(2*vid_vector[:10, :, 0].ravel())
-        plt.plot(marker_force_vector[:10, :, 0].ravel())
-        plt.figure()
-        plt.plot(marker_vector[:10, :, 2].ravel())
-        plt.plot(-0.75*marker_force_vector[:10, :, 2].ravel())
-        plt.plot(-2*vid_vector[:10, :, 1].ravel())
-        plt.show()
-
+        # marker_data, vid_data = x['main_input_marker1'], x['main_input_vid']
+        # knee_marker, ankle_marker = (marker_data[:, :, :3] + marker_data[:, :, 3:6]) / 2, (marker_data[:, :, 6:9] + marker_data[:, :, 9:12]) / 2
+        # marker_vector = knee_marker - ankle_marker
+        # vid_vector = vid_data[:, :, :2] - vid_data[:, :, 2:4]
+        # knee_moments = y['main_output']
+        # plt.figure()
+        # plt.plot(marker_vector[:10, :, 0].ravel())
+        # plt.plot(-2*vid_vector[:10, :, 0].ravel())
+        # plt.plot(1000*knee_moments[:10, :, 1].ravel())
+        # plt.figure()
+        # plt.plot(marker_vector[:10, :, 2].ravel())
+        # plt.plot(-vid_vector[:10, :, 1].ravel())
+        # plt.plot(1000*knee_moments[:10, :, 1].ravel())
+        # plt.show()
 
         x = self.normalize_data(x, self._data_scalar, 'fit_transform', scalar_mode='by_all_columns')
         y = self.normalize_data(y, self._data_scalar, 'fit_transform', scalar_mode='by_each_column')
@@ -183,17 +188,20 @@ class TianModel(BaseModel):
     def train_model(self, x_train, y_train, x_validation=None, y_validation=None, validation_weight=None):
         self.train_step_lens, self.validation_step_lens = self._get_step_len(x_train), self._get_step_len(x_validation)
         x_train = np.concatenate(list(x_train.values()), axis=2)
-        y_train = np.concatenate([y_train['mid_output_marker'], y_train['mid_output_force']], axis=2)
+        y_train = np.concatenate(list(y_train.values()), axis=2)
+        # y_train = np.concatenate([y_train['mid_output_marker'], y_train['mid_output_force']], axis=2)
         x_validation = np.concatenate(list(x_validation.values()), axis=2)
-        y_validation = np.concatenate([y_validation['mid_output_marker'], y_validation['mid_output_force']], axis=2)
+        y_validation = np.concatenate(list(y_validation.values()), axis=2)
+        # y_validation = np.concatenate([y_validation['mid_output_marker'], y_validation['mid_output_force']], axis=2)
 
         # x_train, y_train = x_train[:5000], y_train[:5000]
 
         x_train = torch.from_numpy(x_train).float()
         y_train = torch.from_numpy(y_train).float()
         train_step_lens = torch.from_numpy(self.train_step_lens)
-        # nn_model = TianCNN(14, 6)
-        nn_model = TianRNN(14, 6)
+        # nn_model = TianCNN(x_train.shape[2], y_train.shape[2])
+        # nn_model = TianRNN(x_train.shape[2], y_train.shape[2])
+        nn_model = FCModel(x_train.shape[2], y_train.shape[2])
 
         if USE_GPU:
             nn_model = nn_model.cuda()
@@ -202,7 +210,7 @@ class TianModel(BaseModel):
         logging.info('Model has {} parameters.'.format(pytorch_total_params))
 
         loss_fn = torch.nn.MSELoss(reduction='sum')
-        optimizer = torch.optim.Adam(nn_model.parameters(), lr=5e-4, weight_decay=2e-6)
+        optimizer = torch.optim.Adam(nn_model.parameters(), lr=1e-3, weight_decay=2e-6)
         # optimizer = torch.optim.Adam(nn_model.parameters())
 
         batch_size = 20
@@ -223,13 +231,13 @@ class TianModel(BaseModel):
         vali_from_test_dl = DataLoader(vali_from_test_ds, batch_size=batch_size)
 
         logging.info('\tEpoch\t\tTrain_Loss\tVali_train_Loss\tVali_test_Loss\t\tDuration\t\t')
-        for epoch in range(20):
+        for epoch in range(10):
             epoch_start_time = time.time()
             for i_batch, (xb, yb, lens) in enumerate(train_dl):
-                if i_batch > 1:
-                    n = random.randint(1, 100)
-                    if n > 10:
-                        continue  # increase the speed of epoch
+                # if i_batch > 1:
+                #     n = random.randint(1, 100)
+                #     if n > 10:
+                #         continue  # increase the speed of epoch
 
                 if USE_GPU:
                     xb = xb.cuda()
@@ -295,7 +303,8 @@ class TianModel(BaseModel):
             y_pred = torch.cat(y_pred_list)
         y_pred = y_pred.detach().cpu().numpy()
 
-        return {'mid_output_marker': y_pred[:, :, :3], 'mid_output_force': y_pred[:, :, 3:6]}
+        # return {'mid_output_marker': y_pred[:, :, :3], 'mid_output_force': y_pred[:, :, 3:6]}
+        return {'main_output': y_pred}
 
     @staticmethod
     def _get_step_len(data, input_cate='main_input_acc', feature_col_num=0):
@@ -358,7 +367,7 @@ class TianModel(BaseModel):
 
 
 if __name__ == "__main__":
-    data_path = DATA_PATH + '/40samples+stance_swing+padding_zero.h5'
+    data_path = DATA_PATH + '/40samples+stance.h5'
     IMU_FIELDS_ACC = IMU_FIELDS[:3]
     IMU_FIELDS_GYR = IMU_FIELDS[3:6]
     IMU_FIELDS_ORI = IMU_FIELDS[9:13]
@@ -368,7 +377,6 @@ if __name__ == "__main__":
                   for angle in ['90', '180'] for axis in ['x', 'y']]
     knee_ankle_video_cols = [loc + '_' + axis + '_' + angle for loc in ['RKnee', 'RAnkle']
                              for angle in ['180'] for axis in ['x', 'y']]
-    output_cols = ['RIGHT_KNEE_ADDUCTION_MOMENT', 'EXT_KM_Y']
 
     R_LEG_ACC = [imu_field + "_" + sensor for sensor in ['R_SHANK', 'R_THIGH'] for imu_field in IMU_FIELDS_ACC]
     R_LEG_GYR = [imu_field + "_" + sensor for sensor in ['R_SHANK', 'R_THIGH'] for imu_field in IMU_FIELDS_ACC]
@@ -376,31 +384,33 @@ if __name__ == "__main__":
 
     KNEE_MARKER_FIELDS = [marker + axis for marker in ['RFME', 'RFLE'] for axis in ['_X', '_Y', '_Z']]
     ANKLE_MARKER_FIELDS = [marker + axis for marker in ['RTAM', 'RFAL'] for axis in ['_X', '_Y', '_Z']]
+    TRUNK_MARKER_FIELDS = [marker + axis for marker in ['CV7'] for axis in ['_X', '_Y', '_Z']]
 
     x_fields = {
         # 'main_input_acc': STATIC_DATA,
-        # 'main_input_marker': MARKER_FIELDS,
-        # 'main_input_force': FORCE_DATA_FIELDS[6:12],
+        # 'main_input_marker1': KNEE_MARKER_FIELDS + ANKLE_MARKER_FIELDS,
+        # 'main_input_marker': ['KNEE_X', 'KNEE_Y', 'KNEE_Z'],
+        # 'main_input_force': FORCE_DATA_FIELDS[6:9],
 
         'main_input_acc': R_LEG_ACC,
-        'main_input_gyr': R_LEG_GYR,
+        # 'main_input_gyr': R_LEG_GYR,
         # 'main_input_ori': R_LEG_ORI,
-        'main_input_anthro': STATIC_DATA,
-        'main_input_marker': KNEE_MARKER_FIELDS + ANKLE_MARKER_FIELDS,
-        'main_input_vid': knee_ankle_video_cols,
+        # 'main_input_anthro': STATIC_DATA,
+        'main_input_marker': KNEE_MARKER_FIELDS + ANKLE_MARKER_FIELDS + TRUNK_MARKER_FIELDS,
+        # 'main_input_vid': knee_ankle_video_cols,
     }
-    MAIN_OUTPUT_FIELDS = ['EXT_KM_Y']  # EXT_KM_Y RIGHT_KNEE_ADDUCTION_MOMENT
+    MAIN_OUTPUT_FIELDS = ['RIGHT_KNEE_ADDUCTION_MOMENT']  # EXT_KM_Y RIGHT_KNEE_ADDUCTION_MOMENT
     y_fields = {
-        # 'main_output': MAIN_OUTPUT_FIELDS,
-        'mid_output_marker': ['KNEE_X', 'KNEE_Y', 'KNEE_Z'],
-        'mid_output_force': FORCE_DATA_FIELDS[6:9]
+        'main_output': MAIN_OUTPUT_FIELDS,
+        # 'mid_output_marker': ['KNEE_X', 'KNEE_Y', 'KNEE_Z'],
+        # 'mid_output_force': FORCE_DATA_FIELDS[6:9]
                 }
 
-    weights = {'main_output': [FORCE_PHASE] * len(output_cols),
+    weights = {'main_output': [FORCE_PHASE] * len(MAIN_OUTPUT_FIELDS),
                'mid_output_marker': [FORCE_PHASE] * 3,
                'mid_output_force': [FORCE_PHASE] * 3}
     model = TianModel(data_path, x_fields, y_fields, weights, lambda: MinMaxScaler(feature_range=(-3, 3)))
     subjects = model.get_all_subjects()
-    model.preprocess_train_evaluation(subjects[:13], subjects[13:], subjects[16:])
+    model.preprocess_train_evaluation(subjects[:13], subjects[13:], subjects[13:])
     # model.cross_validation(subjects)
     plt.show()
