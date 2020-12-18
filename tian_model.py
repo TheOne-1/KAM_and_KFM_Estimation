@@ -210,8 +210,8 @@ class TianModel(BaseModel):
         y_train = torch.from_numpy(y_train).float()
         train_step_lens = torch.from_numpy(self.train_step_lens)
         # nn_model = TianCNN(x_train.shape[2], y_train.shape[2])
-        # nn_model = HuangRNN(x_train.shape[2], y_train.shape[2])
-        nn_model = FCModel(x_train.shape[2], y_train.shape[2])
+        nn_model = HuangRNN(x_train.shape[2], y_train.shape[2])
+        # nn_model = FCModel(x_train.shape[2], y_train.shape[2])
 
         if USE_GPU:
             nn_model = nn_model.cuda()
@@ -221,7 +221,7 @@ class TianModel(BaseModel):
 
         loss_fn = torch.nn.MSELoss(reduction='sum')
         optimizer = torch.optim.Adam(nn_model.parameters(), lr=5e-3, weight_decay=2e-6)
-        scheduler = ExponentialLR(optimizer, gamma=1)
+        scheduler = ExponentialLR(optimizer, gamma=0.9)
 
         batch_size = 20
         train_ds = TensorDataset(x_train, y_train, train_step_lens)
@@ -241,7 +241,7 @@ class TianModel(BaseModel):
         vali_from_test_dl = DataLoader(vali_from_test_ds, batch_size=batch_size)
 
         logging.info('\tEpoch\t\tTrain_Loss\tVali_train_Loss\tVali_test_Loss\t\tDuration\t\t')
-        for epoch in range(100):
+        for epoch in range(10):
             epoch_start_time = time.time()
             for i_batch, (xb, yb, lens) in enumerate(train_dl):
                 if i_batch > 1:
