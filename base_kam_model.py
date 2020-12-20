@@ -124,7 +124,7 @@ class BaseModel:
             test_sub_weight = self._get_raw_data_dict(test_sub_data, self._weights)
             test_sub_x, test_sub_y, test_sub_weight = self.preprocess_validation_test_data(test_sub_x, test_sub_y, test_sub_weight)
             pred_sub_y = self.predict(model, test_sub_x)
-            all_scores = self.get_all_scores(test_sub_y, pred_sub_y, test_sub_weight)
+            all_scores = self.get_all_scores(test_sub_y, pred_sub_y, self._y_fields, test_sub_weight)
             all_scores = [{'subject': test_sub_name, **scores} for scores in all_scores]
             self.customized_analysis(test_sub_y, pred_sub_y, all_scores)
             test_results += all_scores
@@ -197,7 +197,8 @@ class BaseModel:
     def predict(model, x_test):
         raise RuntimeError('Method not implemented')
 
-    def get_all_scores(self, y_true, y_pred, weights=None):
+    @staticmethod
+    def get_all_scores(y_true, y_pred, y_fields, weights=None):
         def get_column_score(arr_true, arr_pred, w):
             r2, rmse, mae, r_rmse, cor_value = [np.zeros(arr_true.shape[0]) for _ in range(5)]
             for i in range(arr_true.shape[0]):
@@ -218,7 +219,7 @@ class BaseModel:
 
         scores = []
         weights = {} if weights is None else weights
-        for output_name, fields in self._y_fields.items():
+        for output_name, fields in y_fields.items():
             for col, field in enumerate(fields):
                 y_true_one_field = y_true[output_name][:, :, col]
                 y_pred_one_field = y_pred[output_name][:, :, col]
