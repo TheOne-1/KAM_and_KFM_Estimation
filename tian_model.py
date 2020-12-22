@@ -213,45 +213,133 @@ class TianModel(BaseModel):
         return loss_positive
 
     def train_model(self, x_train, y_train, x_validation=None, y_validation=None, validation_weight=None):
-        sub_model_base_param = {'epoch': 10, 'batch_size': 20, 'lr': 1e-3, 'use_ratio': 20}
+        sub_model_base_param = {'epoch': 12, 'batch_size': 20, 'lr': 1e-3, 'use_ratio': 20}
         self.train_step_lens, self.validation_step_lens = self._get_step_len(x_train), self._get_step_len(x_validation)
         x_train_rx, x_validation_rx = x_train['r_x'], x_validation['r_x']
         y_train_rx, y_validation_rx = x_train['midout_r_x'], x_validation['midout_r_x']
         model_rx = TianRNN(x_train_rx.shape[2], y_train_rx.shape[2])
         model_rx = model_rx.cuda()
         params = {**sub_model_base_param, **{'target_name': 'midout_r_x', 'fields': ['KNEE_X']}}
-        self.build_sub_model(model_rx, x_train_rx, y_train_rx, x_validation_rx, y_validation_rx, validation_weight,
-                             params)
+        self.build_sub_model(model_rx, x_train_rx, y_train_rx, x_validation_rx, y_validation_rx, validation_weight, params)
 
         x_train_rz, x_validation_rz = x_train['r_z'], x_validation['r_z']
         y_train_rz, y_validation_rz = x_train['midout_r_z'], x_validation['midout_r_z']
         model_rz = TianRNN(x_train_rz.shape[2], y_train_rz.shape[2])
         model_rz = model_rz.cuda()
         params = {**sub_model_base_param, **{'target_name': 'midout_r_z', 'fields': ['KNEE_Z']}}
-        self.build_sub_model(model_rz, x_train_rz, y_train_rz, x_validation_rz, y_validation_rz, validation_weight,
-                             params)
+        self.build_sub_model(model_rz, x_train_rz, y_train_rz, x_validation_rz, y_validation_rz, validation_weight, params)
 
         x_train_fz, x_validation_fz = x_train['force_z'], x_validation['force_z']
         y_train_fz, y_validation_fz = x_train['midout_force_z'], x_validation['midout_force_z']
         model_fz = TianRNN(x_train_fz.shape[2], y_train_fz.shape[2])
         model_fz = model_fz.cuda()
         params = {**sub_model_base_param, **{'target_name': 'midout_force_z', 'fields': ['plate_2_force_z']}}
-        self.build_sub_model(model_fz, x_train_fz, y_train_fz, x_validation_fz, y_validation_fz, validation_weight,
-                             params)
+        self.build_sub_model(model_fz, x_train_fz, y_train_fz, x_validation_fz, y_validation_fz, validation_weight, params)
 
         x_train_fx, x_validation_fx = x_train['force_x'], x_validation['force_x']
         y_train_fx, y_validation_fx = x_train['midout_force_x'], x_validation['midout_force_x']
         model_fx = TianRNN(x_train_fx.shape[2], y_train_fx.shape[2])
         model_fx = model_fx.cuda()
         params = {**sub_model_base_param, **{'target_name': 'midout_force_x', 'fields': ['plate_2_force_x']}}
-        self.build_sub_model(model_fx, x_train_fx, y_train_fx, x_validation_fx, y_validation_fx, validation_weight,
-                             params)
+        self.build_sub_model(model_fx, x_train_fx, y_train_fx, x_validation_fx, y_validation_fx, validation_weight, params)
+
         four_source_model = FourSourceModel(model_fx, model_fz, model_rx, model_rz, self._data_scalar)
+        params = {**sub_model_base_param, **{'target_name': 'main_output', 'fields': ['EXT_KM_Y']}}
+        self.build_main_model(four_source_model, x_train, y_train, x_validation, y_validation, validation_weight, params)
         return four_source_model
 
+    def build_main_model(self, model, x_train, y_train, x_validation, y_validation, validation_weight, params):
+        def prepare_main_model_data(x_train, y_train, train_step_lens, x_validation, y_validation, validation_step_lens,
+                                    batch_size):
+            x_fx, x_fz, x_rx, x_rz, x_anthro = x_train['force_x'], x_train['force_z'], x_train['r_x'], x_train['r_z'], x_train['anthro']
+            y_train = torch.from_numpy(y_train['main_output']).float().cuda()
+            x_fx, x_fz = torch.from_numpy(x_fx).float().cuda(), torch.from_numpy(x_fz).float().cuda()
+            x_rx, x_rz, x_anthro = torch.from_numpy(x_rx).float().cuda(), torch.from_numpy(x_rz).float().cuda(), torch.from_numpy(x_anthro).float().cuda()
+            train_step_lens = torch.from_numpy(train_step_lens)
+            train_ds = TensorDataset(x_fx, x_fz, x_rx, x_rz, x_anthro, y_train, train_step_lens)
+            train_size = int(0.9 * len(train_ds))
+            vali_from_train_size = len(train_ds) - train_size
+            train_ds, vali_from_train_ds = torch.utils.data.dataset.random_split(train_ds, [train_size, vali_from_train_size])
+            train_dl = DataLoader(train_ds, batch_size=batch_size)
+            vali_from_train_dl = DataLoader(vali_from_train_ds, batch_size=batch_size)
+
+            x_fx, x_fz, x_rx, x_rz, x_anthro = x_validation['force_x'], x_validation['force_z'], x_validation['r_x'], x_validation['r_z'], x_validation['anthro']
+            y_validation = torch.from_numpy(y_validation['main_output']).float().cuda()
+            x_fx, x_fz = torch.from_numpy(x_fx).float().cuda(), torch.from_numpy(x_fz).float().cuda()
+            x_rx, x_rz, x_anthro = torch.from_numpy(x_rx).float().cuda(), torch.from_numpy(x_rz).float().cuda(), torch.from_numpy(x_anthro).float().cuda()
+            vali_step_lens = torch.from_numpy(validation_step_lens)
+            test_ds = TensorDataset(x_fx, x_fz, x_rx, x_rz, x_anthro, y_validation, vali_step_lens)
+            test_dl = DataLoader(test_ds, batch_size=batch_size)
+            vali_from_test_ds = TensorDataset(x_fx, x_fz, x_rx, x_rz, x_anthro, y_validation, vali_step_lens)
+            num_of_step_for_peek = int(0.1 * len(y_validation))
+            vali_from_test_ds, _ = torch.utils.data.dataset.random_split(vali_from_test_ds, [num_of_step_for_peek, len(
+                y_validation) - num_of_step_for_peek])
+            vali_from_test_dl = DataLoader(vali_from_test_ds, batch_size=batch_size)
+            return train_dl, vali_from_train_dl, vali_from_test_dl, test_dl
+
+        def train(model, train_dl, optimizer, loss_fn, params):
+            for i_batch, (xb_0, xb_1, xb_2, xb_3, xb_4, yb, lens) in enumerate(train_dl):
+                n = random.randint(1, 100)
+                if n > params.use_ratio:
+                    continue  # increase the speed of epoch
+                # if USE_GPU:
+                #     xb = xb.cuda()
+                #     yb = yb.cuda()
+                optimizer.zero_grad()
+                y_pred = model(xb_0, xb_1, xb_2, xb_3, xb_4, lens)
+                # train_loss = self.loss_fun_emphasize_peak(y_pred, yb)
+                # train_loss = self.loss_fun_only_positive(y_pred, yb)
+                train_loss = loss_fn(y_pred, yb)
+                train_loss.backward()
+                optimizer.step()
+
+        def eval_after_training(model, test_dl, y_validation, validation_weight, params, show_plots=False):
+            with torch.no_grad():
+                y_pred_list = []
+                for i_batch, (xb_0, xb_1, xb_2, xb_3, xb_4, yb, lens) in enumerate(test_dl):
+                    y_pred_list.append(model(xb_0, xb_1, xb_2, xb_3, xb_4, lens).detach().cpu())
+                y_pred = torch.cat(y_pred_list)
+            y_pred = {params.target_name: y_pred.detach().cpu().numpy()}
+            all_scores = BaseModel.get_all_scores(y_validation, y_pred, {params.target_name: params.fields}, validation_weight)
+            all_scores = [{'subject': 'all', **scores} for scores in all_scores]
+            self.print_table(all_scores)
+            if show_plots:
+                self.customized_analysis(y_validation, y_pred, all_scores)
+                plt.show()
+            return y_pred
+
+        def eval_during_training(model, vali_from_train_dl, vali_from_test_dl, loss_fn, epoch_end_time, i_epoch):
+            def vali_set_loss(nn_model, validation_dl, loss_fn):
+                validation_loss = []
+                for xb_0, xb_1, xb_2, xb_3, xb_4, yb, lens in validation_dl:
+                    with torch.no_grad():
+                        yb_pred = nn_model(xb_0, xb_1, xb_2, xb_3, xb_4, lens)
+                        validation_loss.append(loss_fn(yb_pred, yb).item() / xb_0.shape[0])
+                return np.mean(validation_loss)
+            vali_from_train_loss = vali_set_loss(model, vali_from_train_dl, loss_fn)
+            vali_from_test_loss = vali_set_loss(model, vali_from_test_dl, loss_fn)
+            logging.info("\t{:3}\t{:15.2f}\t{:15.2f}\t{:13.2f}s\t\t".format(
+                i_epoch, vali_from_train_loss, vali_from_test_loss, time.time() - epoch_end_time))
+
+        params = SimpleNamespace(**params)
+        train_dl, vali_from_train_dl, vali_from_test_dl, test_dl = prepare_main_model_data(
+            x_train, y_train, self.train_step_lens, x_validation, y_validation, self.validation_step_lens,
+            params.batch_size)
+        loss_fn = torch.nn.MSELoss(reduction='sum')
+        optimizer = torch.optim.Adam(model.parameters(), lr=params.lr)
+        scheduler = ExponentialLR(optimizer, gamma=1)
+        logging.info('\tEpoch | Vali_train_Loss | Vali_test_Loss | Duration\t\t')
+        epoch_end_time = time.time()
+        for i_epoch in range(params.epoch):
+            eval_during_training(model, vali_from_train_dl, vali_from_test_dl, loss_fn, epoch_end_time, i_epoch)
+            epoch_end_time = time.time()
+            train(model, train_dl, optimizer, loss_fn, params)
+            scheduler.step()
+        eval_after_training(model, test_dl, y_validation, validation_weight, params)
+
     def build_sub_model(self, model, x_train, y_train, x_validation, y_validation, validation_weight, params):
-        def prepare_data(x_train, y_train, train_step_lens, x_validation, y_validation, validation_step_lens,
-                         batch_size):
+        def prepare_sub_model_data(x_train, y_train, train_step_lens, x_validation, y_validation, validation_step_lens,
+                                   batch_size):
             x_train = torch.from_numpy(x_train).float()
             y_train = torch.from_numpy(y_train).float()
             train_step_lens = torch.from_numpy(train_step_lens)
@@ -276,7 +364,7 @@ class TianModel(BaseModel):
 
             return train_dl, vali_from_train_dl, vali_from_test_dl, test_dl
 
-        def train(model, train_dl):
+        def train(model, train_dl, optimizer, loss_fn, params):
             for i_batch, (xb, yb, lens) in enumerate(train_dl):
                 n = random.randint(1, 100)
                 if n > params.use_ratio:
@@ -292,24 +380,7 @@ class TianModel(BaseModel):
                 train_loss.backward()
                 optimizer.step()
 
-        def vali_set_loss(nn_model, validation_dl, loss_fn):
-            validation_loss = []
-            for x_validation, y_validation, lens in validation_dl:
-                if USE_GPU:
-                    x_validation = x_validation.cuda()
-                    y_validation = y_validation.cuda()
-                with torch.no_grad():
-                    y_validation_pred = nn_model(x_validation, lens)
-                    validation_loss.append(loss_fn(y_validation_pred, y_validation).item() / x_validation.shape[0])
-            return np.mean(validation_loss)
-
-        def eval_during_training(model, vali_from_train_dl, vali_from_test_dl, epoch_end_time):
-            vali_from_train_loss = vali_set_loss(model, vali_from_train_dl, loss_fn)
-            vali_from_test_loss = vali_set_loss(model, vali_from_test_dl, loss_fn)
-            logging.info("\t{:3}\t{:15.2f}\t{:15.2f}\t{:13.2f}s\t\t".format(
-                i_epoch, vali_from_train_loss, vali_from_test_loss, time.time() - epoch_end_time))
-
-        def eval_after_training(model, test_dl, y_validation, validation_weight, show_plots=False):
+        def eval_after_training(model, test_dl, y_validation, validation_weight, params, show_plots=False):
             with torch.no_grad():
                 y_pred_list = []
                 for i_batch, (xb, yb, lens) in enumerate(test_dl):
@@ -330,8 +401,24 @@ class TianModel(BaseModel):
                 plt.show()
             return y_pred
 
+        def eval_during_training(model, vali_from_train_dl, vali_from_test_dl, loss_fn, epoch_end_time, i_epoch):
+            def vali_set_loss(nn_model, validation_dl, loss_fn):
+                validation_loss = []
+                for x_validation, y_validation, lens in validation_dl:
+                    if USE_GPU:
+                        x_validation = x_validation.cuda()
+                        y_validation = y_validation.cuda()
+                    with torch.no_grad():
+                        y_validation_pred = nn_model(x_validation, lens)
+                        validation_loss.append(loss_fn(y_validation_pred, y_validation).item() / x_validation.shape[0])
+                return np.mean(validation_loss)
+            vali_from_train_loss = vali_set_loss(model, vali_from_train_dl, loss_fn)
+            vali_from_test_loss = vali_set_loss(model, vali_from_test_dl, loss_fn)
+            logging.info("\t{:3}\t{:15.2f}\t{:15.2f}\t{:13.2f}s\t\t".format(
+                i_epoch, vali_from_train_loss, vali_from_test_loss, time.time() - epoch_end_time))
+
         params = SimpleNamespace(**params)
-        train_dl, vali_from_train_dl, vali_from_test_dl, test_dl = prepare_data(
+        train_dl, vali_from_train_dl, vali_from_test_dl, test_dl = prepare_sub_model_data(
             x_train, y_train, self.train_step_lens, x_validation, y_validation, self.validation_step_lens,
             params.batch_size)
         loss_fn = torch.nn.MSELoss(reduction='sum')
@@ -340,11 +427,11 @@ class TianModel(BaseModel):
         logging.info('\tEpoch | Vali_train_Loss | Vali_test_Loss | Duration\t\t')
         epoch_end_time = time.time()
         for i_epoch in range(params.epoch):
-            eval_during_training(model, vali_from_train_dl, vali_from_test_dl, epoch_end_time)
+            eval_during_training(model, vali_from_train_dl, vali_from_test_dl, loss_fn, epoch_end_time, i_epoch)
             epoch_end_time = time.time()
-            train(model, train_dl)
+            train(model, train_dl, optimizer, loss_fn, params)
             scheduler.step()
-        eval_after_training(model, test_dl, y_validation, validation_weight)
+        eval_after_training(model, test_dl, y_validation, validation_weight, params)
 
     def predict(self, nn_model, x_test):
         self.test_step_lens = self._get_step_len(x_test)
@@ -432,6 +519,6 @@ if __name__ == "__main__":
     weights.update({key: [FORCE_PHASE] * len(x_fields[key]) for key in x_fields.keys()})
     model_builder = TianModel(data_path, x_fields, y_fields, weights, lambda: MinMaxScaler(feature_range=(0, 3)))
     subjects = model_builder.get_all_subjects()
-    model_builder.preprocess_train_evaluation(subjects[:13], subjects[13:], subjects[13:])
-    # model.cross_validation(subjects)
+    # model_builder.preprocess_train_evaluation(subjects[:13], subjects[13:], subjects[13:])
+    model_builder.cross_validation(subjects)
     plt.show()

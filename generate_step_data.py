@@ -6,7 +6,7 @@ import json
 from scipy.interpolate import interp1d
 from customized_logger import logger as logging
 from const import TRIALS, SUBJECTS, ALL_FIELDS, KAM_PHASE, FORCE_PHASE, STEP_PHASE
-from const import SAMPLES_BEFORE_STEP, SAMPLES_AFTER_STEP, DATA_PATH, L_PLATE_FORCE_Z
+from const import SAMPLES_BEFORE_STEP, SAMPLES_AFTER_STEP, DATA_PATH, L_PLATE_FORCE_Z, FORCE_DATA_FIELDS
 from const import R_PLATE_FORCE_Z, R_KAM_COLUMN, EVENT_COLUMN, CONTINUOUS_FIELDS, DISCRETE_FIELDS, SEGMENT_DEFINITIONS
 from const import SEGMENT_DATA_FIELDS, STEP_TYPE, STANCE_SWING, STANCE
 
@@ -36,17 +36,26 @@ def get_step_data(step_array):
 
 
 def append_force_phase(one_step):
-    if STEP_TYPE == STANCE_SWING:
-        # -20: swing phase might contain stance phase of next step, in which case, there might be a force.
-        step_max_index = one_step[one_step[STEP_PHASE] == 1.].index.max() - 20
-    elif STEP_TYPE == STANCE:
-        step_max_index = one_step[one_step[STEP_PHASE] == 1.].index.max()
-    else:
-        raise RuntimeError("not handled case for STEP_TYPE {}".format(STEP_TYPE))
-    padding_size = one_step.shape[0] - step_max_index
-    one_step[FORCE_PHASE] = \
-        np.pad(np.where(one_step[R_PLATE_FORCE_Z][:step_max_index] < -20, 1., 0.), (0, padding_size)) \
-        * one_step[STEP_PHASE]
+    # if STEP_TYPE == STANCE_SWING:
+    #     # -20: swing phase might contain stance phase of next step, in which case, there might be a force.
+    #     step_max_index = one_step[one_step[STEP_PHASE] == 1.].index.max() - 20
+    # elif STEP_TYPE == STANCE:
+    #     step_max_index = one_step[one_step[STEP_PHASE] == 1.].index.max()
+    # else:
+    #     raise RuntimeError("not handled case for STEP_TYPE {}".format(STEP_TYPE))
+    # padding_size = one_step.shape[0] - step_max_index
+    one_step[FORCE_PHASE] = np.where(one_step[R_PLATE_FORCE_Z][:] < -20, 1., 0.)
+    return one_step
+
+
+def fill_invalid_cop(one_step, safe_frame=3):
+    step_length = np.sum(np.where((one_step.iloc[:, :10] == 0).all(axis=1), 0, 1))
+    f_nonzero = np.where(one_step[FORCE_PHASE] == 1)[0]
+    f_nonzero = f_nonzero[f_nonzero > 10]
+    f_nonzero = f_nonzero[f_nonzero < 150]
+    for name in FORCE_DATA_FIELDS[9:12]:
+        one_step[name].iloc[:f_nonzero[safe_frame - 1]] = one_step[name].iloc[f_nonzero[safe_frame - 1]]
+        one_step[name].iloc[f_nonzero[-safe_frame]:step_length] = one_step[name].iloc[f_nonzero[-safe_frame]]
     return one_step
 
 
@@ -123,9 +132,9 @@ if __name__ == "__main__":
     all_data_dict = {subject + " " + trial: pd.read_csv(os.path.join(DATA_PATH, subject, "combined", trial + ".csv"))
                      for subject in SUBJECTS for trial in TRIALS}
     max_step_length = max([trial_data[EVENT_COLUMN].value_counts().max() for trial_data in all_data_dict.values()])
-    SAMPLES_BEFORE_STEP = 40
     custom_process = [
         lambda step_data_list: map(append_force_phase, step_data_list),
+        lambda step_data_list: map(fill_invalid_cop, step_data_list),
         lambda step_data_list: map(append_kam_phase, step_data_list),
         lambda step_data_list: filter(is_step_data_corrupted, step_data_list),
         lambda step_data_list: filter(is_foot_on_right_plate_alone, step_data_list),
