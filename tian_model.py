@@ -9,7 +9,7 @@ from torch.utils.data import DataLoader, TensorDataset
 import numpy as np
 import time
 from const import IMU_FIELDS, SENSOR_LIST, DATA_PATH, KAM_PHASE, SUBJECT_WEIGHT, SUBJECT_HEIGHT, FORCE_PHASE, \
-    FORCE_DATA_FIELDS, STATIC_DATA
+    FORCE_DATA_FIELDS, STATIC_DATA, SEGMENT_MASS_PERCENT
 from torch.nn.utils.rnn import pack_padded_sequence, pad_packed_sequence
 from sklearn.preprocessing import MinMaxScaler
 from types import SimpleNamespace
@@ -99,7 +99,7 @@ class FCModel(nn.Module):
         self.linear2 = nn.Linear(hidden_num, hidden_num, bias=False)
         self.linear3 = nn.Linear(hidden_num, hidden_num, bias=False)
         self.linear4 = nn.Linear(hidden_num, hidden_num, bias=False)
-        self.hidden2output = nn.Linear(hidden_num, y_dim)
+        self.hidden2output = nn.Linear(hidden_num, y_dim, bias=False)
         self.sigmoid = nn.Sigmoid()
 
     def forward(self, sequence, lens):
@@ -112,6 +112,16 @@ class FCModel(nn.Module):
         # sequence = self.linear3(sequence).clamp(min=0)
         # sequence = self.linear4(sequence).clamp(min=0)
         sequence = self.hidden2output(sequence)
+        return sequence
+
+
+class TianLinear(nn.Module):
+    def __init__(self, x_dim, y_dim):
+        super(TianLinear, self).__init__()
+        self.linear = nn.Linear(x_dim, y_dim)
+
+    def forward(self, sequence, lens=None):
+        sequence = self.linear(sequence)
         return sequence
 
 
@@ -170,36 +180,18 @@ class TianModel(BaseModel):
     def preprocess_train_data(self, x, y, weight):
         x['midout_force_x'], x['midout_force_z'] = -x['midout_force_x'], -x['midout_force_z']
         x['midout_r_x'], x['midout_r_z'] = x['midout_r_x'] / 1000, x['midout_r_z'] / 1000
+        # x['r_z'] = x['r_z'] / 1000
         self.x_need_norm = {k: x[k] for k in set(list(x.keys())) - set(['anthro'])}
         x.update(**self.normalize_data(self.x_need_norm, self._data_scalar, 'fit_transform', scalar_mode='by_each_column'))
 
-        """check correctness"""
-        # kam_fx_rz = (x['midout_r_z'] * x['midout_force_x']) / (x['anthro'][0, 0, 0] * x['anthro'][0, 0, 1])
-        # kam_fz_rx = - (x['midout_r_x'] * x['midout_force_z']) / (x['anthro'][0, 0, 0] * x['anthro'][0, 0, 1])
-        # kam = (x['midout_r_z'] * x['midout_force_x'] - x['midout_r_x'] * x['midout_force_z']) / (x['anthro'][0, 0, 0] * x['anthro'][0, 0, 1])
-        # plt.figure()
-        # p1, = plt.plot(kam[:100].ravel())
-        # p2, = plt.plot(kam_fx_rz[:100].ravel())
-        # p3, = plt.plot(kam_fz_rx[:100].ravel())
-        # plt.legend([p1, p2, p3], ['kam', 'fx_rz', 'fz_rx'])
-
-        # midout_r_z = x['midout_r_z']
-        # midout_r_z = midout_r_z[midout_r_z != 0]
-        # r_z_vid = x['r_z'][:, :, 1]
-        # r_z_vid = r_z_vid[r_z_vid != 0]
-        # p2, = plt.plot(-midout_r_z[:])
-        # p3, = plt.plot(-r_z_vid[:] / 500 + 3.18)
-        # plt.show()
-
-        # y = self.normalize_data(y, self._data_scalar, 'fit_transform', scalar_mode='by_each_column')
         return x, y, weight
 
     def preprocess_validation_test_data(self, x, y, weight):
         x['midout_force_x'], x['midout_force_z'] = -x['midout_force_x'], -x['midout_force_z']
         x['midout_r_x'], x['midout_r_z'] = x['midout_r_x'] / 1000, x['midout_r_z'] / 1000
+        # x['r_z'] = x['r_z'] / 1000
         self.x_need_norm = {k: x[k] for k in set(list(x.keys())) - set(['anthro'])}
         x.update(**self.normalize_data(self.x_need_norm, self._data_scalar, 'transform', scalar_mode='by_each_column'))
-        # y = self.normalize_data(y, self._data_scalar, 'transform', scalar_mode='by_each_column')
         return x, y, weight
 
     @staticmethod
@@ -226,8 +218,16 @@ class TianModel(BaseModel):
         return loss_positive
 
     def train_model(self, x_train, y_train, x_validation=None, y_validation=None, validation_weight=None):
-        sub_model_base_param = {'epoch': 12, 'batch_size': 20, 'lr': 1e-3, 'use_ratio': 20}
+        sub_model_base_param = {'epoch': 12, 'batch_size': 20, 'lr': 1e-3, 'weight_decay': 1e-5, 'use_ratio': 20}
         self.train_step_lens, self.validation_step_lens = self._get_step_len(x_train), self._get_step_len(x_validation)
+
+        x_train_rz, x_validation_rz = x_train['r_z'], x_validation['r_z']
+        y_train_rz, y_validation_rz = x_train['midout_r_z'], x_validation['midout_r_z']
+        model_rz = TianRNN(x_train_rz.shape[2], y_train_rz.shape[2])
+        model_rz = model_rz.cuda()
+        params = {**sub_model_base_param, **{'target_name': 'midout_r_z', 'fields': ['KNEE_Z']}}
+        params['epoch'] = 20
+        self.build_sub_model(model_rz, x_train_rz, y_train_rz, x_validation_rz, y_validation_rz, validation_weight, params)
 
         x_train_rx, x_validation_rx = x_train['r_x'], x_validation['r_x']
         y_train_rx, y_validation_rx = x_train['midout_r_x'], x_validation['midout_r_x']
@@ -235,13 +235,6 @@ class TianModel(BaseModel):
         model_rx = model_rx.cuda()
         params = {**sub_model_base_param, **{'target_name': 'midout_r_x', 'fields': ['KNEE_X']}}
         self.build_sub_model(model_rx, x_train_rx, y_train_rx, x_validation_rx, y_validation_rx, validation_weight, params)
-
-        x_train_rz, x_validation_rz = x_train['r_z'], x_validation['r_z']
-        y_train_rz, y_validation_rz = x_train['midout_r_z'], x_validation['midout_r_z']
-        model_rz = TianRNN(x_train_rz.shape[2], y_train_rz.shape[2])
-        model_rz = model_rz.cuda()
-        params = {**sub_model_base_param, **{'target_name': 'midout_r_z', 'fields': ['KNEE_Z']}}
-        self.build_sub_model(model_rz, x_train_rz, y_train_rz, x_validation_rz, y_validation_rz, validation_weight, params)
 
         x_train_fz, x_validation_fz = x_train['force_z'], x_validation['force_z']
         y_train_fz, y_validation_fz = x_train['midout_force_z'], x_validation['midout_force_z']
@@ -337,7 +330,7 @@ class TianModel(BaseModel):
             x_train, y_train, self.train_step_lens, x_validation, y_validation, self.validation_step_lens,
             params.batch_size)
         loss_fn = torch.nn.MSELoss(reduction='sum')
-        optimizer = torch.optim.Adam(model.parameters(), lr=params.lr)
+        optimizer = torch.optim.Adam(model.parameters(), lr=params.lr, weight_decay=params.weight_decay)
         scheduler = ExponentialLR(optimizer, gamma=1)
         logging.info('\tEpoch | Vali_train_Loss | Vali_test_Loss | Duration\t\t')
         epoch_end_time = time.time()
@@ -380,9 +373,8 @@ class TianModel(BaseModel):
                 n = random.randint(1, 100)
                 if n > params.use_ratio:
                     continue  # increase the speed of epoch
-                if USE_GPU:
-                    xb = xb.cuda()
-                    yb = yb.cuda()
+                xb = xb.cuda()
+                yb = yb.cuda()
                 optimizer.zero_grad()
                 y_pred = model(xb, lens)
                 # train_loss = self.loss_fun_emphasize_peak(y_pred, yb)
@@ -414,12 +406,14 @@ class TianModel(BaseModel):
             def vali_set_loss(nn_model, validation_dl, loss_fn):
                 validation_loss = []
                 for x_validation, y_validation, lens in validation_dl:
-                    if USE_GPU:
-                        x_validation = x_validation.cuda()
-                        y_validation = y_validation.cuda()
+                    x_validation = x_validation.cuda()
+                    y_validation = y_validation.cuda()
                     with torch.no_grad():
                         y_validation_pred = nn_model(x_validation, lens)
                         validation_loss.append(loss_fn(y_validation_pred, y_validation).item() / x_validation.shape[0])
+                # plt.figure()
+                # plt.plot(x_validation[0, :, 0].cpu().numpy())
+                # plt.plot(y_validation_pred[0, :, 0].cpu().numpy())
                 return np.mean(validation_loss)
             vali_from_train_loss = vali_set_loss(model, vali_from_train_dl, loss_fn)
             vali_from_test_loss = vali_set_loss(model, vali_from_test_dl, loss_fn)
@@ -489,10 +483,10 @@ if __name__ == "__main__":
     IMU_FIELDS_ORI = IMU_FIELDS[9:13]
     IMU_DATA_FIELDS_ACC = [IMU_FIELD + "_" + SENSOR for SENSOR in SENSOR_LIST for IMU_FIELD in IMU_FIELDS_ACC]
     IMU_DATA_FIELDS_GYR = [IMU_FIELD + "_" + SENSOR for SENSOR in SENSOR_LIST for IMU_FIELD in IMU_FIELDS_GYR]
-    VID_RKNEE = [loc + '_' + axis + '_' + angle for loc in ['RKnee'] for angle in ['90'] for axis in ['x', 'y']]
+    VID_RKNEE = [loc + '_' + axis + '_' + angle for loc in ['RKnee'] for angle in ['90'] for axis in ['y']]
 
-    R_LEG_ACC = [imu_field + "_" + sensor for sensor in ['R_SHANK', 'R_THIGH'] for imu_field in IMU_FIELDS_ACC]
-    R_LEG_GYR = [imu_field + "_" + sensor for sensor in ['R_SHANK', 'R_THIGH'] for imu_field in IMU_FIELDS_ACC]
+    R_LEG_ACC = [imu_field + "_" + sensor for sensor in ['R_SHANK', 'R_FOOT'] for imu_field in IMU_FIELDS_ACC]
+    R_LEG_GYR = [imu_field + "_" + sensor for sensor in ['R_SHANK', 'R_FOOT'] for imu_field in IMU_FIELDS_GYR]
     R_LEG_ORI = [ori_field + "_" + sensor for sensor in ['R_SHANK', 'R_FOOT'] for ori_field in IMU_FIELDS_ORI]
 
     ACC_VERTICAL = ["AccelY_" + sensor for sensor in SENSOR_LIST[2:]]
@@ -508,7 +502,7 @@ if __name__ == "__main__":
     x_fields = {
         'force_x': ACC_ML,
         'force_z': ACC_VERTICAL,
-        'r_z': VID_RKNEE,
+        'r_z': VID_RKNEE + ['GyroX_R_FOOT'],        # ['GyroX_R_FOOT']
         'r_x': VID_RKNEE,
         'anthro': STATIC_DATA,
         'midout_force_x': ['plate_2_force_x'],
@@ -525,6 +519,7 @@ if __name__ == "__main__":
     weights.update({key: [FORCE_PHASE] * len(x_fields[key]) for key in x_fields.keys()})
     model_builder = TianModel(data_path, x_fields, y_fields, weights, lambda: MinMaxScaler(feature_range=(0, 3)))
     subjects = model_builder.get_all_subjects()
-    model_builder.preprocess_train_evaluation(subjects[:13], subjects[13:], subjects[13:])
+    # model_builder.preprocess_train_evaluation(subjects[:13], subjects[13:], subjects[13:])
+    model_builder.preprocess_train_evaluation(subjects[4:], subjects[:4], subjects[:4])
     # model_builder.cross_validation(subjects)
     plt.show()

@@ -36,14 +36,14 @@ def get_step_data(step_array):
 
 
 def append_force_phase(one_step):
-    # if STEP_TYPE == STANCE_SWING:
-    #     # -20: swing phase might contain stance phase of next step, in which case, there might be a force.
-    #     step_max_index = one_step[one_step[STEP_PHASE] == 1.].index.max() - 20
-    # elif STEP_TYPE == STANCE:
-    #     step_max_index = one_step[one_step[STEP_PHASE] == 1.].index.max()
-    # else:
-    #     raise RuntimeError("not handled case for STEP_TYPE {}".format(STEP_TYPE))
-    # padding_size = one_step.shape[0] - step_max_index
+    if STEP_TYPE == STANCE_SWING:
+        # -20: swing phase might contain stance phase of next step, in which case, there might be a force.
+        step_max_index = one_step[one_step[STEP_PHASE] == 1.].index.max() - 20
+    elif STEP_TYPE == STANCE:
+        step_max_index = one_step[one_step[STEP_PHASE] == 1.].index.max()
+    else:
+        raise RuntimeError("not handled case for STEP_TYPE {}".format(STEP_TYPE))
+    padding_size = one_step.shape[0] - step_max_index
     one_step[FORCE_PHASE] = np.where(one_step[R_PLATE_FORCE_Z][:] < -20, 1., 0.)
     return one_step
 
@@ -81,6 +81,13 @@ def append_kam_phase(one_step):
 
 def is_step_data_corrupted(one_step):
     return (one_step[EVENT_COLUMN] >= 0.).all()
+
+
+def is_openpose_rknee_invalid(one_step):
+    vid_90 = one_step['RKnee_y_90'][one_step['RKnee_y_90'] > 0.]
+    vid_90 = (one_step['RKnee_y_90'][one_step['RKnee_y_90'] > 0.] > 1150).all()
+    vid_180 = (one_step['RKnee_y_180'][one_step['RKnee_y_180'] > 0.] > 1150).all()
+    return vid_90 and vid_180
 
 
 def is_foot_on_right_plate_alone(one_step_array):
@@ -138,6 +145,7 @@ if __name__ == "__main__":
         lambda step_data_list: map(fill_invalid_cop, step_data_list),
         lambda step_data_list: map(append_kam_phase, step_data_list),
         lambda step_data_list: filter(is_step_data_corrupted, step_data_list),
+        lambda step_data_list: filter(is_openpose_rknee_invalid, step_data_list),       # !!! remove after updating openpose
         lambda step_data_list: filter(is_foot_on_right_plate_alone, step_data_list),
         # lambda step_data_list: filter(is_kam_positive, step_data_list),
         lambda step_data_list: filter(is_kam_length_reasonable, step_data_list)
