@@ -29,7 +29,7 @@ def sync_and_crop_data_frame(subject, trial):
     video_180_data.fill_low_probability_data()
 
     # create step events
-    imu_data.create_step_id(verbose=True)
+    imu_data.create_step_id(verbose=False)
 
     # Synchronize Vicon and IMU data
     vicon_sync_data = vicon_data.get_angular_velocity_theta('R_SHANK', 1000)

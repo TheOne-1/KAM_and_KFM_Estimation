@@ -116,6 +116,10 @@ class ViconCsvReader:
                                                for force_name in force_names_ori], axis=1)
         filtered_force_array = filtered_force_array[::10, :]
         filtered_force_df = pd.DataFrame(filtered_force_array, columns=FORCE_DATA_FIELDS)
+        cal_offset = sub_info[['Caliwand for plate 1-x', 'Caliwand for plate 1-y', 'Caliwand for plate 1-z',
+                               'Caliwand for plate 2-x', 'Caliwand for plate 2-y', 'Caliwand for plate 2-z']]
+        filtered_force_df[['plate_1_cop_x', 'plate_1_cop_y', 'plate_1_cop_z',
+                           'plate_2_cop_x', 'plate_2_cop_y', 'plate_2_cop_z']] += cal_offset.values
 
         self.segment_definitions = segment_definitions
         if segment_definitions != {}:
@@ -176,9 +180,9 @@ class ViconCsvReader:
 
     def get_right_external_kam(self, sub_info):
         sub_height, sub_weight = sub_info[[SUBJECT_HEIGHT, SUBJECT_WEIGHT]]
-        cal_offset = sub_info[['Caliwand for plate 2-x', 'Caliwand for plate 2-y', 'Caliwand for plate 2-z']]
+        # cal_offset = sub_info[['Caliwand for plate 2-x', 'Caliwand for plate 2-y', 'Caliwand for plate 2-z']]
         force_cop = self.data_frame[['plate_2_cop_x', 'plate_2_cop_y', 'plate_2_cop_z']].values
-        force_cop += cal_offset
+        # force_cop += cal_offset
         knee_origin = (self.data_frame[['RFME_X', 'RFME_Y', 'RFME_Z']].values +
                        self.data_frame[['RFLE_X', 'RFLE_Y', 'RFLE_Z']].values) / 2
         r = force_cop - knee_origin
@@ -327,7 +331,7 @@ class SageCsvReader:
                                    self.data_frame.columns]
         self.missing_data_index = self.data_frame.isnull().any(axis=1)
         self.data_frame = self.data_frame.interpolate(method='linear', axis=0)
-        self.data_frame.loc[:, :] = data_filter(self.data_frame.values, 15, 100, 2)
+        # self.data_frame.loc[:, :] = data_filter(self.data_frame.values, 15, 100, 2)
 
     def get_norm(self, sensor, field, is_plot=False):
         assert sensor in SENSOR_LIST

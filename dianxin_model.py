@@ -48,7 +48,7 @@ class DXKamModel(BaseModel):
     def get_all_scores(self, y_true, y_pred, weights=None):
         y_true = self.normalize_data(y_true, self._data_scalar, 'inverse_transform', 'by_each_column')
         y_pred = self.normalize_data(y_pred, self._data_scalar, 'inverse_transform', 'by_each_column')
-        return BaseModel.get_all_scores(self, y_true, y_pred, weights)
+        return BaseModel.get_all_scores(y_true, y_pred, self._y_fields, weights)
 
     def customized_analysis(self, sub_y_true, sub_y_pred, all_scores):
         sub_y_true = self.normalize_data(sub_y_true, self._data_scalar, 'inverse_transform', 'by_each_column')
