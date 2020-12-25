@@ -27,6 +27,8 @@ def sync_and_crop_data_frame(subject, trial):
     # interpolate low probability data
     video_90_data.fill_low_probability_data()
     video_180_data.fill_low_probability_data()
+    video_90_data.resample_to_100hz()
+    video_180_data.resample_to_100hz()
 
     # create step events
     imu_data.create_step_id(verbose=False)

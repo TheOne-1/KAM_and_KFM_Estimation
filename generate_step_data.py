@@ -20,7 +20,7 @@ def get_step_data(step_array):
 
     step_array = pd.concat([step_array]+list(map(get_segment_point, SEGMENT_DATA_FIELDS)), axis=1)
 
-    def get_stance_swing_data(_id):
+    def get_one_step_data(_id):
         step = step_array[np.abs(step_array[EVENT_COLUMN]) == _id]
         min_index, max_index = step.index.min(), step.index.max()
         extended_step = step_array[min_index-SAMPLES_BEFORE_STEP:max_index+SAMPLES_AFTER_STEP]
@@ -32,7 +32,7 @@ def get_step_data(step_array):
         return extended_step
 
     target_ids = np.abs(step_array[EVENT_COLUMN]).drop_duplicates().dropna()
-    return map(get_stance_swing_data, target_ids)
+    return map(get_one_step_data, target_ids)
 
 
 def append_force_phase(one_step):
@@ -129,6 +129,7 @@ def generate_step_data(export_path, processes):
 
 if __name__ == "__main__":
     logging.debug("Loading all csv data")
+    SAMPLES_BEFORE_STEP = 40
     all_data_dict = {subject + " " + trial: pd.read_csv(os.path.join(DATA_PATH, subject, "combined", trial + ".csv"))
                      for subject in SUBJECTS for trial in TRIALS}
     max_step_length = max([trial_data[EVENT_COLUMN].value_counts().max() for trial_data in all_data_dict.values()])
@@ -138,11 +139,8 @@ if __name__ == "__main__":
         lambda step_data_list: map(append_kam_phase, step_data_list),
         lambda step_data_list: filter(is_step_data_corrupted, step_data_list),
         lambda step_data_list: filter(is_foot_on_right_plate_alone, step_data_list),
-        lambda step_data_list: filter(is_kam_positive, step_data_list),
+        # lambda step_data_list: filter(is_kam_positive, step_data_list),
         lambda step_data_list: filter(is_kam_length_reasonable, step_data_list)
     ]
     generate_step_data('40samples+stance.h5', custom_process)
-    # TRIALS = ['baseline', 'fpa', 'step_width']
-    # generate_step_data('40samples+stance+kick_out_trunksway.h5')
-    # custom_process += [lambda step_data_list: map(resample_to_100_sample, step_data_list)]
-    # generate_step_data('stance_resampled.h5', custom_process)
+
