@@ -8,11 +8,12 @@ import matplotlib.pyplot as plt
 from torch.utils.data import DataLoader, TensorDataset
 import numpy as np
 import time
-from const import IMU_FIELDS, SENSOR_LIST, DATA_PATH, KAM_PHASE, SUBJECT_WEIGHT, SUBJECT_HEIGHT, FORCE_PHASE, \
+from const import IMU_FIELDS, SENSOR_LIST, DATA_PATH, VIDEO_LIST, SUBJECT_WEIGHT, SUBJECT_HEIGHT, FORCE_PHASE, \
     FORCE_DATA_FIELDS, STATIC_DATA, SEGMENT_MASS_PERCENT
 from torch.nn.utils.rnn import pack_padded_sequence, pad_packed_sequence
 from sklearn.preprocessing import MinMaxScaler
 from types import SimpleNamespace
+import pandas as pd
 
 USE_GPU = True
 
@@ -164,7 +165,16 @@ class TianModel(BaseModel):
     def __init__(self, data_path, x_fields, y_fields, weights, base_scalar):
         BaseModel.__init__(self, data_path, x_fields, y_fields, weights, base_scalar)
         self.train_step_lens, self.validation_step_lens, self.test_step_lens = [None] * 3
+        self.vid_static_cali()
         self.add_additional_columns()
+
+    def vid_static_cali(self):
+        vid_y_90_col_loc = [self._data_fields.index(marker + '_y_90') for marker in VIDEO_LIST]
+        for sub_name, sub_data in self._data_all_sub.items():
+            static_side_df = pd.read_csv(DATA_PATH + '/' + sub_name + '/combined/static_side.csv', index_col=0)
+            r_ankle_z = np.median(static_side_df['RAnkle_y_90'])
+            sub_data[:, :, vid_y_90_col_loc] = sub_data[:, :, vid_y_90_col_loc] - r_ankle_z + 1500
+            self._data_all_sub[sub_name] = sub_data
 
     def add_additional_columns(self):
         marker_col_loc = [self._data_fields.index(field_name) for field_name in KNEE_MARKER_FIELDS]
