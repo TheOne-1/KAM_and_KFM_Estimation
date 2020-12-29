@@ -179,12 +179,18 @@ class TianModel(BaseModel):
     def add_additional_columns(self):
         marker_col_loc = [self._data_fields.index(field_name) for field_name in KNEE_MARKER_FIELDS]
         force_col_loc = [self._data_fields.index(field_name) for field_name in FORCE_DATA_FIELDS]
+        # vid_col_loc = [self._data_fields.index(marker + '_x_180') for marker in ["LShoulder", "RShoulder", "MidHip"]]
+        # plt.figure()
         for sub_name, sub_data in self._data_all_sub.items():
             marker_data = sub_data[:, :, marker_col_loc].copy()
             force_data = sub_data[:, :, force_col_loc].copy()
             knee_vector = force_data[:, :, 9:12] - (marker_data[:, :, :3] + marker_data[:, :, 3:6]) / 2
             total_force = force_data[:, :, :3] + force_data[:, :, 6:9]
             self._data_all_sub[sub_name] = np.concatenate([sub_data, knee_vector, total_force], axis=2)
+        #     vid_data = sub_data[:, :, vid_col_loc]
+        #     trunk_sway_x = (vid_data[:, :, 0] + vid_data[:, :, 1]) / 2 - vid_data[:, :, 2]
+        #     plt.plot(force_data[:, :, 9].ravel(), trunk_sway_x.ravel(), '.')
+        # plt.show()
         self._data_fields.extend(['KNEE_X', 'KNEE_Y', 'KNEE_Z', 'TOTAL_F_X', 'TOTAL_F_Y', 'TOTAL_F_Z'])
 
     def preprocess_train_data(self, x, y, weight):
@@ -239,7 +245,6 @@ class TianModel(BaseModel):
         y_train_rz, y_validation_rz = x_train['midout_r_z'], x_validation['midout_r_z']
         model_rz = TianRNN(x_train_rz.shape[2], y_train_rz.shape[2]).cuda()
         params = {**sub_model_base_param, **{'target_name': 'midout_r_z', 'fields': ['KNEE_Z']}}
-        params['epoch'] = 2
         self.build_sub_model(model_rz, x_train_rz, y_train_rz, x_validation_rz, y_validation_rz, validation_weight, params)
 
         x_train_fz, x_validation_fz = x_train['force_z'], x_validation['force_z']
@@ -257,6 +262,7 @@ class TianModel(BaseModel):
         four_source_model = FourSourceModel(model_fx, model_fz, model_rx, model_rz, self._data_scalar).cuda()
         params = {**sub_model_base_param, **{'target_name': 'main_output', 'fields': ['EXT_KM_Y']}}
         params['lr'] = params['lr'] * 0.1
+        params['batch_size'] = 200
         self.build_main_model(four_source_model, x_train, y_train, x_validation, y_validation, validation_weight, params)
         return four_source_model
 
@@ -495,6 +501,7 @@ if __name__ == "__main__":
 
     ACC_VERTICAL = ["AccelY_" + sensor for sensor in SENSOR_LIST[2:]]
     ACC_ML = ["AccelX_" + sensor for sensor in SENSOR_LIST[2:]]
+    GYR_ML = ["GyroX_" + sensor for sensor in SENSOR_LIST[2:]]
 
     MARKER_Z = [marker + '_Z' for marker in ['RFME', 'RFLE', 'RTAM', 'RFAL']]
     MARKER_X = [marker + '_X' for marker in ['RFME', 'RFLE', 'RTAM', 'RFAL']]
@@ -505,7 +512,7 @@ if __name__ == "__main__":
 
     VID_FIELDS = [loc + '_' + axis + '_' + angle for loc in ['RShoulder', 'RHip'] for angle in ['180'] for axis in ['x']]
     x_fields = {
-        'force_x': ACC_ML,
+        'force_x': ACC_ML + GYR_ML,
         'force_z': ACC_VERTICAL,
         'r_x': [axis + sensor for axis in ["AccelX_", 'GyroZ_'] for sensor in ['WAIST', 'CHEST']],            # GyroZ_
         'r_z': ['RKnee_y_90', 'GyroX_R_FOOT'],
@@ -526,6 +533,6 @@ if __name__ == "__main__":
     weights.update({key: [FORCE_PHASE] * len(x_fields[key]) for key in x_fields.keys()})
     model_builder = TianModel(data_path, x_fields, y_fields, weights, lambda: MinMaxScaler(feature_range=(0, 3)))
     subjects = model_builder.get_all_subjects()
-    model_builder.preprocess_train_evaluation(subjects[:13], subjects[13:], subjects[13:])
-    # model_builder.cross_validation(subjects)
+    # model_builder.preprocess_train_evaluation(subjects[:13], subjects[13:], subjects[13:])
+    model_builder.cross_validation(subjects)
     plt.show()
