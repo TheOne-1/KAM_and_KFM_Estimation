@@ -598,24 +598,13 @@ if __name__ == "__main__":
     SPINE_MARKER_FIELDS = [marker + axis for marker in ['CV7', 'MAI'] for axis in ['_X', '_Y', '_Z']]
 
     VID_FIELDS = [loc + '_' + axis + '_' + angle for loc in ['RShoulder', 'RHip'] for angle in ['180'] for axis in ['x']]
-    # x_fields = {
-    #     'force_x': ACC_ML,
-    #     'force_z': ACC_VERTICAL,
-    #     'r_x': [axis + sensor for axis in ["AccelX_", 'GyroZ_'] for sensor in ['WAIST', 'CHEST']],
-    #     'r_z': ['RKnee_y_90', 'GyroX_R_FOOT'],
-    #     # 'r_x': MARKER_X,            # GyroZ_
-    #     # 'r_z': MARKER_Z,
-    #     'anthro': STATIC_DATA,
-    #     'midout_force_x': ['plate_2_force_x'],
-    #     'midout_force_z': ['plate_2_force_z'],
-    #     'midout_r_x': ['KNEE_X'],
-    #     'midout_r_z': ['KNEE_Z'],
-    # }
     x_fields = {
         'force_x': ACC_ML,
         'force_z': ACC_VERTICAL,
-        'r_x': [axis + sensor for axis in ["AccelX_", 'GyroZ_'] for sensor in ['WAIST', 'CHEST', 'R_SHANK', 'R_THIGH']],
+        'r_x': [axis + sensor for axis in ["AccelX_", 'GyroZ_'] for sensor in ['WAIST', 'CHEST']],
         'r_z': ['RKnee_y_90', 'GyroX_R_FOOT'],
+        # 'r_x': MARKER_X,            # GyroZ_
+        # 'r_z': MARKER_Z,
         'anthro': STATIC_DATA,
         'midout_force_x': ['plate_2_force_x'],
         'midout_force_z': ['plate_2_force_z'],
