@@ -225,12 +225,12 @@ class VideoReader:
 
 if __name__ == '__main__':
     VICON_SAMPLE_RATE = 100
-    for sub_name in SUBJECTS[:1]:
+    for sub_name in SUBJECTS[5:11]:
         print(sub_name)
         for trial_name in TRIALS:
             print(trial_name)
             for camera in ['_90', '_180']:
                 video_file_name = os.path.join(VIDEO_PATH, sub_name, trial_name + camera + '.MOV')
                 output_file_name = os.path.join(DATA_PATH, sub_name, 'raw_video_output', trial_name + camera + '.csv')
-                reader = VideoReader(video_file_name, OPENPOSE_MODEL_PATH, True)
+                reader = VideoReader(video_file_name, OPENPOSE_MODEL_PATH, False)
                 reader.key_points_df.to_csv(output_file_name)

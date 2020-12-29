@@ -83,9 +83,10 @@ class BaseModel:
                 rmse = np.round(np.mean(np.concatenate([res['rmse'] for res in field_results])), 3)
                 mae = np.round(np.mean(np.concatenate([res['mae'] for res in field_results])), 3)
                 r_rmse = np.round(np.mean(np.concatenate([res['r_rmse'] for res in field_results])), 3)
+                sr_rmse = np.round(np.mean(np.concatenate([res['sr_rmse'] for res in field_results])), 3)
                 cor_value = np.round(np.mean(np.concatenate([res['cor_value'] for res in field_results])), 3)
                 mean_results += [{'output': output_name, 'field': field, 'r2': r2, 'rmse': rmse, 'mae': mae,
-                                  'r_rmse': r_rmse, 'cor_value': cor_value}]
+                                  'r_rmse': r_rmse, 'sr_rmse': sr_rmse, 'cor_value': cor_value}]
         self.print_table(mean_results)
         return mean_results
 
@@ -204,7 +205,7 @@ class BaseModel:
     @staticmethod
     def get_all_scores(y_true, y_pred, y_fields, weights=None):
         def get_column_score(arr_true, arr_pred, w):
-            r2, rmse, mae, r_rmse, cor_value = [np.zeros(arr_true.shape[0]) for _ in range(5)]
+            r2, rmse, mae, r_rmse, sr_rmse, cor_value = [np.zeros(arr_true.shape[0]) for _ in range(6)]
             for i in range(arr_true.shape[0]):
                 arr_true_i = arr_true[i, w[i, :]]
                 arr_pred_i = arr_pred[i, w[i, :]]
@@ -212,13 +213,14 @@ class BaseModel:
                 r2[i] = r2_score(arr_true_i, arr_pred_i)
                 rmse[i] = np.sqrt(mse(arr_true_i, arr_pred_i))
                 mae[i] = np.mean(abs((arr_true_i - arr_pred_i)))
-                r_rmse[i] = rmse[i] / (0.5*(arr_true_i.max() - arr_true_i.min() + arr_pred_i.max() - arr_pred_i.min()))
+                r_rmse[i] = rmse[i] / (0.5*(arr_true_i.max() - arr_true_i.min()))
+                sr_rmse[i] = rmse[i] / (0.5*(arr_true_i.max() - arr_true_i.min() + arr_pred_i.max() - arr_pred_i.min()))
                 cor_value[i] = pearsonr(arr_true_i, arr_pred_i)[0]
 
             locs = np.where(w.ravel())[0]
             r2_all = r2_score(arr_true.ravel()[locs], arr_pred.ravel()[locs])
             r2_all = np.full(r2.shape, r2_all)
-            return {'r2': r2, 'r2_all': r2_all, 'rmse': rmse, 'mae': mae, 'r_rmse': r_rmse,
+            return {'r2': r2, 'r2_all': r2_all, 'rmse': rmse, 'mae': mae, 'r_rmse': r_rmse, 'sr_rmse': sr_rmse,
                     'cor_value': cor_value}
 
         scores = []
