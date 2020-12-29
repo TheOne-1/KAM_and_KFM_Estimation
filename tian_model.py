@@ -16,7 +16,7 @@ from types import SimpleNamespace
 import pandas as pd
 
 USE_GPU = True
-GRAVITY = 9.81
+ROTATE_IMU = False
 
 
 class TianCNN(nn.Module):
@@ -153,9 +153,12 @@ class FourSourceModel(nn.Module):
         return output
 
     def inverse_scaling(self, data, fields):
-        min_, scale_ = self.scalars[fields].min_[0], self.scalars[fields].scale_[0]
         data[data == 0.] = np.nan
-        data = torch.add(data, - min_)
+        if isinstance(self.scalars[fields], MinMaxScaler):
+            bias_, scale_ = self.scalars[fields].min_[0], self.scalars[fields].scale_[0]
+        elif isinstance(self.scalars[fields], StandardScaler):
+            bias_, scale_ = self.scalars[fields].mean_[0], self.scalars[fields].scale_[0]
+        data = torch.add(data, - bias_)
         data = torch.div(data, scale_)
         data[torch.isnan(data)] = 0.
         return data
@@ -180,18 +183,12 @@ class TianModel(BaseModel):
     def add_additional_columns(self):
         marker_rknee_col_loc = [self._data_fields.index(field_name) for field_name in RKNEE_MARKER_FIELDS]
         force_col_loc = [self._data_fields.index(field_name) for field_name in FORCE_DATA_FIELDS]
-        # vid_col_loc = [self._data_fields.index(marker + '_x_180') for marker in ["LShoulder", "RShoulder", "MidHip"]]
-        # plt.figure()
         for sub_name, sub_data in self._data_all_sub.items():
             marker_data = sub_data[:, :, marker_rknee_col_loc].copy()
             force_data = sub_data[:, :, force_col_loc].copy()
             knee_vector = force_data[:, :, 9:12] - (marker_data[:, :, :3] + marker_data[:, :, 3:6]) / 2
             total_force = force_data[:, :, :3] + force_data[:, :, 6:9]
             self._data_all_sub[sub_name] = np.concatenate([sub_data, knee_vector, total_force], axis=2)
-        #     vid_data = sub_data[:, :, vid_col_loc]
-        #     trunk_sway_x = (vid_data[:, :, 0] + vid_data[:, :, 1]) / 2 - vid_data[:, :, 2]
-        #     plt.plot(force_data[:, :, 9].ravel(), trunk_sway_x.ravel(), '.')
-        # plt.show()
         self._data_fields.extend(['KNEE_X', 'KNEE_Y', 'KNEE_Z', 'TOTAL_F_X', 'TOTAL_F_Y', 'TOTAL_F_Z'])
 
     def get_rotated_gravityfree_body_weighted_imu(self):
@@ -216,7 +213,6 @@ class TianModel(BaseModel):
             dcm_mat = np.array([segment_x, segment_y, segment_z])
             dcm_mat = np.swapaxes(dcm_mat, 0, 1)
             segment_acc_rotated = np.array(list(map(np.matmul, dcm_mat, segment_acc)))
-            segment_acc_rotated[:, 2] = segment_acc_rotated[:, 2] - GRAVITY
             segment_gyr_rotated = np.array(list(map(np.matmul, dcm_mat, segment_gyr)))
             segment_imu_transformed = np.column_stack([segment_acc_rotated, segment_gyr_rotated]).reshape(data_shape_ori)
             segment_imu_transformed[np.isnan(segment_imu_transformed)] = 0
@@ -241,34 +237,30 @@ class TianModel(BaseModel):
 
         weight_col_loc = self._data_fields.index(SUBJECT_WEIGHT)
         for sub_name, sub_data in self._data_all_sub.items():
-            lshank_ml = sub_data[:, :, marker_lknee_col_loc[:3]] - sub_data[:, :, marker_lknee_col_loc[3:]]
-            lshank_y = (sub_data[:, :, marker_lknee_col_loc[:3]] + sub_data[:, :, marker_lknee_col_loc[3:]]) / 2 - \
-                       (sub_data[:, :, marker_lankle_col_loc[:3]] + sub_data[:, :, marker_lankle_col_loc[3:]]) / 2
-            sub_data[:, :, imu_lshank_col_loc] = transform_segment_imu(sub_data[:, :, imu_lshank_col_loc], lshank_ml, lshank_y)
-
-            lthigh_ml = lshank_ml
-            lthigh_y = sub_data[:, :, marker_lhip_col_loc] - \
-                       (sub_data[:, :, marker_lknee_col_loc[:3]] + sub_data[:, :, marker_lknee_col_loc[3:]]) / 2
-            sub_data[:, :, imu_lthigh_col_loc] = transform_segment_imu(sub_data[:, :, imu_lthigh_col_loc], lthigh_ml, lthigh_y)
-
-            trunk_ml = sub_data[:, :, marker_shoulder_col_loc[:3]] - sub_data[:, :, marker_shoulder_col_loc[3:]]
-            trunk_y = sub_data[:, :, marker_spine_col_loc[:3]] - sub_data[:, :, marker_spine_col_loc[3:]]
-            sub_data[:, :, imu_trunk_col_loc] = transform_segment_imu(sub_data[:, :, imu_trunk_col_loc], trunk_ml, trunk_y)
-
-            pelvis_ml = sub_data[:, :, marker_asis_col_loc[:3]] - sub_data[:, :, marker_asis_col_loc[3:]]
-            pelvis_z = (sub_data[:, :, marker_asis_col_loc[:3]] + sub_data[:, :, marker_asis_col_loc[3:]]) / 2 - \
-                       (sub_data[:, :, marker_psis_col_loc[:3]] + sub_data[:, :, marker_psis_col_loc[3:]]) / 2
-            sub_data[:, :, imu_pelvis_col_loc] = transform_segment_imu(sub_data[:, :, imu_pelvis_col_loc], pelvis_ml, None, pelvis_z)
-
-            rshank_ml = sub_data[:, :, marker_rknee_col_loc[:3]] - sub_data[:, :, marker_rknee_col_loc[3:]]
-            rshank_y = (sub_data[:, :, marker_rknee_col_loc[:3]] + sub_data[:, :, marker_rknee_col_loc[3:]]) / 2 - \
-                      (sub_data[:, :, marker_rankle_col_loc[:3]] + sub_data[:, :, marker_rankle_col_loc[3:]]) / 2
-            sub_data[:, :, imu_rshank_col_loc] = transform_segment_imu(sub_data[:, :, imu_rshank_col_loc], rshank_ml, rshank_y)
-
-            rthigh_ml = rshank_ml
-            rthigh_y = sub_data[:, :, marker_rhip_col_loc] - \
-                      (sub_data[:, :, marker_rknee_col_loc[:3]] + sub_data[:, :, marker_rknee_col_loc[3:]]) / 2
-            sub_data[:, :, imu_rthigh_col_loc] = transform_segment_imu(sub_data[:, :, imu_rthigh_col_loc], rthigh_ml, rthigh_y)
+            if ROTATE_IMU:
+                lshank_ml = sub_data[:, :, marker_lknee_col_loc[:3]] - sub_data[:, :, marker_lknee_col_loc[3:]]
+                lshank_y = (sub_data[:, :, marker_lknee_col_loc[:3]] + sub_data[:, :, marker_lknee_col_loc[3:]]) / 2 - \
+                           (sub_data[:, :, marker_lankle_col_loc[:3]] + sub_data[:, :, marker_lankle_col_loc[3:]]) / 2
+                sub_data[:, :, imu_lshank_col_loc] = transform_segment_imu(sub_data[:, :, imu_lshank_col_loc], lshank_ml, lshank_y)
+                lthigh_ml = lshank_ml
+                lthigh_y = sub_data[:, :, marker_lhip_col_loc] - \
+                           (sub_data[:, :, marker_lknee_col_loc[:3]] + sub_data[:, :, marker_lknee_col_loc[3:]]) / 2
+                sub_data[:, :, imu_lthigh_col_loc] = transform_segment_imu(sub_data[:, :, imu_lthigh_col_loc], lthigh_ml, lthigh_y)
+                trunk_ml = sub_data[:, :, marker_shoulder_col_loc[:3]] - sub_data[:, :, marker_shoulder_col_loc[3:]]
+                trunk_y = sub_data[:, :, marker_spine_col_loc[:3]] - sub_data[:, :, marker_spine_col_loc[3:]]
+                sub_data[:, :, imu_trunk_col_loc] = transform_segment_imu(sub_data[:, :, imu_trunk_col_loc], trunk_ml, trunk_y)
+                pelvis_ml = sub_data[:, :, marker_asis_col_loc[:3]] - sub_data[:, :, marker_asis_col_loc[3:]]
+                pelvis_z = (sub_data[:, :, marker_asis_col_loc[:3]] + sub_data[:, :, marker_asis_col_loc[3:]]) / 2 - \
+                           (sub_data[:, :, marker_psis_col_loc[:3]] + sub_data[:, :, marker_psis_col_loc[3:]]) / 2
+                sub_data[:, :, imu_pelvis_col_loc] = transform_segment_imu(sub_data[:, :, imu_pelvis_col_loc], pelvis_ml, None, pelvis_z)
+                rshank_ml = sub_data[:, :, marker_rknee_col_loc[:3]] - sub_data[:, :, marker_rknee_col_loc[3:]]
+                rshank_y = (sub_data[:, :, marker_rknee_col_loc[:3]] + sub_data[:, :, marker_rknee_col_loc[3:]]) / 2 - \
+                          (sub_data[:, :, marker_rankle_col_loc[:3]] + sub_data[:, :, marker_rankle_col_loc[3:]]) / 2
+                sub_data[:, :, imu_rshank_col_loc] = transform_segment_imu(sub_data[:, :, imu_rshank_col_loc], rshank_ml, rshank_y)
+                rthigh_ml = rshank_ml
+                rthigh_y = sub_data[:, :, marker_rhip_col_loc] - \
+                          (sub_data[:, :, marker_rknee_col_loc[:3]] + sub_data[:, :, marker_rknee_col_loc[3:]]) / 2
+                sub_data[:, :, imu_rthigh_col_loc] = transform_segment_imu(sub_data[:, :, imu_rthigh_col_loc], rthigh_ml, rthigh_y)
 
             sub_weight = sub_data[0, 0, weight_col_loc]
             sub_data[:, :, imu_lshank_col_loc[:3]] = sub_data[:, :, imu_lshank_col_loc[:3]] * sub_weight * SEGMENT_MASS_PERCENT['L_SHANK'] / 100
@@ -322,7 +314,7 @@ class TianModel(BaseModel):
         return loss_positive
 
     def train_model(self, x_train, y_train, x_validation=None, y_validation=None, validation_weight=None):
-        sub_model_base_param = {'epoch': 12, 'batch_size': 20, 'lr': 3e-3, 'weight_decay': 1e-5, 'use_ratio': 20}
+        sub_model_base_param = {'epoch': 10, 'batch_size': 20, 'lr': 3e-3, 'weight_decay': 1e-5, 'use_ratio': 100}
         self.train_step_lens, self.validation_step_lens = self._get_step_len(x_train), self._get_step_len(x_validation)
 
         x_train_rx, x_validation_rx = x_train['r_x'], x_validation['r_x']
@@ -606,13 +598,24 @@ if __name__ == "__main__":
     SPINE_MARKER_FIELDS = [marker + axis for marker in ['CV7', 'MAI'] for axis in ['_X', '_Y', '_Z']]
 
     VID_FIELDS = [loc + '_' + axis + '_' + angle for loc in ['RShoulder', 'RHip'] for angle in ['180'] for axis in ['x']]
+    # x_fields = {
+    #     'force_x': ACC_ML,
+    #     'force_z': ACC_VERTICAL,
+    #     'r_x': [axis + sensor for axis in ["AccelX_", 'GyroZ_'] for sensor in ['WAIST', 'CHEST']],
+    #     'r_z': ['RKnee_y_90', 'GyroX_R_FOOT'],
+    #     # 'r_x': MARKER_X,            # GyroZ_
+    #     # 'r_z': MARKER_Z,
+    #     'anthro': STATIC_DATA,
+    #     'midout_force_x': ['plate_2_force_x'],
+    #     'midout_force_z': ['plate_2_force_z'],
+    #     'midout_r_x': ['KNEE_X'],
+    #     'midout_r_z': ['KNEE_Z'],
+    # }
     x_fields = {
         'force_x': ACC_ML,
         'force_z': ACC_VERTICAL,
-        'r_x': [axis + sensor for axis in ["AccelX_", 'GyroZ_'] for sensor in ['WAIST', 'CHEST']],
+        'r_x': [axis + sensor for axis in ["AccelX_", 'GyroZ_'] for sensor in ['WAIST', 'CHEST', 'R_SHANK', 'R_THIGH']],
         'r_z': ['RKnee_y_90', 'GyroX_R_FOOT'],
-        # 'r_x': MARKER_X,            # GyroZ_
-        # 'r_z': MARKER_Z,
         'anthro': STATIC_DATA,
         'midout_force_x': ['plate_2_force_x'],
         'midout_force_z': ['plate_2_force_z'],
@@ -626,7 +629,7 @@ if __name__ == "__main__":
 
     weights = {key: [FORCE_PHASE] * len(y_fields[key]) for key in y_fields.keys()}
     weights.update({key: [FORCE_PHASE] * len(x_fields[key]) for key in x_fields.keys()})
-    model_builder = TianModel(data_path, x_fields, y_fields, weights, lambda: MinMaxScaler(feature_range=(0, 10)))
+    model_builder = TianModel(data_path, x_fields, y_fields, weights, lambda: MinMaxScaler(feature_range=(-10, 10)))
     subjects = model_builder.get_all_subjects()
     # model_builder.preprocess_train_evaluation(subjects[:13], subjects[13:], subjects[13:])
     model_builder.cross_validation(subjects)
