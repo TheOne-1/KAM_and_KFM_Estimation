@@ -37,7 +37,7 @@ class TianCNN(nn.Module):
         self.pool4 = nn.AvgPool1d(2)
         self.relu = nn.ReLU()
         self.flatten = nn.Flatten()
-        self.conv2output = nn.Linear(64, y_dim * 100, bias=False)
+        self.conv2output = nn.Linear(64, y_dim * 152, bias=False)
         self.drop = nn.Dropout(p=0.1)
         self.y_dim = y_dim
         self.x_dim = x_dim
@@ -59,7 +59,7 @@ class TianCNN(nn.Module):
         sequence = self.pool4(sequence)
         sequence = self.flatten(sequence)
         output = self.conv2output(sequence)
-        output = torch.reshape(output, (-1, 100, self.y_dim))
+        output = torch.reshape(output, (-1, 152, self.y_dim))
         return output
 
 
@@ -293,7 +293,7 @@ class TianModel(BaseModel):
         return loss_positive
 
     def train_model(self, x_train, y_train, x_validation=None, y_validation=None, validation_weight=None):
-        sub_model_base_param = {'epoch': 5, 'batch_size': 20, 'lr': 3e-3, 'weight_decay': 1e-5, 'use_ratio': 100}
+        sub_model_base_param = {'epoch': 5, 'batch_size': 20, 'lr': 3e-3, 'weight_decay': 3e-4, 'use_ratio': 100}
         self.train_step_lens, self.validation_step_lens = self._get_step_len(x_train), self._get_step_len(x_validation)
 
         x_train_fx, x_validation_fx = x_train['force_x'], x_validation['force_x']
@@ -573,11 +573,27 @@ if __name__ == "__main__":
     SPINE_MARKER_FIELDS = [marker + axis for marker in ['CV7', 'MAI'] for axis in ['_X', '_Y', '_Z']]
 
     VID_180_FIELDS = [loc + axis + angle for loc in ["LShoulder", "RShoulder", "RKnee", "LKnee", "RAnkle", "LAnkle"] for angle in ['_180'] for axis in ['_x', '_y']]
+
+    input_vid = {'force_x': VID_180_FIELDS, 'force_z': VID_180_FIELDS, 'r_x': VID_180_FIELDS, 'r_z': ['RKnee_y_90']}
+    input_imu = {'force_x': ACC_ML, 'force_z': ACC_VERTICAL,
+                 'r_x': [axis + sensor for axis in ["AccelX_", 'GyroZ_'] for sensor in ['WAIST', 'CHEST']] + R_LEG_GYR,
+                 'r_z': R_LEG_GYR}
+
     x_fields = {
-        'force_x': ACC_ML + VID_180_FIELDS,
-        'force_z': ACC_VERTICAL + VID_180_FIELDS,
-        'r_x': [axis + sensor for axis in ["AccelX_", 'GyroZ_'] for sensor in ['WAIST', 'CHEST']] + VID_180_FIELDS,
-        'r_z': ['RKnee_y_90'] + R_LEG_GYR,
+        # 'force_x': input_vid['force_x'] + input_imu['force_x'],
+        # 'force_z': input_vid['force_z'] + input_imu['force_z'],
+        # 'r_x': input_vid['r_x'] + input_imu['r_x'],
+        # 'r_z': input_vid['r_z'] + input_imu['r_z'],
+
+        'force_x': input_imu['force_x'],
+        'force_z': input_imu['force_z'],
+        'r_x': input_imu['r_x'],
+        'r_z': input_imu['r_z'],
+        #
+        # 'force_x': input_vid['force_x'],
+        # 'force_z': input_vid['force_z'],
+        # 'r_x': input_vid['r_x'],
+        # 'r_z': input_vid['r_z'],
         'anthro': STATIC_DATA,
         'midout_force_x': ['plate_2_force_x'],
         'midout_force_z': ['plate_2_force_z'],
