@@ -93,29 +93,6 @@ class TianRNN(nn.Module):
         return output
 
 
-class TianFCNN(nn.Module):
-    def __init__(self, x_dim, y_dim):
-        super(TianFCNN, self).__init__()
-        hidden_num = 20
-        self.linear1 = nn.Linear(x_dim, hidden_num)
-        self.linear2 = nn.Linear(hidden_num, hidden_num)
-        self.linear3 = nn.Linear(hidden_num, hidden_num)
-        self.linear4 = nn.Linear(hidden_num, hidden_num)
-        self.hidden2output = nn.Linear(hidden_num, y_dim)
-        self.sigmoid = nn.Sigmoid()
-
-    def forward(self, sequence, lens):
-        sequence = self.sigmoid(self.linear1(sequence))
-        # sequence = self.sigmoid(self.linear4(sequence))
-
-        # sequence = self.linear1(sequence).clamp(min=0)
-        # sequence = self.linear2(sequence).clamp(min=0)
-        # sequence = self.linear3(sequence).clamp(min=0)
-        # sequence = self.linear4(sequence).clamp(min=0)
-        sequence = self.hidden2output(sequence)
-        return sequence
-
-
 class FourSourceModel(nn.Module):
     def __init__(self, model_fx, model_fz, model_rx, model_rz, scalars):
         super(FourSourceModel, self).__init__()
@@ -159,9 +136,9 @@ class TianModel(BaseModel):
         BaseModel.__init__(self, data_path, x_fields, y_fields, weights, base_scalar)
         self.train_step_lens, self.validation_step_lens, self.test_step_lens = [None] * 3
         self.vid_static_cali()
+        self.get_relative_vid_180_vector()
         self.get_rotated_gravityfree_body_weighted_imu()
         self.add_additional_columns()
-        self.get_relative_vid_vector()
 
     def vid_static_cali(self):
         vid_y_90_col_loc = [self._data_fields.index(marker + '_y_90') for marker in VIDEO_LIST]
@@ -169,6 +146,21 @@ class TianModel(BaseModel):
             static_side_df = pd.read_csv(DATA_PATH + '/' + sub_name + '/combined/static_side.csv', index_col=0)
             r_ankle_z = np.median(static_side_df['RAnkle_y_90'])
             sub_data[:, :, vid_y_90_col_loc] = sub_data[:, :, vid_y_90_col_loc] - r_ankle_z + 1500
+            self._data_all_sub[sub_name] = sub_data
+
+    def get_relative_vid_180_vector(self, scale_180=False):
+        midhip_col_loc = [self._data_fields.index('MidHip' + axis + '_180') for axis in ['_x', '_y']]
+        midhip_90_x_loc = self._data_fields.index('MidHip_x_90')
+        key_points_to_process = ["LShoulder", "RShoulder", "RKnee", "LKnee", "RAnkle", "LAnkle"]
+        for sub_name, sub_data in self._data_all_sub.items():
+            midhip_180_data = sub_data[:, :, midhip_col_loc]
+            midhip_90_x = sub_data[:, :, midhip_90_x_loc]
+            for key_point in key_points_to_process:
+                key_point_col_loc = [self._data_fields.index(key_point + axis + angle) for axis in ['_x', '_y'] for angle in ['_180']]
+                sub_data[:, :, key_point_col_loc] = sub_data[:, :, key_point_col_loc] - midhip_180_data
+                if scale_180:
+                    sub_data[:, :, key_point_col_loc[0]] = sub_data[:, :, key_point_col_loc[0]] / (2060 - midhip_90_x)
+                    sub_data[:, :, key_point_col_loc[1]] = sub_data[:, :, key_point_col_loc[1]] / (2060 - midhip_90_x)
             self._data_all_sub[sub_name] = sub_data
 
     def add_additional_columns(self):
@@ -260,15 +252,6 @@ class TianModel(BaseModel):
             sub_data[:, :, imu_pelvis_col_loc[:3]] = sub_data[:, :, imu_pelvis_col_loc[:3]] * sub_weight * SEGMENT_MASS_PERCENT['WAIST'] / 100
             sub_data[:, :, imu_trunk_col_loc[:3]] = sub_data[:, :, imu_trunk_col_loc[:3]] * sub_weight * SEGMENT_MASS_PERCENT['CHEST'] / 100
 
-            self._data_all_sub[sub_name] = sub_data
-
-    def get_relative_vid_vector(self):
-        midhip_col_loc = [self._data_fields.index('MidHip' + axis + angle) for axis in ['_x', '_y'] for angle in ['_180']]
-        key_points_to_process = ["LShoulder", "RShoulder", "RKnee", "LKnee", "RAnkle", "LAnkle"]
-        for sub_name, sub_data in self._data_all_sub.items():
-            for key_point in key_points_to_process:
-                key_point_col_loc = [self._data_fields.index(key_point + axis + angle) for axis in ['_x', '_y'] for angle in ['_180']]
-                sub_data[:, :, key_point_col_loc] = sub_data[:, :, key_point_col_loc] - sub_data[:, :, midhip_col_loc]
             self._data_all_sub[sub_name] = sub_data
 
     def preprocess_train_data(self, x, y, weight):
