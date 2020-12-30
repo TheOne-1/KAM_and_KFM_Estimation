@@ -629,6 +629,6 @@ if __name__ == "__main__":
     weights.update({key: [FORCE_PHASE] * len(x_fields[key]) for key in x_fields.keys()})
     model_builder = TianModel(data_path, x_fields, y_fields, weights, lambda: MinMaxScaler(feature_range=(-10, 10)))
     subjects = model_builder.get_all_subjects()
-    model_builder.preprocess_train_evaluation(subjects[:13], subjects[13:], subjects[13:])
-    # model_builder.cross_validation(subjects)
+    # model_builder.preprocess_train_evaluation(subjects[:13], subjects[13:], subjects[13:])
+    model_builder.cross_validation(subjects)
     plt.show()
