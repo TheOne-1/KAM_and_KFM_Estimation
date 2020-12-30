@@ -319,7 +319,7 @@ class TianModel(BaseModel):
         return loss_positive
 
     def train_model(self, x_train, y_train, x_validation=None, y_validation=None, validation_weight=None):
-        sub_model_base_param = {'epoch': 5, 'batch_size': 20, 'lr': 1e-3, 'weight_decay': 1e-5, 'use_ratio': 100}
+        sub_model_base_param = {'epoch': 5, 'batch_size': 20, 'lr': 3e-3, 'weight_decay': 1e-5, 'use_ratio': 100}
         self.train_step_lens, self.validation_step_lens = self._get_step_len(x_train), self._get_step_len(x_validation)
 
         x_train_fx, x_validation_fx = x_train['force_x'], x_validation['force_x']
