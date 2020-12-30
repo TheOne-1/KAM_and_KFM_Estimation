@@ -136,7 +136,6 @@ def generate_step_data(export_path, processes):
 
 if __name__ == "__main__":
     logging.debug("Loading all csv data")
-    SAMPLES_BEFORE_STEP = 40
     all_data_dict = {subject + " " + trial: pd.read_csv(os.path.join(DATA_PATH, subject, "combined", trial + ".csv"))
                      for subject in SUBJECTS for trial in TRIALS}
     max_step_length = max([trial_data[EVENT_COLUMN].value_counts().max() for trial_data in all_data_dict.values()])
