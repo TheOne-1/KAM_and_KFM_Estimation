@@ -116,16 +116,6 @@ class TianFCNN(nn.Module):
         return sequence
 
 
-class TianLinear(nn.Module):
-    def __init__(self, x_dim, y_dim):
-        super(TianLinear, self).__init__()
-        self.linear = nn.Linear(x_dim, y_dim)
-
-    def forward(self, sequence, lens=None):
-        sequence = self.linear(sequence)
-        return sequence
-
-
 class FourSourceModel(nn.Module):
     def __init__(self, model_fx, model_fz, model_rx, model_rz, scalars):
         super(FourSourceModel, self).__init__()
@@ -296,22 +286,6 @@ class TianModel(BaseModel):
         return x, y, weight
 
     @staticmethod
-    def loss_fun_emphasize_peak(y_pred, y):
-        peak_locs = torch.argmax(y, dim=1).reshape([-1])
-        loss_peak = (y_pred[range(y.shape[0]), peak_locs] - y[range(y.shape[0]), peak_locs]).pow(2).mean()
-        y_pred_non_zero = y_pred[y != 0]
-        y_non_zero = y[y != 0]
-        loss_profile = (y_pred_non_zero - y_non_zero).pow(2).mean()
-        return (loss_profile + loss_peak) * 1e3
-
-    @staticmethod
-    def loss_fun_only_positive(y_pred, y):
-        y_pred_positive = y_pred[y > 0]
-        y_positive = y[y > 0]
-        loss_positive = (y_pred_positive - y_positive).pow(2).sum()
-        return loss_positive
-
-    @staticmethod
     def loss_fun_valid_part(y_pred, y, left, right):
         y_pred_valid = y_pred[:, left:-right]
         y_valid = y[:, left:-right]
@@ -389,8 +363,6 @@ class TianModel(BaseModel):
                     continue  # increase the speed of epoch
                 optimizer.zero_grad()
                 y_pred = model(xb_0, xb_1, xb_2, xb_3, xb_4, lens)
-                # train_loss = self.loss_fun_emphasize_peak(y_pred, yb)
-                # train_loss = self.loss_fun_only_positive(y_pred, yb)
                 train_loss = loss_fn(y_pred, yb)
                 train_loss.backward()
                 optimizer.step()
@@ -475,8 +447,6 @@ class TianModel(BaseModel):
                 yb = yb.cuda()
                 optimizer.zero_grad()
                 y_pred = model(xb, lens)
-                # train_loss = self.loss_fun_emphasize_peak(y_pred, yb)
-                # train_loss = self.loss_fun_only_positive(y_pred, yb)
                 train_loss = loss_fn(y_pred, yb)
                 train_loss.backward()
                 optimizer.step()
@@ -608,8 +578,6 @@ if __name__ == "__main__":
         'force_z': ACC_VERTICAL + VID_180_FIELDS,
         'r_x': [axis + sensor for axis in ["AccelX_", 'GyroZ_'] for sensor in ['WAIST', 'CHEST']] + VID_180_FIELDS,
         'r_z': ['RKnee_y_90'] + R_LEG_GYR,
-        # 'r_x': MARKER_X,            # GyroZ_
-        # 'r_z': MARKER_Z,
         'anthro': STATIC_DATA,
         'midout_force_x': ['plate_2_force_x'],
         'midout_force_z': ['plate_2_force_z'],
