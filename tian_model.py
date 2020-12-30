@@ -171,6 +171,7 @@ class TianModel(BaseModel):
         self.vid_static_cali()
         self.get_rotated_gravityfree_body_weighted_imu()
         self.add_additional_columns()
+        self.get_relative_vid_vector()
 
     def vid_static_cali(self):
         vid_y_90_col_loc = [self._data_fields.index(marker + '_y_90') for marker in VIDEO_LIST]
@@ -187,9 +188,8 @@ class TianModel(BaseModel):
             marker_data = sub_data[:, :, marker_rknee_col_loc].copy()
             force_data = sub_data[:, :, force_col_loc].copy()
             knee_vector = force_data[:, :, 9:12] - (marker_data[:, :, :3] + marker_data[:, :, 3:6]) / 2
-            total_force = force_data[:, :, :3] + force_data[:, :, 6:9]
-            self._data_all_sub[sub_name] = np.concatenate([sub_data, knee_vector, total_force], axis=2)
-        self._data_fields.extend(['KNEE_X', 'KNEE_Y', 'KNEE_Z', 'TOTAL_F_X', 'TOTAL_F_Y', 'TOTAL_F_Z'])
+            self._data_all_sub[sub_name] = np.concatenate([sub_data, knee_vector], axis=2)
+        self._data_fields.extend(['KNEE_X', 'KNEE_Y', 'KNEE_Z'])
 
     def get_rotated_gravityfree_body_weighted_imu(self):
         def transform_segment_imu(segment_imu, segment_ml, segment_y, segment_z=None):
@@ -217,6 +217,13 @@ class TianModel(BaseModel):
             segment_imu_transformed = np.column_stack([segment_acc_rotated, segment_gyr_rotated]).reshape(data_shape_ori)
             segment_imu_transformed[np.isnan(segment_imu_transformed)] = 0
             return segment_imu_transformed
+        imu_lshank_col_loc = [self._data_fields.index(field + '_L_SHANK') for field in IMU_FIELDS[:6]]
+        imu_lthigh_col_loc = [self._data_fields.index(field + '_L_SHANK') for field in IMU_FIELDS[:6]]
+        imu_rshank_col_loc = [self._data_fields.index(field + '_R_SHANK') for field in IMU_FIELDS[:6]]
+        imu_rthigh_col_loc = [self._data_fields.index(field + '_R_SHANK') for field in IMU_FIELDS[:6]]
+        imu_pelvis_col_loc = [self._data_fields.index(field + '_WAIST') for field in IMU_FIELDS[:6]]
+        imu_trunk_col_loc = [self._data_fields.index(field + '_CHEST') for field in IMU_FIELDS[:6]]
+
         marker_lknee_col_loc = [self._data_fields.index(field_name) for field_name in LKNEE_MARKER_FIELDS]
         marker_lankle_col_loc = [self._data_fields.index(field_name) for field_name in LANKLE_MARKER_FIELDS]
         marker_lhip_col_loc = [self._data_fields.index(field_name) for field_name in LHIP_MARKER_FIELDS]
@@ -227,13 +234,6 @@ class TianModel(BaseModel):
         marker_psis_col_loc = [self._data_fields.index(field_name) for field_name in PSIS_MARKER_FIELDS]
         marker_shoulder_col_loc = [self._data_fields.index(field_name) for field_name in SHOULDER_MARKER_FIELDS]
         marker_spine_col_loc = [self._data_fields.index(field_name) for field_name in SPINE_MARKER_FIELDS]
-
-        imu_lshank_col_loc = [self._data_fields.index(field + '_L_SHANK') for field in IMU_FIELDS[:6]]
-        imu_lthigh_col_loc = [self._data_fields.index(field + '_L_SHANK') for field in IMU_FIELDS[:6]]
-        imu_rshank_col_loc = [self._data_fields.index(field + '_R_SHANK') for field in IMU_FIELDS[:6]]
-        imu_rthigh_col_loc = [self._data_fields.index(field + '_R_SHANK') for field in IMU_FIELDS[:6]]
-        imu_pelvis_col_loc = [self._data_fields.index(field + '_WAIST') for field in IMU_FIELDS[:6]]
-        imu_trunk_col_loc = [self._data_fields.index(field + '_CHEST') for field in IMU_FIELDS[:6]]
 
         weight_col_loc = self._data_fields.index(SUBJECT_WEIGHT)
         for sub_name, sub_data in self._data_all_sub.items():
@@ -270,6 +270,15 @@ class TianModel(BaseModel):
             sub_data[:, :, imu_pelvis_col_loc[:3]] = sub_data[:, :, imu_pelvis_col_loc[:3]] * sub_weight * SEGMENT_MASS_PERCENT['WAIST'] / 100
             sub_data[:, :, imu_trunk_col_loc[:3]] = sub_data[:, :, imu_trunk_col_loc[:3]] * sub_weight * SEGMENT_MASS_PERCENT['CHEST'] / 100
 
+            self._data_all_sub[sub_name] = sub_data
+
+    def get_relative_vid_vector(self):
+        midhip_col_loc = [self._data_fields.index('MidHip' + axis + angle) for axis in ['_x', '_y'] for angle in ['_90', '_180']]
+        key_points_to_process = ["LShoulder", "RShoulder", "RKnee", "LKnee", "RAnkle", "LAnkle"]
+        for sub_name, sub_data in self._data_all_sub.items():
+            for key_point in key_points_to_process:
+                key_point_col_loc = [self._data_fields.index(key_point + axis + angle) for axis in ['_x', '_y'] for angle in ['_90', '_180']]
+                sub_data[:, :, key_point_col_loc] = sub_data[:, :, key_point_col_loc] - sub_data[:, :, midhip_col_loc]
             self._data_all_sub[sub_name] = sub_data
 
     def preprocess_train_data(self, x, y, weight):
@@ -597,10 +606,10 @@ if __name__ == "__main__":
     SHOULDER_MARKER_FIELDS = [marker + axis for marker in ['LAC', 'RAC'] for axis in ['_X', '_Y', '_Z']]
     SPINE_MARKER_FIELDS = [marker + axis for marker in ['CV7', 'MAI'] for axis in ['_X', '_Y', '_Z']]
 
-    VID_FIELDS = [loc + '_' + axis + '_' + angle for loc in ['RShoulder', 'RHip'] for angle in ['180'] for axis in ['x']]
+    VID_180_FIELDS = [loc + axis + angle for loc in ["LShoulder", "RShoulder", "RKnee", "LKnee", "RAnkle", "LAnkle"] for angle in ['_180'] for axis in ['_x', '_y']]
     x_fields = {
-        'force_x': ACC_ML,
-        'force_z': ACC_VERTICAL,
+        'force_x': ACC_ML + VID_180_FIELDS,
+        'force_z': ACC_VERTICAL + VID_180_FIELDS,
         'r_x': [axis + sensor for axis in ["AccelX_", 'GyroZ_'] for sensor in ['WAIST', 'CHEST']],
         'r_z': ['RKnee_y_90', 'GyroX_R_FOOT'],
         # 'r_x': MARKER_X,            # GyroZ_
@@ -620,6 +629,6 @@ if __name__ == "__main__":
     weights.update({key: [FORCE_PHASE] * len(x_fields[key]) for key in x_fields.keys()})
     model_builder = TianModel(data_path, x_fields, y_fields, weights, lambda: MinMaxScaler(feature_range=(-10, 10)))
     subjects = model_builder.get_all_subjects()
-    # model_builder.preprocess_train_evaluation(subjects[:13], subjects[13:], subjects[13:])
-    model_builder.cross_validation(subjects)
+    model_builder.preprocess_train_evaluation(subjects[:13], subjects[13:], subjects[13:])
+    # model_builder.cross_validation(subjects)
     plt.show()
