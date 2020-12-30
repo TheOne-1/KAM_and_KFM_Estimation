@@ -273,30 +273,26 @@ class TianModel(BaseModel):
             self._data_all_sub[sub_name] = sub_data
 
     def get_relative_vid_vector(self):
-        midhip_col_loc = [self._data_fields.index('MidHip' + axis + angle) for axis in ['_x', '_y'] for angle in ['_90', '_180']]
+        midhip_col_loc = [self._data_fields.index('MidHip' + axis + angle) for axis in ['_x', '_y'] for angle in ['_180']]
         key_points_to_process = ["LShoulder", "RShoulder", "RKnee", "LKnee", "RAnkle", "LAnkle"]
         for sub_name, sub_data in self._data_all_sub.items():
             for key_point in key_points_to_process:
-                key_point_col_loc = [self._data_fields.index(key_point + axis + angle) for axis in ['_x', '_y'] for angle in ['_90', '_180']]
+                key_point_col_loc = [self._data_fields.index(key_point + axis + angle) for axis in ['_x', '_y'] for angle in ['_180']]
                 sub_data[:, :, key_point_col_loc] = sub_data[:, :, key_point_col_loc] - sub_data[:, :, midhip_col_loc]
             self._data_all_sub[sub_name] = sub_data
 
     def preprocess_train_data(self, x, y, weight):
         x['midout_force_x'], x['midout_force_z'] = -x['midout_force_x'], -x['midout_force_z']
         x['midout_r_x'], x['midout_r_z'] = x['midout_r_x'] / 1000, x['midout_r_z'] / 1000
-        x_channel_norm = {k: x[k] for k in set(list(x.keys())) - set(['anthro', 'force_x', 'force_z'])}
+        x_channel_norm = {k: x[k] for k in set(list(x.keys())) - set(['anthro'])}
         x.update(**self.normalize_data(x_channel_norm, self._data_scalar, 'fit_transform', scalar_mode='by_each_column'))
-        x_modal_norm = {'force_x': x['force_x'], 'force_z': x['force_z']}
-        x.update(**self.normalize_data(x_modal_norm, self._data_scalar, 'fit_transform', scalar_mode='by_all_columns'))
         return x, y, weight
 
     def preprocess_validation_test_data(self, x, y, weight):
         x['midout_force_x'], x['midout_force_z'] = -x['midout_force_x'], -x['midout_force_z']
         x['midout_r_x'], x['midout_r_z'] = x['midout_r_x'] / 1000, x['midout_r_z'] / 1000
-        x_channel_norm = {k: x[k] for k in set(list(x.keys())) - set(['anthro', 'force_x', 'force_z'])}
+        x_channel_norm = {k: x[k] for k in set(list(x.keys())) - set(['anthro'])}
         x.update(**self.normalize_data(x_channel_norm, self._data_scalar, 'transform', scalar_mode='by_each_column'))
-        x_modal_norm = {'force_x': x['force_x'], 'force_z': x['force_z']}
-        x.update(**self.normalize_data(x_modal_norm, self._data_scalar, 'transform', scalar_mode='by_all_columns'))
         return x, y, weight
 
     @staticmethod
@@ -323,8 +319,20 @@ class TianModel(BaseModel):
         return loss_positive
 
     def train_model(self, x_train, y_train, x_validation=None, y_validation=None, validation_weight=None):
-        sub_model_base_param = {'epoch': 10, 'batch_size': 20, 'lr': 3e-3, 'weight_decay': 1e-5, 'use_ratio': 100}
+        sub_model_base_param = {'epoch': 5, 'batch_size': 20, 'lr': 1e-3, 'weight_decay': 1e-5, 'use_ratio': 100}
         self.train_step_lens, self.validation_step_lens = self._get_step_len(x_train), self._get_step_len(x_validation)
+
+        x_train_fx, x_validation_fx = x_train['force_x'], x_validation['force_x']
+        y_train_fx, y_validation_fx = x_train['midout_force_x'], x_validation['midout_force_x']
+        model_fx = TianRNN(x_train_fx.shape[2], y_train_fx.shape[2]).cuda()
+        params = {**sub_model_base_param, **{'target_name': 'midout_force_x', 'fields': ['plate_2_force_x']}}
+        self.build_sub_model(model_fx, x_train_fx, y_train_fx, x_validation_fx, y_validation_fx, validation_weight, params)
+
+        x_train_fz, x_validation_fz = x_train['force_z'], x_validation['force_z']
+        y_train_fz, y_validation_fz = x_train['midout_force_z'], x_validation['midout_force_z']
+        model_fz = TianRNN(x_train_fz.shape[2], y_train_fz.shape[2]).cuda()
+        params = {**sub_model_base_param, **{'target_name': 'midout_force_z', 'fields': ['plate_2_force_z']}}
+        self.build_sub_model(model_fz, x_train_fz, y_train_fz, x_validation_fz, y_validation_fz, validation_weight, params)
 
         x_train_rx, x_validation_rx = x_train['r_x'], x_validation['r_x']
         y_train_rx, y_validation_rx = x_train['midout_r_x'], x_validation['midout_r_x']
@@ -337,18 +345,6 @@ class TianModel(BaseModel):
         model_rz = TianRNN(x_train_rz.shape[2], y_train_rz.shape[2]).cuda()
         params = {**sub_model_base_param, **{'target_name': 'midout_r_z', 'fields': ['KNEE_Z']}}
         self.build_sub_model(model_rz, x_train_rz, y_train_rz, x_validation_rz, y_validation_rz, validation_weight, params)
-
-        x_train_fz, x_validation_fz = x_train['force_z'], x_validation['force_z']
-        y_train_fz, y_validation_fz = x_train['midout_force_z'], x_validation['midout_force_z']
-        model_fz = TianRNN(x_train_fz.shape[2], y_train_fz.shape[2]).cuda()
-        params = {**sub_model_base_param, **{'target_name': 'midout_force_z', 'fields': ['plate_2_force_z']}}
-        self.build_sub_model(model_fz, x_train_fz, y_train_fz, x_validation_fz, y_validation_fz, validation_weight, params)
-
-        x_train_fx, x_validation_fx = x_train['force_x'], x_validation['force_x']
-        y_train_fx, y_validation_fx = x_train['midout_force_x'], x_validation['midout_force_x']
-        model_fx = TianRNN(x_train_fx.shape[2], y_train_fx.shape[2]).cuda()
-        params = {**sub_model_base_param, **{'target_name': 'midout_force_x', 'fields': ['plate_2_force_x']}}
-        self.build_sub_model(model_fx, x_train_fx, y_train_fx, x_validation_fx, y_validation_fx, validation_weight, params)
 
         four_source_model = FourSourceModel(model_fx, model_fz, model_rx, model_rz, self._data_scalar).cuda()
         params = {**sub_model_base_param, **{'target_name': 'main_output', 'fields': ['EXT_KM_Y']}}
@@ -610,8 +606,8 @@ if __name__ == "__main__":
     x_fields = {
         'force_x': ACC_ML + VID_180_FIELDS,
         'force_z': ACC_VERTICAL + VID_180_FIELDS,
-        'r_x': [axis + sensor for axis in ["AccelX_", 'GyroZ_'] for sensor in ['WAIST', 'CHEST']],
-        'r_z': ['RKnee_y_90', 'GyroX_R_FOOT'],
+        'r_x': [axis + sensor for axis in ["AccelX_", 'GyroZ_'] for sensor in ['WAIST', 'CHEST']] + VID_180_FIELDS,
+        'r_z': ['RKnee_y_90'] + R_LEG_GYR,
         # 'r_x': MARKER_X,            # GyroZ_
         # 'r_z': MARKER_Z,
         'anthro': STATIC_DATA,
@@ -627,7 +623,7 @@ if __name__ == "__main__":
 
     weights = {key: [FORCE_PHASE] * len(y_fields[key]) for key in y_fields.keys()}
     weights.update({key: [FORCE_PHASE] * len(x_fields[key]) for key in x_fields.keys()})
-    model_builder = TianModel(data_path, x_fields, y_fields, weights, lambda: MinMaxScaler(feature_range=(-10, 10)))
+    model_builder = TianModel(data_path, x_fields, y_fields, weights, lambda: MinMaxScaler(feature_range=(-3, 3)))
     subjects = model_builder.get_all_subjects()
     # model_builder.preprocess_train_evaluation(subjects[:13], subjects[13:], subjects[13:])
     model_builder.cross_validation(subjects)
