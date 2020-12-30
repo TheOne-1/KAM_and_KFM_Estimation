@@ -3,7 +3,6 @@ import json
 import h5py
 import datetime
 import numpy as np
-import pandas as pd
 import prettytable as pt
 import matplotlib.pyplot as plt
 from typing import List
@@ -13,12 +12,8 @@ from sklearn.utils import shuffle
 from sklearn.metrics import r2_score, mean_squared_error as mse
 from scipy.stats import pearsonr
 import scipy.interpolate as interpo
-from transforms3d.euler import euler2mat
 
-from const import SENSOR_LIST, DATA_PATH
-
-SAVING_DIR = os.path.join(DATA_PATH, 'training_results', str(datetime.datetime.now()))
-os.mkdir(SAVING_DIR)
+from const import DATA_PATH
 
 
 def execute_cmd(cmd):
@@ -26,13 +21,18 @@ def execute_cmd(cmd):
 
 
 class BaseModel:
-    def __init__(self, data_path, x_fields, y_fields, weights=None, base_scalar=MinMaxScaler):
+    def __init__(self, data_path, x_fields, y_fields, weights=None, base_scalar=MinMaxScaler, result_dir=None):
         """
         x_fileds: a dict contains input names and input fields
         y_fileds: a dict contains output names and output fields
         """
         # log to file
-        add_file_handler(logging, os.path.join(SAVING_DIR, 'training_log'))
+        if result_dir is not None:
+            self.result_dir = os.path.join(DATA_PATH, 'training_results', result_dir)
+        else:
+            self.result_dir = os.path.join(DATA_PATH, 'training_results', str(datetime.datetime.now()))
+        os.mkdir(self.result_dir)
+        add_file_handler(logging, os.path.join(self.result_dir, 'training_log'))
         logging.info("Current commit is {}".format(execute_cmd("git rev-parse HEAD")))
         logging.info("Load data from h5 file {}".format(data_path))
         logging.debug("Load data with input fields {}, output fields {}".format(x_fields, y_fields))
@@ -83,10 +83,12 @@ class BaseModel:
                 rmse = np.round(np.mean(np.concatenate([res['rmse'] for res in field_results])), 3)
                 mae = np.round(np.mean(np.concatenate([res['mae'] for res in field_results])), 3)
                 r_rmse = np.round(np.mean(np.concatenate([res['r_rmse'] for res in field_results])), 3)
+                sr_rmse = np.round(np.mean(np.concatenate([res['sr_rmse'] for res in field_results])), 3)
                 cor_value = np.round(np.mean(np.concatenate([res['cor_value'] for res in field_results])), 3)
                 mean_results += [{'output': output_name, 'field': field, 'r2': r2, 'rmse': rmse, 'mae': mae,
-                                  'r_rmse': r_rmse, 'cor_value': cor_value}]
+                                  'r_rmse': r_rmse, 'sr_rmse': sr_rmse, 'cor_value': cor_value}]
         self.print_table(mean_results)
+        return mean_results
 
     def preprocess_and_train(self, train_sub_ids: List[str], validate_sub_ids: List[str]):
         """
@@ -109,7 +111,9 @@ class BaseModel:
             x_validation = self._get_raw_data_dict(validation_data, self._x_fields)
             y_validation = self._get_raw_data_dict(validation_data, self._y_fields)
             validation_weight = self._get_raw_data_dict(validation_data, self._weights)
-            x_validation, y_validation, validation_weight = self.preprocess_validation_test_data(x_validation, y_validation, validation_weight)
+            x_validation, y_validation, validation_weight = self.preprocess_validation_test_data(x_validation,
+                                                                                                 y_validation,
+                                                                                                 validation_weight)
 
         model = self.train_model(x_train, y_train, x_validation, y_validation, validation_weight)
         return model
@@ -122,7 +126,8 @@ class BaseModel:
             test_sub_x = self._get_raw_data_dict(test_sub_data, self._x_fields)
             test_sub_y = self._get_raw_data_dict(test_sub_data, self._y_fields)
             test_sub_weight = self._get_raw_data_dict(test_sub_data, self._weights)
-            test_sub_x, test_sub_y, test_sub_weight = self.preprocess_validation_test_data(test_sub_x, test_sub_y, test_sub_weight)
+            test_sub_x, test_sub_y, test_sub_weight = self.preprocess_validation_test_data(test_sub_x, test_sub_y,
+                                                                                           test_sub_weight)
             pred_sub_y = self.predict(model, test_sub_x)
             all_scores = self.get_all_scores(test_sub_y, pred_sub_y, self._y_fields, test_sub_weight)
             all_scores = [{'subject': test_sub_name, **scores} for scores in all_scores]
@@ -184,7 +189,7 @@ class BaseModel:
             data_array = data_array.reshape(1, -1)
         data_len = data_array.shape[1]
         data_step = np.arange(0, data_len)
-        resampled_step = np.linspace(0, data_len-1+1e-10, resampled_len)
+        resampled_step = np.linspace(0, data_len - 1 + 1e-10, resampled_len)
         tck, data_step = interpo.splprep(data_array, u=data_step, s=0)
         data_resampled = interpo.splev(resampled_step, tck, der=0)[0]
         return data_resampled
@@ -200,7 +205,7 @@ class BaseModel:
     @staticmethod
     def get_all_scores(y_true, y_pred, y_fields, weights=None):
         def get_column_score(arr_true, arr_pred, w):
-            r2, rmse, mae, r_rmse, cor_value = [np.zeros(arr_true.shape[0]) for _ in range(5)]
+            r2, rmse, mae, r_rmse, sr_rmse, cor_value = [np.zeros(arr_true.shape[0]) for _ in range(6)]
             for i in range(arr_true.shape[0]):
                 arr_true_i = arr_true[i, w[i, :]]
                 arr_pred_i = arr_pred[i, w[i, :]]
@@ -208,13 +213,14 @@ class BaseModel:
                 r2[i] = r2_score(arr_true_i, arr_pred_i)
                 rmse[i] = np.sqrt(mse(arr_true_i, arr_pred_i))
                 mae[i] = np.mean(abs((arr_true_i - arr_pred_i)))
-                r_rmse[i] = rmse[i] / (arr_true_i.max() - arr_true_i.min())
+                r_rmse[i] = rmse[i] / (0.5*(arr_true_i.max() - arr_true_i.min()))
+                sr_rmse[i] = rmse[i] / (0.5*(arr_true_i.max() - arr_true_i.min() + arr_pred_i.max() - arr_pred_i.min()))
                 cor_value[i] = pearsonr(arr_true_i, arr_pred_i)[0]
 
             locs = np.where(w.ravel())[0]
             r2_all = r2_score(arr_true.ravel()[locs], arr_pred.ravel()[locs])
             r2_all = np.full(r2.shape, r2_all)
-            return {'r2': r2, 'r2_all': r2_all, 'rmse': rmse, 'mae': mae, 'r_rmse': r_rmse,
+            return {'r2': r2, 'r2_all': r2_all, 'rmse': rmse, 'mae': mae, 'r_rmse': r_rmse, 'sr_rmse': sr_rmse,
                     'cor_value': cor_value}
 
         scores = []
@@ -233,8 +239,7 @@ class BaseModel:
                 scores.append(score_one_field)
         return scores
 
-    @staticmethod
-    def representative_profile_curves(arr_true, arr_pred, title, metric):
+    def representative_profile_curves(self, arr_true, arr_pred, title, metric):
         """
         arr1: 2-dimensional array
         arr2: 2-dimensional array
@@ -269,8 +274,9 @@ class BaseModel:
         axs[1, 1].text(0.4, 0.9, np.round(np.mean(metric), 3), transform=axs[1, 1].transAxes)
         axs[1, 1].set_title('general performance')
         plt.tight_layout()
-        plt.savefig(os.path.join(SAVING_DIR, title))
-        plt.show(block=False)
+        plt.savefig(os.path.join(self.result_dir, title))
+        plt.close()
+        # plt.show(block=False)
 
     @staticmethod
     def print_table(results):
@@ -280,4 +286,3 @@ class BaseModel:
             tb.add_row([np.round(np.mean(value), 3) if isinstance(value, np.ndarray) else value
                         for value in test_result.values()])
         logging.info(tb)
-

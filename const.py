@@ -1,12 +1,16 @@
 import os
 
+VIDEO_PATH = os.environ.get('VIDEO_DATA_PATH')
+OPENPOSE_MODEL_PATH = os.environ.get('OPENPOSE_MODEL_PATH')
+VIDEO_ORIGINAL_SAMPLE_RATE = 119.99014859206962
 DATA_PATH = os.environ.get('KAM_DATA_PATH')
 TRIALS = ['baseline', 'fpa', 'step_width', 'trunk_sway']
 STATIC_TRIALS = ['static_back', 'static_side']
-SUBJECTS = ['s002_wangdianxin', 's004_ouyangjue', 's005_tangansheng', 's006_xusen', 's007_zuogangao', 's008_liyu',
-            's009_sunyubo', 's010_handai', 's011_wuxingze', 's012_likaixiang', 's013_zhangxiaohan', 's014_maqichao',
+SUBJECTS = ['s002_wangdianxin', 's004_ouyangjue', 's006_xusen', 's008_liyu', 's016_houjikang',
+            's010_handai',  's005_tangansheng', 's007_zuogangao', 's009_sunyubo', 's003_linyuan',
+            's011_wuxingze', 's012_likaixiang', 's013_zhangxiaohan', 's014_maqichao',
             's015_weihuan', 's017_tantian', 's018_wangmian', 's019_chenhongyuan', 's020_houjikang'
-            # , 's003_linyuan', 's001_tantian', 's016_houjikang'
+            # , 's001_tantian',
             ]
 STEP_TYPES = STANCE, STANCE_SWING = range(2)
 STEP_TYPE = STANCE

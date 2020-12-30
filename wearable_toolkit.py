@@ -16,9 +16,10 @@ from scipy.signal import find_peaks, butter, filtfilt
 import matplotlib.pyplot as plt
 from scipy import linalg
 from sklearn.preprocessing import MinMaxScaler
+from scipy.interpolate import interp1d
 
 from const import SENSOR_LIST, IMU_FIELDS, FORCE_DATA_FIELDS, EXT_KNEE_MOMENT, TARGETS_LIST, SUBJECT_HEIGHT
-from const import SUBJECT_WEIGHT, STANCE, STANCE_SWING, STEP_TYPE
+from const import SUBJECT_WEIGHT, STANCE, STANCE_SWING, STEP_TYPE, VIDEO_ORIGINAL_SAMPLE_RATE
 import wearable_math
 
 
@@ -45,6 +46,14 @@ class VideoCsvReader:
         for x, y, probability in columns_label:
             self.data_frame.loc[self.data_frame[probability] < 0.6, [x, y]] = np.nan
         self.data_frame = self.data_frame.interpolate(method='linear', axis=0)
+
+    def resample_to_100hz(self):
+        target_sample_rate = 100.
+        x, step = np.linspace(0., 1., self.data_frame.shape[0], retstep=True)
+        # new_x = np.linspace(0., 1., int(self.data_frame.shape[0]*target_sample_rate/VIDEO_ORIGINAL_SAMPLE_RATE))
+        new_x = np.arange(0., 1., step*VIDEO_ORIGINAL_SAMPLE_RATE/target_sample_rate)
+        f = interp1d(x, self.data_frame, axis=0)
+        self.data_frame = pd.DataFrame(f(new_x), columns=self.data_frame.columns)
 
     def crop(self, start_index):
         # keep index after start_index
@@ -415,13 +424,6 @@ class SageCsvReader:
                 if the_off is not None and the_off < max_distance:
                     off_list.append(the_off + i_sample + off_delay)
                 i_sample = back_crossing
-        # check if these two lists are in cross order
-        event_list = sorted(
-            [[i, event_type] for event_type, event in enumerate([strike_list, off_list]) for i in event],
-            key=lambda x: x[0])
-        for i in range(1, len(event_list)):
-            if event_list[i - 1][1] == event_list[i][1]:
-                print("Likely got bad foot event here at sample {}".format(event_list[i][0]))
         if verbose:
             plt.figure()
             plt.plot(stationary_flag * 400)
