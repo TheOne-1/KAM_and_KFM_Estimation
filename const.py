@@ -6,11 +6,10 @@ VIDEO_ORIGINAL_SAMPLE_RATE = 119.99014859206962
 DATA_PATH = os.environ.get('KAM_DATA_PATH')
 TRIALS = ['baseline', 'fpa', 'step_width', 'trunk_sway']
 STATIC_TRIALS = ['static_back', 'static_side']
-SUBJECTS = ['s002_wangdianxin', 's004_ouyangjue', 's006_xusen', 's008_liyu', 's016_houjikang',
-            's010_handai',  's005_tangansheng', 's007_zuogangao', 's009_sunyubo', 's003_linyuan',
-            's011_wuxingze', 's012_likaixiang', 's013_zhangxiaohan', 's014_maqichao',
+SUBJECTS = ['s002_wangdianxin', 's004_ouyangjue', 's005_tangansheng', 's006_xusen', 's007_zuogangao', 's008_liyu',
+            's009_sunyubo', 's010_handai', 's011_wuxingze', 's012_likaixiang', 's013_zhangxiaohan', 's014_maqichao',
             's015_weihuan', 's017_tantian', 's018_wangmian', 's019_chenhongyuan', 's020_houjikang'
-            # , 's001_tantian',
+            # , 's003_linyuan', 's001_tantian', 's016_houjikang'
             ]
 STEP_TYPES = STANCE, STANCE_SWING = range(2)
 STEP_TYPE = STANCE
@@ -25,6 +24,8 @@ SEGMENT_DEFINITIONS = {
     'CHEST': ['MAI', 'SXS', 'SJN', 'CV7', 'LAC', 'RAC']
 }
 SEGMENT_DATA_FIELDS = [seg_name + '_' + axis for axis in ['X', 'Y', 'Z'] for seg_name in SEGMENT_DEFINITIONS.keys()]
+SEGMENT_MASS_PERCENT = {'L_FOOT': 1.37, 'R_FOOT': 1.37, 'R_SHANK': 4.33, 'R_THIGH': 14.16,
+                        'WAIST': 11.17, 'CHEST': 15.96, 'L_SHANK': 4.33, 'L_THIGH': 14.16}
 SENSOR_LIST = ['L_FOOT', 'R_FOOT', 'R_SHANK', 'R_THIGH', 'WAIST', 'CHEST', 'L_SHANK', 'L_THIGH']
 IMU_FIELDS = ['AccelX', 'AccelY', 'AccelZ', 'GyroX', 'GyroY', 'GyroZ', 'MagX', 'MagY', 'MagZ', 'Quat1', 'Quat2',
               'Quat3', 'Quat4']
