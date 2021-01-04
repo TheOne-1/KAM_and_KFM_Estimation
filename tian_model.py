@@ -259,6 +259,8 @@ class TianModel(BaseModel):
             self._data_all_sub[sub_name] = sub_data
 
     def preprocess_train_data(self, x, y, weight):
+        # y['midout_force_x_pre'], y['midout_force_z_pre'] = -y['midout_force_x_pre'], -y['midout_force_z_pre']
+        # y['midout_r_x_pre'], y['midout_r_z_pre'] = y['midout_r_x_pre'] / 1000, y['midout_r_z_pre'] / 1000
         y['midout_force_x'], y['midout_force_z'] = -y['midout_force_x'], -y['midout_force_z']
         y['midout_r_x'], y['midout_r_z'] = y['midout_r_x'] / 1000, y['midout_r_z'] / 1000
         x_need_norm = {k: x[k] for k in set(list(x.keys())) - set(['anthro'])}
@@ -267,10 +269,11 @@ class TianModel(BaseModel):
         y_need_norm = {k: y[k] for k in set(list(y.keys())) - set(['main_output', 'auxiliary_info'])}
         y.update(
             **self.normalize_data(y_need_norm, self._data_scalar, 'fit_transform', scalar_mode='by_each_column'))
-
         return x, y, weight
 
     def preprocess_validation_test_data(self, x, y, weight):
+        # y['midout_force_x_pre'], y['midout_force_z_pre'] = -y['midout_force_x_pre'], -y['midout_force_z_pre']
+        # y['midout_r_x_pre'], y['midout_r_z_pre'] = y['midout_r_x_pre'] / 1000, y['midout_r_z_pre'] / 1000
         y['midout_force_x'], y['midout_force_z'] = -y['midout_force_x'], -y['midout_force_z']
         y['midout_r_x'], y['midout_r_z'] = y['midout_r_x'] / 1000, y['midout_r_z'] / 1000
         x_need_norm = {k: x[k] for k in set(list(x.keys())) - set(['anthro'])}
@@ -287,43 +290,43 @@ class TianModel(BaseModel):
         return loss_positive
 
     def train_model(self, x_train, y_train, x_validation=None, y_validation=None, validation_weight=None):
-        sub_model_base_param = {'epoch': 5, 'batch_size': 20, 'lr': 3e-3, 'weight_decay': 3e-4, 'use_ratio': 100}
+        sub_model_base_param = {'epoch': 1, 'batch_size': 20, 'lr': 3e-3, 'weight_decay': 3e-4, 'use_ratio': 1}
         self.train_step_lens, self.validation_step_lens = self._get_step_len(x_train), self._get_step_len(x_validation)
 
         x_train_rx, x_validation_rx = x_train['r_x'], x_validation['r_x']
-        y_train_rx, y_validation_rx = y_train['midout_r_x_pre'], y_validation['midout_r_x_pre']
+        y_train_rx, y_validation_rx = y_train['midout_r_x'], y_validation['midout_r_x']
         model_rx = TianRNN(x_train_rx.shape[2], y_train_rx.shape[2]).cuda()
         params = {**sub_model_base_param, **{'target_name': 'midout_r_x', 'fields': ['KNEE_X']}}
         self.build_sub_model(model_rx, x_train_rx, y_train_rx, x_validation_rx, y_validation_rx, validation_weight, params)
 
         x_train_rz, x_validation_rz = x_train['r_z'], x_validation['r_z']
-        y_train_rz, y_validation_rz = y_train['midout_r_z_pre'], y_validation['midout_r_z_pre']
+        y_train_rz, y_validation_rz = y_train['midout_r_z'], y_validation['midout_r_z']
         model_rz = TianRNN(x_train_rz.shape[2], y_train_rz.shape[2]).cuda()
         params = {**sub_model_base_param, **{'target_name': 'midout_r_z', 'fields': ['KNEE_Z']}}
         self.build_sub_model(model_rz, x_train_rz, y_train_rz, x_validation_rz, y_validation_rz, validation_weight, params)
 
         x_train_fz, x_validation_fz = x_train['force_z'], x_validation['force_z']
-        y_train_fz, y_validation_fz = y_train['midout_force_z_pre'], y_validation['midout_force_z_pre']
+        y_train_fz, y_validation_fz = y_train['midout_force_z'], y_validation['midout_force_z']
         model_fz = TianRNN(x_train_fz.shape[2], y_train_fz.shape[2]).cuda()
         params = {**sub_model_base_param, **{'target_name': 'midout_force_z', 'fields': ['plate_2_force_z']}}
         self.build_sub_model(model_fz, x_train_fz, y_train_fz, x_validation_fz, y_validation_fz, validation_weight,
                              params)
 
         x_train_fx, x_validation_fx = x_train['force_x'], x_validation['force_x']
-        y_train_fx, y_validation_fx = y_train['midout_force_x_pre'], y_validation['midout_force_x_pre']
+        y_train_fx, y_validation_fx = y_train['midout_force_x'], y_validation['midout_force_x']
         model_fx = TianRNN(x_train_fx.shape[2], y_train_fx.shape[2]).cuda()
         params = {**sub_model_base_param, **{'target_name': 'midout_force_x', 'fields': ['plate_2_force_x']}}
         self.build_sub_model(model_fx, x_train_fx, y_train_fx, x_validation_fx, y_validation_fx, validation_weight,
                              params)
 
-        model_rx_pre = type(model_rx)(x_train_rx.shape[2], y_train_rx.shape[2]).cuda()
-        model_rz_pre = type(model_rz)(x_train_rz.shape[2], y_train_rz.shape[2]).cuda()
         model_fx_pre = type(model_fx)(x_train_fx.shape[2], y_train_fx.shape[2]).cuda()
         model_fz_pre = type(model_fz)(x_train_fz.shape[2], y_train_fz.shape[2]).cuda()
-        model_rx_pre.load_state_dict(model_rx.state_dict())
-        model_rz_pre.load_state_dict(model_rz.state_dict())
+        model_rx_pre = type(model_rx)(x_train_rx.shape[2], y_train_rx.shape[2]).cuda()
+        model_rz_pre = type(model_rz)(x_train_rz.shape[2], y_train_rz.shape[2]).cuda()
         model_fx_pre.load_state_dict(model_fx.state_dict())
         model_fz_pre.load_state_dict(model_fz.state_dict())
+        model_rx_pre.load_state_dict(model_rx.state_dict())
+        model_rz_pre.load_state_dict(model_rz.state_dict())
 
         four_source_model = FourSourceModel(model_fx, model_fz, model_rx, model_rz, self._data_scalar)
         params = {**sub_model_base_param, **{'target_name': 'main_output', 'fields': ['EXT_KM_Y']}}
@@ -566,11 +569,11 @@ class TianModel(BaseModel):
         results = []
         columns = []
         for category, fields in self._y_fields.items():
-            y_true_columns = ['true_' + category + field for field in fields]
+            y_true_columns = ['true_' + category + '_' + field for field in fields]
             columns += y_true_columns
             results.append(pred_sub_y[category])
         for category, fields_data in pred_sub_y.items():
-            y_pred_columns = ['pred_' + category + field for field in self._y_fields[category]]
+            y_pred_columns = ['pred_' + category]
             columns += y_pred_columns
             results.append(fields_data)
         results = np.concatenate(results, axis=2)
@@ -651,10 +654,10 @@ if __name__ == "__main__":
         'midout_force_z': ['plate_2_force_z'],
         'midout_r_x': ['KNEE_X'],
         'midout_r_z': ['KNEE_Z'],
-        'midout_force_x_pre': ['plate_2_force_x'],
-        'midout_force_z_pre': ['plate_2_force_z'],
-        'midout_r_x_pre': ['KNEE_X'],
-        'midout_r_z_pre': ['KNEE_Z'],
+        # 'midout_force_x_pre': ['plate_2_force_x'],
+        # 'midout_force_z_pre': ['plate_2_force_z'],
+        # 'midout_r_x_pre': ['KNEE_X'],
+        # 'midout_r_z_pre': ['KNEE_Z'],
         # 'auxiliary_info': [SUBJECT_ID, TRIAL_ID, FORCE_PHASE]
     }
     weights = {key: [FORCE_PHASE] * len(y_fields[key]) for key in y_fields.keys()}
