@@ -21,7 +21,7 @@ def execute_cmd(cmd):
 
 
 class BaseModel:
-    def __init__(self, data_path, x_fields, y_fields, weights=None, base_scalar=MinMaxScaler, result_dir=None):
+    def __init__(self, data_path, x_fields, y_fields, weights=None, evaluate_fields=None, base_scalar=MinMaxScaler, result_dir=None):
         """
         x_fileds: a dict contains input names and input fields
         y_fileds: a dict contains output names and output fields
@@ -31,6 +31,10 @@ class BaseModel:
             self.result_dir = os.path.join(DATA_PATH, 'training_results', result_dir)
         else:
             self.result_dir = os.path.join(DATA_PATH, 'training_results', str(datetime.datetime.now()))
+        if evaluate_fields is None:
+            self._evaluate_fields = y_fields
+        else:
+            self._evaluate_fields = evaluate_fields
         os.mkdir(self.result_dir)
         add_file_handler(logging, os.path.join(self.result_dir, 'training_log'))
         logging.info("Current commit is {}".format(execute_cmd("git rev-parse HEAD")))
@@ -129,12 +133,17 @@ class BaseModel:
             test_sub_x, test_sub_y, test_sub_weight = self.preprocess_validation_test_data(test_sub_x, test_sub_y,
                                                                                            test_sub_weight)
             pred_sub_y = self.predict(model, test_sub_x)
-            all_scores = self.get_all_scores(test_sub_y, pred_sub_y, self._y_fields, test_sub_weight)
+            all_scores = self.get_all_scores(test_sub_y, pred_sub_y, self._evaluate_fields, test_sub_weight)
             all_scores = [{'subject': test_sub_name, **scores} for scores in all_scores]
             self.customized_analysis(test_sub_y, pred_sub_y, all_scores)
+            self.save_temp_result(test_sub_y, pred_sub_y, test_sub_weight, model, test_sub_name)
             test_results += all_scores
         self.print_table(test_results)
         return test_results
+
+    @staticmethod
+    def save_temp_result(test_sub_y, pred_sub_y, test_sub_weight, model, test_sub_name):
+        pass
 
     def customized_analysis(self, sub_y_true, sub_y_pred, all_scores):
         """ Customized data visualization"""
