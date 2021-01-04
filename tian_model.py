@@ -287,7 +287,7 @@ class TianModel(BaseModel):
         return loss_positive
 
     def train_model(self, x_train, y_train, x_validation=None, y_validation=None, validation_weight=None):
-        sub_model_base_param = {'epoch': 1, 'batch_size': 20, 'lr': 3e-3, 'weight_decay': 3e-4, 'use_ratio': 1}
+        sub_model_base_param = {'epoch': 5, 'batch_size': 20, 'lr': 3e-3, 'weight_decay': 3e-4, 'use_ratio': 100}
         self.train_step_lens, self.validation_step_lens = self._get_step_len(x_train), self._get_step_len(x_validation)
 
         x_train_rx, x_validation_rx = x_train['r_x'], x_validation['r_x']
@@ -655,7 +655,7 @@ if __name__ == "__main__":
         'midout_force_z_pre': ['plate_2_force_z'],
         'midout_r_x_pre': ['KNEE_X'],
         'midout_r_z_pre': ['KNEE_Z'],
-        # 'auxiliary_info': [SUBJECT_ID, TRIAL_ID]
+        # 'auxiliary_info': [SUBJECT_ID, TRIAL_ID, FORCE_PHASE]
     }
     weights = {key: [FORCE_PHASE] * len(y_fields[key]) for key in y_fields.keys()}
     weights.update({key: [FORCE_PHASE] * len(x_fields[key]) for key in x_fields.keys()})

@@ -80,7 +80,7 @@ class BaseModel:
         self.print_table(results)
         # get mean results
         mean_results = []
-        for output_name, output_fields in self._y_fields.items():
+        for output_name, output_fields in self._evaluate_fields.items():
             for field in output_fields:
                 field_results = list(filter(lambda x: x['output'] == output_name and x['field'] == field, results))
                 r2 = np.round(np.mean(np.concatenate([res['r2'] for res in field_results])), 3)
