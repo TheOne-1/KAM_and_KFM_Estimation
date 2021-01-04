@@ -566,15 +566,15 @@ class TianModel(BaseModel):
         results = []
         columns = []
         for category, fields in self._y_fields.items():
-            y_true_columns = ['true_' + field for field in fields]
+            y_true_columns = ['true_' + category + field for field in fields]
             columns += y_true_columns
             results.append(pred_sub_y[category])
         for category, fields_data in pred_sub_y.items():
-            y_pred_columns = ['pred' + field for field in self._y_fields[category]]
+            y_pred_columns = ['pred_' + category + field for field in self._y_fields[category]]
             columns += y_pred_columns
             results.append(fields_data)
         results = np.concatenate(results, axis=2)
-        with h5py.File(os.path.join(save_path, 'results.h5'), 'a') as hf:
+        with h5py.File(os.path.join(self.result_dir, 'results.h5'), 'a') as hf:
             hf.create_dataset(test_sub_name, data=results, dtype='float32')
             hf.attrs['columns'] = json.dumps(columns)
 
