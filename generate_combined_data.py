@@ -2,7 +2,8 @@ import wearable_toolkit
 import pandas as pd
 import numpy as np
 import os
-from const import SEGMENT_DEFINITIONS, SUBJECTS, STATIC_TRIALS, TRIALS, DATA_PATH, SUBJECT_HEIGHT, SUBJECT_WEIGHT
+from const import SEGMENT_DEFINITIONS, SUBJECTS, STATIC_TRIALS, TRIALS, DATA_PATH, SUBJECT_HEIGHT, SUBJECT_WEIGHT, \
+    SUBJECT_ID, TRIAL_ID
 
 subject_infos = pd.read_csv(os.path.join(DATA_PATH, 'subject_info.csv'), index_col=0)
 
@@ -78,6 +79,8 @@ def sync_and_crop_data_frame(subject, trial):
     middle_data = middle_data.loc[:min_length]
     middle_data[SUBJECT_HEIGHT] = subject_info[SUBJECT_HEIGHT]
     middle_data[SUBJECT_WEIGHT] = subject_info[SUBJECT_WEIGHT]
+    middle_data[SUBJECT_ID] = SUBJECTS.index(subject)
+    middle_data[TRIAL_ID] = TRIALS.index(trial)
     middle_data.to_csv(middle_data_path)
 
 

@@ -225,7 +225,7 @@ class VideoReader:
 
 if __name__ == '__main__':
     VICON_SAMPLE_RATE = 100
-    for sub_name in SUBJECTS[5:11]:
+    for sub_name in SUBJECTS:
         print(sub_name)
         for trial_name in TRIALS:
             print(trial_name)

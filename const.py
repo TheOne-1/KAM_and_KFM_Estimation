@@ -58,7 +58,7 @@ FORCE_DATA_FIELDS = ['plate_' + num + '_' + data_type + '_' + axis for num in ['
 
 STATIC_DATA = SUBJECT_WEIGHT, SUBJECT_HEIGHT = ['body weight', 'body height']
 
-PHASE_LIST = [EVENT_COLUMN, KAM_PHASE, FORCE_PHASE, STEP_PHASE] = ['Event', 'kam_phase', 'force_phase', 'step_phase']
+PHASE_LIST = [EVENT_COLUMN, KAM_PHASE, FORCE_PHASE, STEP_PHASE, SUBJECT_ID, TRIAL_ID] = ['Event', 'kam_phase', 'force_phase', 'step_phase', 'subject_id', 'trial_id']
 # all the fields of combined data
 CONTINUOUS_FIELDS = TARGETS_LIST + EXT_KNEE_MOMENT + IMU_DATA_FIELDS + VIDEO_DATA_FIELDS + FORCE_DATA_FIELDS +\
                     JOINT_LIST + SEGMENT_DATA_FIELDS
