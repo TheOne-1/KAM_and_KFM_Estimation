@@ -25,7 +25,7 @@ SEGMENT_DEFINITIONS = {
 }
 SEGMENT_DATA_FIELDS = [seg_name + '_' + axis for axis in ['X', 'Y', 'Z'] for seg_name in SEGMENT_DEFINITIONS.keys()]
 SEGMENT_MASS_PERCENT = {'L_FOOT': 1.37, 'R_FOOT': 1.37, 'R_SHANK': 4.33, 'R_THIGH': 14.16,
-                        'WAIST': 11.17, 'CHEST': 15.96, 'L_SHANK': 4.33, 'L_THIGH': 14.16}
+                        'WAIST': 11.17, 'CHEST': 15.96, 'L_SHANK': 4.33, 'L_THIGH': 14.16}      # 15.96 + 16.33
 SENSOR_LIST = ['L_FOOT', 'R_FOOT', 'R_SHANK', 'R_THIGH', 'WAIST', 'CHEST', 'L_SHANK', 'L_THIGH']
 IMU_FIELDS = ['AccelX', 'AccelY', 'AccelZ', 'GyroX', 'GyroY', 'GyroZ', 'MagX', 'MagY', 'MagZ', 'Quat1', 'Quat2',
               'Quat3', 'Quat4']
@@ -64,3 +64,13 @@ CONTINUOUS_FIELDS = TARGETS_LIST + EXT_KNEE_MOMENT + IMU_DATA_FIELDS + VIDEO_DAT
                     JOINT_LIST + SEGMENT_DATA_FIELDS
 DISCRETE_FIELDS = STATIC_DATA + PHASE_LIST
 ALL_FIELDS = DISCRETE_FIELDS + CONTINUOUS_FIELDS
+
+FONT_SIZE_LARGE = 24
+FONT_SIZE = 20
+FONT_SIZE_SMALL = 16
+FONT_DICT = {'fontsize': FONT_SIZE, 'fontname': 'DejaVu Sans'}
+FONT_DICT_LARGE = {'fontsize': FONT_SIZE_LARGE, 'fontname': 'DejaVu Sans'}
+FONT_DICT_SMALL = {'fontsize': FONT_SIZE_SMALL, 'fontname': 'DejaVu Sans'}
+FONT_DICT_X_SMALL = {'fontsize': 15, 'fontname': 'DejaVu Sans'}
+LINE_WIDTH = 2
+LINE_WIDTH_THICK = 3

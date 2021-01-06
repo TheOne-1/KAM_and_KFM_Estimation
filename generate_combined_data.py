@@ -28,6 +28,8 @@ def sync_and_crop_data_frame(subject, trial):
     # interpolate low probability data
     video_90_data.fill_low_probability_data()
     video_180_data.fill_low_probability_data()
+    video_90_data.low_pass_filtering(15, 100, 2)
+    video_180_data.low_pass_filtering(15, 100, 2)
     video_90_data.resample_to_100hz()
     video_180_data.resample_to_100hz()
 
@@ -104,11 +106,15 @@ def get_static_combined_data():
             vicon_data = wearable_toolkit.ViconCsvReader(vicon_data_path, SEGMENT_DEFINITIONS, calibrate_vicon_data_path, subject_info)
             video_90_data = wearable_toolkit.VideoCsvReader(video_data_path_90)
             video_180_data = wearable_toolkit.VideoCsvReader(video_data_path_180)
-            video_90_data.data_frame.columns = [col + '_90' for col in video_90_data.data_frame.columns]
-            video_180_data.data_frame.columns = [col + '_180' for col in video_180_data.data_frame.columns]
+            video_90_data.fill_low_probability_data()
+            video_180_data.fill_low_probability_data()
+            video_90_data.low_pass_filtering(15, 100, 2)
+            video_180_data.low_pass_filtering(15, 100, 2)
             video_90_data.resample_to_100hz()
             video_180_data.resample_to_100hz()
 
+            video_90_data.data_frame.columns = [col + '_90' for col in video_90_data.data_frame.columns]
+            video_180_data.data_frame.columns = [col + '_180' for col in video_180_data.data_frame.columns]
             imu_data = wearable_toolkit.SageCsvReader(imu_data_path)
             middle_data = pd.concat(
                 [imu_data.data_frame.loc[:450], video_90_data.data_frame.loc[:450], video_180_data.data_frame.loc[:450],

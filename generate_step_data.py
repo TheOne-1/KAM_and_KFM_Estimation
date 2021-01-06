@@ -84,7 +84,6 @@ def is_step_data_corrupted(one_step):
 
 
 def is_openpose_rknee_invalid(one_step):
-    vid_90 = one_step['RKnee_y_90'][one_step['RKnee_y_90'] > 0.]
     vid_90 = (one_step['RKnee_y_90'][one_step['RKnee_y_90'] > 0.] > 1150).all()
     vid_180 = (one_step['RKnee_y_180'][one_step['RKnee_y_180'] > 0.] > 1150).all()
     return vid_90 and vid_180

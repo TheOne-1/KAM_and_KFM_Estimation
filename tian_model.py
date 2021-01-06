@@ -146,11 +146,18 @@ class TianModel(BaseModel):
 
     def vid_static_cali(self):
         vid_y_90_col_loc = [self._data_fields.index(marker + '_y_90') for marker in VIDEO_LIST]
+        # knee_op_col_loc = self._data_fields.index('RKnee_y_90')
+        # knee_vi_col_loc = self._data_fields.index('RFLE_Z')
         for sub_name, sub_data in self._data_all_sub.items():
+            # plt.figure()
+            # plt.plot(sub_data[:, :, knee_op_col_loc].ravel(), sub_data[:, :, knee_vi_col_loc].ravel(), '.')
+            # plt.plot(sub_data[:, :, knee_op_col_loc].ravel())
+            # plt.plot(sub_data[:, :, knee_vi_col_loc].ravel())
             static_side_df = pd.read_csv(DATA_PATH + '/' + sub_name + '/combined/static_side.csv', index_col=0)
             r_ankle_z = np.median(static_side_df['RAnkle_y_90'])
-            sub_data[:, :, vid_y_90_col_loc] = sub_data[:, :, vid_y_90_col_loc] - r_ankle_z + 1500
+            sub_data[:, :, vid_y_90_col_loc] = sub_data[:, :, vid_y_90_col_loc] - r_ankle_z
             self._data_all_sub[sub_name] = sub_data
+        # plt.show()
 
     def get_relative_vid_180_vector(self, scale_180=False):
         midhip_col_loc = [self._data_fields.index('MidHip' + axis + '_180') for axis in ['_x', '_y']]
@@ -565,9 +572,12 @@ class TianModel(BaseModel):
         results = []
         columns = []
         for category, fields in self._y_fields.items():
-            y_true_columns = ['true_' + category + '_' + field for field in fields]
+            if len(fields) > 1:
+                y_true_columns = fields
+            else:
+                y_true_columns = ['true_' + category]
             columns += y_true_columns
-            results.append(pred_sub_y[category])
+            results.append(test_sub_y[category])
         for category, fields_data in pred_sub_y.items():
             y_pred_columns = ['pred_' + category]
             columns += y_pred_columns
@@ -602,22 +612,6 @@ class TianModel(BaseModel):
 
 
 if __name__ == "__main__":
-    data_path = DATA_PATH + '/40samples+stance.h5'
-    IMU_FIELDS_ACC = IMU_FIELDS[:3]
-    IMU_FIELDS_GYR = IMU_FIELDS[3:6]
-    IMU_FIELDS_ORI = IMU_FIELDS[9:13]
-
-    R_LEG_ACC = [imu_field + "_" + sensor for sensor in ['R_SHANK', 'R_FOOT'] for imu_field in IMU_FIELDS_ACC]
-    R_LEG_GYR = [imu_field + "_" + sensor for sensor in ['R_SHANK', 'R_FOOT'] for imu_field in IMU_FIELDS_GYR]
-    R_LEG_ORI = [ori_field + "_" + sensor for sensor in ['R_SHANK', 'R_FOOT'] for ori_field in IMU_FIELDS_ORI]
-
-    ACC_VERTICAL = ["AccelY_" + sensor for sensor in SENSOR_LIST[2:]]
-    ACC_ML = ["AccelX_" + sensor for sensor in SENSOR_LIST[2:]]
-    GYR_ML = ["GyroX_" + sensor for sensor in SENSOR_LIST[2:]]
-
-    MARKER_Z = [marker + '_Z' for marker in ['RFME', 'RFLE', 'RTAM', 'RFAL']]
-    MARKER_X = [marker + '_X' for marker in ['RFME', 'RFLE', 'RTAM', 'RFAL']]
-
     RKNEE_MARKER_FIELDS = [marker + axis for marker in ['RFME', 'RFLE'] for axis in ['_X', '_Y', '_Z']]
     RANKLE_MARKER_FIELDS = [marker + axis for marker in ['RTAM', 'RFAL'] for axis in ['_X', '_Y', '_Z']]
     RHIP_MARKER_FIELDS = [marker + axis for marker in ['RFT'] for axis in ['_X', '_Y', '_Z']]
@@ -629,18 +623,33 @@ if __name__ == "__main__":
     SHOULDER_MARKER_FIELDS = [marker + axis for marker in ['LAC', 'RAC'] for axis in ['_X', '_Y', '_Z']]
     SPINE_MARKER_FIELDS = [marker + axis for marker in ['CV7', 'MAI'] for axis in ['_X', '_Y', '_Z']]
 
-    VID_180_FIELDS = [loc + axis + angle for loc in ["LShoulder", "RShoulder", "RKnee", "LKnee", "RAnkle", "LAnkle"] for angle in ['_180'] for axis in ['_x', '_y']]
+    data_path = DATA_PATH + '/40samples+stance.h5'
+
+    R_LEG_GYR_X = ["GyroX_" + sensor for sensor in ['R_SHANK', 'R_THIGH']]
+    ACC_VERTICAL = ["AccelY_" + sensor for sensor in SENSOR_LIST[2:]]
+    ACC_ML = ["AccelX_" + sensor for sensor in SENSOR_LIST[2:]]
+    GYR_Z = ["GyroZ_" + sensor for sensor in SENSOR_LIST[2:]]
+    VID_180_FIELDS = [loc + axis + angle for loc in ["LShoulder", "RShoulder", "RKnee", "LKnee", "RAnkle", "LAnkle"]
+                      for angle in ['_180'] for axis in ['_x', '_y']]
+
+    ACC_ML_BODY = ["AccelX_" + sensor for sensor in ['WAIST', 'CHEST']]
+    GYR_Z_BODY = ["GyroZ_" + sensor for sensor in ['WAIST', 'CHEST']]
+    R_LEG_GYR = ["Gyro" + axis + sensor for sensor in ['R_SHANK', 'R_FOOT'] for axis in ['X_', 'Y_', 'Z_']]
 
     input_vid = {'force_x': VID_180_FIELDS, 'force_z': VID_180_FIELDS, 'r_x': VID_180_FIELDS, 'r_z': ['RKnee_y_90']}
-    input_imu = {'force_x': ACC_ML, 'force_z': ACC_VERTICAL,
-                 'r_x': [axis + sensor for axis in ["AccelX_", 'GyroZ_'] for sensor in ['WAIST', 'CHEST']] + R_LEG_GYR,
-                 'r_z': R_LEG_GYR}
+    input_imu = {'force_x': ACC_ML, 'force_z': ACC_VERTICAL, 'r_x': ACC_ML + R_LEG_GYR, 'r_z': R_LEG_GYR}
 
     x_fields = {
         'force_x': input_vid['force_x'] + input_imu['force_x'],
         'force_z': input_vid['force_z'] + input_imu['force_z'],
         'r_x': input_vid['r_x'] + input_imu['r_x'],
         'r_z': input_vid['r_z'] + input_imu['r_z'],
+
+        # 'force_x': input_imu['force_x'],
+        # 'force_z': input_imu['force_z'],
+        # 'r_x': input_imu['r_x'],
+        # 'r_z': input_imu['r_z'],
+
         'anthro': STATIC_DATA
     }
     MAIN_OUTPUT_FIELDS = ['EXT_KM_Y']  # EXT_KM_Y RIGHT_KNEE_ADDUCTION_MOMENT
@@ -650,6 +659,7 @@ if __name__ == "__main__":
         'midout_force_z': ['plate_2_force_z'],
         'midout_r_x': ['KNEE_X'],
         'midout_r_z': ['KNEE_Z'],
+        'auxiliary_info': [SUBJECT_ID, TRIAL_ID, FORCE_PHASE]
     }
     weights = {key: [FORCE_PHASE] * len(y_fields[key]) for key in y_fields.keys()}
     weights.update({key: [FORCE_PHASE] * len(x_fields[key]) for key in x_fields.keys()})
