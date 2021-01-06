@@ -227,7 +227,7 @@ if __name__ == '__main__':
     VICON_SAMPLE_RATE = 100
     for sub_name in SUBJECTS:
         print(sub_name)
-        for trial_name in TRIALS:
+        for trial_name in TRIALS+STATIC_TRIALS:
             print(trial_name)
             for camera in ['_90', '_180']:
                 video_file_name = os.path.join(VIDEO_PATH, sub_name, trial_name + camera + '.MOV')

@@ -144,9 +144,8 @@ if __name__ == "__main__":
         lambda step_data_list: map(fill_invalid_cop, step_data_list),
         lambda step_data_list: map(append_kam_phase, step_data_list),
         lambda step_data_list: filter(is_step_data_corrupted, step_data_list),
-        lambda step_data_list: filter(is_openpose_rknee_invalid, step_data_list),       # !!! remove after updating openpose
         lambda step_data_list: filter(is_foot_on_right_plate_alone, step_data_list),
-        # lambda step_data_list: filter(is_kam_positive, step_data_list),
+        lambda step_data_list: filter(is_kam_positive, step_data_list),
         lambda step_data_list: filter(is_kam_length_reasonable, step_data_list)
     ]
     generate_step_data('40samples+stance.h5', custom_process)

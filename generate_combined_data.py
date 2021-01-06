@@ -11,8 +11,8 @@ subject_infos = pd.read_csv(os.path.join(DATA_PATH, 'subject_info.csv'), index_c
 def sync_and_crop_data_frame(subject, trial):
     vicon_data_path = os.path.join(DATA_PATH, subject, 'vicon', trial + '.csv')
     vicon_calibrate_data_path = os.path.join(DATA_PATH, subject, 'vicon', 'calibrate' + '.csv')
-    video_90_data_path = os.path.join(DATA_PATH, subject, 'video_output', trial + '_90.csv')
-    video_180_data_path = os.path.join(DATA_PATH, subject, 'video_output', trial + '_180.csv')
+    video_90_data_path = os.path.join(DATA_PATH, subject, 'raw_video_output', trial + '_90.csv')
+    video_180_data_path = os.path.join(DATA_PATH, subject, 'raw_video_output', trial + '_180.csv')
     imu_data_path = os.path.join(DATA_PATH, subject, 'imu', trial + '.csv')
     v3d_data_path = os.path.join(DATA_PATH, subject, 'v3d', trial + '.csv')
     middle_data_path = os.path.join(DATA_PATH, subject, 'combined', trial + '.csv')
@@ -32,7 +32,7 @@ def sync_and_crop_data_frame(subject, trial):
     video_180_data.resample_to_100hz()
 
     # create step events
-    imu_data.create_step_id(verbose=False)
+    imu_data.create_step_id('R_FOOT', verbose=False)
 
     # Synchronize Vicon and IMU data
     vicon_sync_data = vicon_data.get_angular_velocity_theta('R_SHANK', 1000)
@@ -96,15 +96,18 @@ def get_static_combined_data():
         for trial in STATIC_TRIALS:
             vicon_data_path = os.path.join(DATA_PATH, subject, 'vicon', trial + '.csv')
             calibrate_vicon_data_path = os.path.join(DATA_PATH, subject, 'vicon', 'calibrate' + '.csv')
-            video_data_path_90 = os.path.join(DATA_PATH, subject, 'video_output', trial + '_90.csv')
-            video_data_path_180 = os.path.join(DATA_PATH, subject, 'video_output', trial + '_180.csv')
+            video_data_path_90 = os.path.join(DATA_PATH, subject, 'raw_video_output', trial + '_90.csv')
+            video_data_path_180 = os.path.join(DATA_PATH, subject, 'raw_video_output', trial + '_180.csv')
             imu_data_path = os.path.join(DATA_PATH, subject, 'imu', trial + '.csv')
             middle_data_path = os.path.join(DATA_PATH, subject, 'combined', trial + '.csv')
-            vicon_data = wearable_toolkit.ViconCsvReader(vicon_data_path, SEGMENT_DEFINITIONS, calibrate_vicon_data_path)
+            subject_info = subject_infos.loc[subject, :]
+            vicon_data = wearable_toolkit.ViconCsvReader(vicon_data_path, SEGMENT_DEFINITIONS, calibrate_vicon_data_path, subject_info)
             video_90_data = wearable_toolkit.VideoCsvReader(video_data_path_90)
             video_180_data = wearable_toolkit.VideoCsvReader(video_data_path_180)
             video_90_data.data_frame.columns = [col + '_90' for col in video_90_data.data_frame.columns]
             video_180_data.data_frame.columns = [col + '_180' for col in video_180_data.data_frame.columns]
+            video_90_data.resample_to_100hz()
+            video_180_data.resample_to_100hz()
 
             imu_data = wearable_toolkit.SageCsvReader(imu_data_path)
             middle_data = pd.concat(
@@ -114,5 +117,5 @@ def get_static_combined_data():
 
 
 if __name__ == "__main__":
-    # get_static_combined_data()
+    get_static_combined_data()
     get_combined_data()

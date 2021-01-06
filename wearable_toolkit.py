@@ -18,7 +18,8 @@ from scipy import linalg
 from sklearn.preprocessing import MinMaxScaler
 from scipy.interpolate import interp1d
 
-from const import SENSOR_LIST, IMU_FIELDS, FORCE_DATA_FIELDS, EXT_KNEE_MOMENT, TARGETS_LIST, SUBJECT_HEIGHT
+from const import SENSOR_LIST, IMU_FIELDS, FORCE_DATA_FIELDS, EXT_KNEE_MOMENT, TARGETS_LIST, SUBJECT_HEIGHT, \
+    EVENT_COLUMN
 from const import SUBJECT_WEIGHT, STANCE, STANCE_SWING, STEP_TYPE, VIDEO_ORIGINAL_SAMPLE_RATE
 import wearable_math
 
@@ -29,7 +30,7 @@ class VideoCsvReader:
     """
 
     def __init__(self, file_path):
-        self.data_frame = pd.read_csv(file_path)
+        self.data_frame = pd.read_csv(file_path, index_col=0)
         self.data_frame.loc[:, :] = data_filter(self.data_frame.values, 15, 100, 2)
 
     def get_column_position(self, marker_name):
@@ -135,10 +136,10 @@ class ViconCsvReader:
             markers = [marker for markers in segment_definitions.values() for marker in markers]
             self.data_frame = pd.concat([self.data[marker] for marker in markers], axis=1)
             self.data_frame.columns = [marker + '_' + axis for marker in markers for axis in ['X', 'Y', 'Z']]
-            self.data_frame = pd.concat([self.data_frame, filtered_force_df], axis=1)
-        if sub_info is not None:
-            knee_moment = self.get_right_external_kam(sub_info)
-            self.data_frame = pd.concat([self.data_frame, knee_moment], axis=1)
+
+        self.data_frame = pd.concat([self.data_frame, filtered_force_df], axis=1)
+        knee_moment = self.get_right_external_kam(sub_info)
+        self.data_frame = pd.concat([self.data_frame, knee_moment], axis=1)
 
     @staticmethod
     def reading(file_path):
@@ -375,7 +376,7 @@ class SageCsvReader:
         self.data_frame = self.data_frame.loc[start_index:]
         self.data_frame.index = self.data_frame.index - self.data_frame.index[0]
 
-    def get_walking_strike_off(self, strike_delay, off_delay, max_step_length, cut_off_fre_strike_off=None,
+    def get_walking_strike_off(self, strike_delay, off_delay, segment, cut_off_fre_strike_off=None,
                                verbose=False):
         """ Reliable algorithm used in TNSRE first submission"""
         gyr_thd = np.rad2deg(2.6)
@@ -383,8 +384,8 @@ class SageCsvReader:
         max_distance = self.sample_rate * 2  # distance from stationary phase should be smaller than 2 seconds
 
         acc_data = np.array(
-            self.data_frame[['_'.join([direct, 'R_FOOT']) for direct in ['AccelX', 'AccelY', 'AccelZ']]])
-        gyr_data = np.array(self.data_frame[['_'.join([direct, 'R_FOOT']) for direct in ['GyroX', 'GyroY', 'GyroZ']]])
+            self.data_frame[['_'.join([direct, segment]) for direct in ['AccelX', 'AccelY', 'AccelZ']]])
+        gyr_data = np.array(self.data_frame[['_'.join([direct, segment]) for direct in ['GyroX', 'GyroY', 'GyroZ']]])
 
         if cut_off_fre_strike_off is not None:
             acc_data = data_filter(acc_data, cut_off_fre_strike_off, self.sample_rate, filter_order=2)
@@ -482,23 +483,23 @@ class SageCsvReader:
         max_index = np.argmax(peak_heights)
         return peaks[max_index]
 
-    def create_step_id(self, verbose=False):
+    def create_step_id(self, segment, verbose=False):
         max_step_length = self.sample_rate * 2
-        [RON, ROFF] = self.get_walking_strike_off(0, 0, max_step_length, 10, verbose)
+        [RON, ROFF] = self.get_walking_strike_off(0, 0, segment, 10, verbose)
         events_dict = {'ROFF': ROFF, 'RON': RON}
         foot_events = translate_step_event_to_step_id(events_dict, max_step_length)
-        self.data_frame.insert(0, 'Event', np.nan)
+        self.data_frame.insert(0, EVENT_COLUMN, np.nan)
         if verbose:
             plt.figure()
         for _, event in foot_events.iterrows():
-            self.data_frame.loc[event[0]:event[1], 'Event'] = SageCsvReader.GUESSED_EVENT_INDEX
+            self.data_frame.loc[event[0]:event[1], EVENT_COLUMN] = SageCsvReader.GUESSED_EVENT_INDEX
             SageCsvReader.GUESSED_EVENT_INDEX += 1
             if verbose:
-                plt.plot(self.data_frame.loc[event[0]:event[1], 'GyroX_R_FOOT'].values)
+                plt.plot(self.data_frame.loc[event[0]:event[1], 'GyroX_'+segment].values)
         if self.missing_data_index.any(axis=0):
             print("Steps containing corrupted data: {}. They are marked as minus".format(
-                self.data_frame[self.missing_data_index]['Event'].dropna().drop_duplicates().tolist()))
-            self.data_frame.loc[self.missing_data_index, 'Event'] *= -1  # mark the missing IMU data as minus event
+                self.data_frame[self.missing_data_index][EVENT_COLUMN].dropna().drop_duplicates().tolist()))
+            self.data_frame.loc[self.missing_data_index, EVENT_COLUMN] *= -1  # mark the missing IMU data as minus event
         if verbose:
             plt.show()
 
