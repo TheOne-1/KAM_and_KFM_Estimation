@@ -210,8 +210,10 @@ class TianModel(BaseModel):
             segment_imu_transformed = np.column_stack([segment_acc_rotated, segment_gyr_rotated]).reshape(data_shape_ori)
             segment_imu_transformed[np.isnan(segment_imu_transformed)] = 0
             return segment_imu_transformed
+        imu_lfoot_col_loc = [self._data_fields.index(field + '_L_FOOT') for field in IMU_FIELDS[:6]]
         imu_lshank_col_loc = [self._data_fields.index(field + '_L_SHANK') for field in IMU_FIELDS[:6]]
         imu_lthigh_col_loc = [self._data_fields.index(field + '_L_SHANK') for field in IMU_FIELDS[:6]]
+        imu_rfoot_col_loc = [self._data_fields.index(field + '_R_FOOT') for field in IMU_FIELDS[:6]]
         imu_rshank_col_loc = [self._data_fields.index(field + '_R_SHANK') for field in IMU_FIELDS[:6]]
         imu_rthigh_col_loc = [self._data_fields.index(field + '_R_SHANK') for field in IMU_FIELDS[:6]]
         imu_pelvis_col_loc = [self._data_fields.index(field + '_WAIST') for field in IMU_FIELDS[:6]]
@@ -256,8 +258,10 @@ class TianModel(BaseModel):
                 sub_data[:, :, imu_rthigh_col_loc] = transform_segment_imu(sub_data[:, :, imu_rthigh_col_loc], rthigh_ml, rthigh_y)
 
             sub_weight = sub_data[0, 0, weight_col_loc]
+            sub_data[:, :, imu_lfoot_col_loc[:3]] = sub_data[:, :, imu_lfoot_col_loc[:3]] * sub_weight * SEGMENT_MASS_PERCENT['L_FOOT'] / 100
             sub_data[:, :, imu_lshank_col_loc[:3]] = sub_data[:, :, imu_lshank_col_loc[:3]] * sub_weight * SEGMENT_MASS_PERCENT['L_SHANK'] / 100
             sub_data[:, :, imu_lthigh_col_loc[:3]] = sub_data[:, :, imu_lthigh_col_loc[:3]] * sub_weight * SEGMENT_MASS_PERCENT['L_THIGH'] / 100
+            sub_data[:, :, imu_rfoot_col_loc[:3]] = sub_data[:, :, imu_rfoot_col_loc[:3]] * sub_weight * SEGMENT_MASS_PERCENT['R_FOOT'] / 100
             sub_data[:, :, imu_rshank_col_loc[:3]] = sub_data[:, :, imu_rshank_col_loc[:3]] * sub_weight * SEGMENT_MASS_PERCENT['R_SHANK'] / 100
             sub_data[:, :, imu_rthigh_col_loc[:3]] = sub_data[:, :, imu_rthigh_col_loc[:3]] * sub_weight * SEGMENT_MASS_PERCENT['R_THIGH'] / 100
             sub_data[:, :, imu_pelvis_col_loc[:3]] = sub_data[:, :, imu_pelvis_col_loc[:3]] * sub_weight * SEGMENT_MASS_PERCENT['WAIST'] / 100
@@ -611,33 +615,18 @@ class TianModel(BaseModel):
             self.representative_profile_curves(arr1, arr2, title, r_rmse)
 
 
-if __name__ == "__main__":
-    RKNEE_MARKER_FIELDS = [marker + axis for marker in ['RFME', 'RFLE'] for axis in ['_X', '_Y', '_Z']]
-    RANKLE_MARKER_FIELDS = [marker + axis for marker in ['RTAM', 'RFAL'] for axis in ['_X', '_Y', '_Z']]
-    RHIP_MARKER_FIELDS = [marker + axis for marker in ['RFT'] for axis in ['_X', '_Y', '_Z']]
-    LKNEE_MARKER_FIELDS = [marker + axis for marker in ['LFLE', 'LFME'] for axis in ['_X', '_Y', '_Z']]
-    LANKLE_MARKER_FIELDS = [marker + axis for marker in ['LFAL', 'LTAM'] for axis in ['_X', '_Y', '_Z']]
-    LHIP_MARKER_FIELDS = [marker + axis for marker in ['LFT'] for axis in ['_X', '_Y', '_Z']]
-    ASIS_MARKER_FIELDS = [marker + axis for marker in ['LIAS', 'RIAS'] for axis in ['_X', '_Y', '_Z']]
-    PSIS_MARKER_FIELDS = [marker + axis for marker in ['LIPS', 'RIPS'] for axis in ['_X', '_Y', '_Z']]
-    SHOULDER_MARKER_FIELDS = [marker + axis for marker in ['LAC', 'RAC'] for axis in ['_X', '_Y', '_Z']]
-    SPINE_MARKER_FIELDS = [marker + axis for marker in ['CV7', 'MAI'] for axis in ['_X', '_Y', '_Z']]
-
+def one_loop():
     data_path = DATA_PATH + '/40samples+stance.h5'
 
-    R_LEG_GYR_X = ["GyroX_" + sensor for sensor in ['R_SHANK', 'R_THIGH']]
-    ACC_VERTICAL = ["AccelY_" + sensor for sensor in SENSOR_LIST[2:]]
-    ACC_ML = ["AccelX_" + sensor for sensor in SENSOR_LIST[2:]]
-    GYR_Z = ["GyroZ_" + sensor for sensor in SENSOR_LIST[2:]]
+    ACC_VERTICAL = ["AccelY_" + sensor for sensor in SENSOR_LIST]
+    ACC_ML = ["AccelX_" + sensor for sensor in SENSOR_LIST]
     VID_180_FIELDS = [loc + axis + angle for loc in ["LShoulder", "RShoulder", "RKnee", "LKnee", "RAnkle", "LAnkle"]
                       for angle in ['_180'] for axis in ['_x', '_y']]
 
-    ACC_ML_BODY = ["AccelX_" + sensor for sensor in ['WAIST', 'CHEST']]
-    GYR_Z_BODY = ["GyroZ_" + sensor for sensor in ['WAIST', 'CHEST']]
-    R_LEG_GYR = ["Gyro" + axis + sensor for sensor in ['R_SHANK', 'R_FOOT'] for axis in ['X_', 'Y_', 'Z_']]
+    R_FOOT_SHANK_GYR = ["Gyro" + axis + sensor for sensor in ['R_SHANK', 'R_FOOT'] for axis in ['X_', 'Y_', 'Z_']]
 
     input_vid = {'force_x': VID_180_FIELDS, 'force_z': VID_180_FIELDS, 'r_x': VID_180_FIELDS, 'r_z': ['RKnee_y_90']}
-    input_imu = {'force_x': ACC_ML, 'force_z': ACC_VERTICAL, 'r_x': ACC_ML + R_LEG_GYR, 'r_z': R_LEG_GYR}
+    input_imu = {'force_x': ACC_ML, 'force_z': ACC_VERTICAL, 'r_x': R_FOOT_SHANK_GYR, 'r_z': R_FOOT_SHANK_GYR}
 
     x_fields = {
         'force_x': input_vid['force_x'] + input_imu['force_x'],
@@ -670,3 +659,18 @@ if __name__ == "__main__":
     # model_builder.preprocess_train_evaluation(subjects[:13], subjects[13:], subjects[13:])
     model_builder.cross_validation(subjects)
     plt.show()
+
+
+if __name__ == "__main__":
+    RKNEE_MARKER_FIELDS = [marker + axis for marker in ['RFME', 'RFLE'] for axis in ['_X', '_Y', '_Z']]
+    RANKLE_MARKER_FIELDS = [marker + axis for marker in ['RTAM', 'RFAL'] for axis in ['_X', '_Y', '_Z']]
+    RHIP_MARKER_FIELDS = [marker + axis for marker in ['RFT'] for axis in ['_X', '_Y', '_Z']]
+    LKNEE_MARKER_FIELDS = [marker + axis for marker in ['LFLE', 'LFME'] for axis in ['_X', '_Y', '_Z']]
+    LANKLE_MARKER_FIELDS = [marker + axis for marker in ['LFAL', 'LTAM'] for axis in ['_X', '_Y', '_Z']]
+    LHIP_MARKER_FIELDS = [marker + axis for marker in ['LFT'] for axis in ['_X', '_Y', '_Z']]
+    ASIS_MARKER_FIELDS = [marker + axis for marker in ['LIAS', 'RIAS'] for axis in ['_X', '_Y', '_Z']]
+    PSIS_MARKER_FIELDS = [marker + axis for marker in ['LIPS', 'RIPS'] for axis in ['_X', '_Y', '_Z']]
+    SHOULDER_MARKER_FIELDS = [marker + axis for marker in ['LAC', 'RAC'] for axis in ['_X', '_Y', '_Z']]
+    SPINE_MARKER_FIELDS = [marker + axis for marker in ['CV7', 'MAI'] for axis in ['_X', '_Y', '_Z']]
+
+    one_loop()
