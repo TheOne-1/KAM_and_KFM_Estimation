@@ -639,6 +639,11 @@ def one_loop():
         # 'r_x': input_imu['r_x'],
         # 'r_z': input_imu['r_z'],
 
+        # 'force_x': input_vid['force_x'],
+        # 'force_z': input_vid['force_z'],
+        # 'r_x': input_vid['r_x'],
+        # 'r_z': input_vid['r_z'],
+
         'anthro': STATIC_DATA
     }
     MAIN_OUTPUT_FIELDS = ['EXT_KM_Y']  # EXT_KM_Y RIGHT_KNEE_ADDUCTION_MOMENT
