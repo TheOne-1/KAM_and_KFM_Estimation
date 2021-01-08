@@ -1,5 +1,7 @@
 config.py
 runs/
+figures/results/
+figures/exports/
 .idea/
 
 # Byte-compiled / optimized / DLL files
