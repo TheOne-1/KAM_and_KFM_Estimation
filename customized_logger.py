@@ -37,9 +37,13 @@ ch.setLevel(logging.INFO)
 ch.setFormatter(CustomFormatter())
 
 logger.addHandler(ch)
+fh = None
 
 
 def add_file_handler(logger_, file_name):
+    global fh
+    if fh is not None:
+        logger_.removeHandler(fh)
     fh = logging.FileHandler(file_name)
     fh.setLevel(logging.DEBUG)
     logger_.addHandler(fh)
