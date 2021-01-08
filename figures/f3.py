@@ -61,7 +61,7 @@ def draw_f3(mean_std_kam, mean_std_kfm):
 
 
 if __name__ == "__main__":
-    result_dir = '/home/tan/VideoIMUCombined/experiment_data/KAM/training_results/2021-01-06 15:38:57.213976'
+    result_dir = './results/0107_KAM/IMU+OP'
     with h5py.File(os.path.join(result_dir, 'results.h5'), 'r') as hf:
         _data_all_sub = {subject: subject_data[:] for subject, subject_data in hf.items()}
         _data_fields = json.loads(hf.attrs['columns'])
