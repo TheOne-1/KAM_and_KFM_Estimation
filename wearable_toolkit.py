@@ -31,7 +31,6 @@ class VideoCsvReader:
 
     def __init__(self, file_path):
         self.data_frame = pd.read_csv(file_path, index_col=0)
-        self.data_frame.loc[:, :] = data_filter(self.data_frame.values, 15, 100, 2)
 
     def get_column_position(self, marker_name):
         return self.data_frame[marker_name]
@@ -45,8 +44,11 @@ class VideoCsvReader:
     def fill_low_probability_data(self):
         columns_label = self.data_frame.columns.values.reshape([-1, 3]).tolist()
         for x, y, probability in columns_label:
-            self.data_frame.loc[self.data_frame[probability] < 0.6, [x, y]] = np.nan
+            self.data_frame.loc[self.data_frame[probability] < 0.6, [x, y, probability]] = np.nan
         self.data_frame = self.data_frame.interpolate(method='linear', axis=0)
+
+    def low_pass_filtering(self, cut_off_fre, sampling_fre, filter_order):
+        self.data_frame.loc[:, :] = data_filter(self.data_frame.values, cut_off_fre, sampling_fre, filter_order)
 
     def resample_to_100hz(self):
         target_sample_rate = 100.
