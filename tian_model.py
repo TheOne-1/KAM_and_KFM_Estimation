@@ -705,4 +705,6 @@ if __name__ == "__main__":
     VID_90_R_LIMB_FIELDS = [loc + axis + '_90' for loc in ["RShoulder", "RKnee", "RAnkle"] for axis in ['_x', '_y']]
     R_FOOT_SHANK_GYR = ["Gyro" + axis + sensor for sensor in ['R_SHANK', 'R_FOOT'] for axis in ['X_', 'Y_', 'Z_']]
 
-    run_kfm(use_imu=True, use_op=False)
+    run_kam(use_imu=True, use_op=True)
+    run_kfm(use_imu=True, use_op=True)
+

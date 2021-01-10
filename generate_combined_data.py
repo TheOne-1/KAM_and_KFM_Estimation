@@ -28,8 +28,8 @@ def sync_and_crop_data_frame(subject, trial):
     # interpolate low probability data
     video_90_data.fill_low_probability_data()
     video_180_data.fill_low_probability_data()
-    video_90_data.low_pass_filtering(15, 100, 2)
-    video_180_data.low_pass_filtering(15, 100, 2)
+    video_90_data.low_pass_filtering(10, 100, 2)
+    video_180_data.low_pass_filtering(10, 100, 2)
     video_90_data.resample_to_100hz()
     video_180_data.resample_to_100hz()
 
@@ -108,8 +108,8 @@ def get_static_combined_data():
             video_180_data = wearable_toolkit.VideoCsvReader(video_data_path_180)
             video_90_data.fill_low_probability_data()
             video_180_data.fill_low_probability_data()
-            video_90_data.low_pass_filtering(15, 100, 2)
-            video_180_data.low_pass_filtering(15, 100, 2)
+            video_90_data.low_pass_filtering(10, 100, 2)
+            video_180_data.low_pass_filtering(10, 100, 2)
             video_90_data.resample_to_100hz()
             video_180_data.resample_to_100hz()
 
@@ -123,5 +123,5 @@ def get_static_combined_data():
 
 
 if __name__ == "__main__":
-    get_static_combined_data()
+    # get_static_combined_data()
     get_combined_data()
