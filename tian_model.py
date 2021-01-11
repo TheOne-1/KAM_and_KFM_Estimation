@@ -667,6 +667,7 @@ def run_kam(use_imu, use_op):
 
 
 def run_kfm(use_imu, use_op):
+    """ z -> y, x -> z"""
     input_imu = {'force_y': ACC_AP, 'force_z': ACC_VERTICAL, 'r_y': R_FOOT_SHANK_GYR, 'r_z': R_FOOT_SHANK_GYR}
     input_vid = {'force_y': VID_90_FIELDS, 'force_z': VID_90_FIELDS, 'r_y': VID_90_FIELDS, 'r_z': ['RKnee_y_90']}
 
@@ -708,3 +709,5 @@ if __name__ == "__main__":
     run_kam(use_imu=True, use_op=True)
     run_kfm(use_imu=True, use_op=True)
 
+    run_kam(use_imu=False, use_op=True)
+    run_kfm(use_imu=False, use_op=True)
