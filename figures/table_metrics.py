@@ -38,16 +38,20 @@ if __name__ == '__main__':
     for trial_index, trial_name in enumerate(TRIALS):
         trial_name = trial_name.replace('_', ' ')
         all_subject_results = []
+        all_subject_results_tmp = []
         for subject_index, subject_name in enumerate(SUBJECTS):
             trial_loc = (all_data['trial_id'] == trial_index) & (all_data['subject_id'] == subject_index)
             true_value = all_data['true_main_output'][trial_loc]
             pred_value = all_data['pred_main_output'][trial_loc]
             weight = all_data['force_phase'][trial_loc]
-            all_subject_results.append(get_score(true_value, pred_value, weight))
+            subject_result = get_score(true_value, pred_value, weight)
+            all_subject_results.append(subject_result)
+            all_subject_results_tmp.append({'subject': subject_name, 'category': trial_name, **subject_result})
         all_subject_results = {metric: [subject_result[metric] for subject_result in all_subject_results] for metric in all_subject_results[0].keys()}
         mean_result = {key:  '%.3f' % np.mean(value) for key, value in all_subject_results.items()}
-        mean_results.append({'category': trial_name, **mean_result})
-        std_result = {key:  '%.3f' %  np.std(value) for key, value in all_subject_results.items()}
+        mean_results.append({'subject': 'all', 'category': trial_name, **mean_result})
+        mean_results += all_subject_results_tmp
+        std_result = {key:  '%.3f' % np.std(value) for key, value in all_subject_results.items()}
         std_results.append({'category': trial_name, **std_result})
 
     for export_file, results in [['KAM_mean_metrics.csv', mean_results], ['KAM_std_metrics.csv', std_results]]:
