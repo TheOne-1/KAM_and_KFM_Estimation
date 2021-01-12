@@ -48,6 +48,13 @@ class VideoCsvReader:
         self.data_frame = self.data_frame.interpolate(method='linear', axis=0)
 
     def low_pass_filtering(self, cut_off_fre, sampling_fre, filter_order):
+
+        # plt.figure()
+        # plt.plot(self.data_frame['RKnee_x'])
+        # plt.plot(data_filter(self.data_frame['RKnee_x'], 15, 100, 2))
+        # plt.plot(data_filter(self.data_frame['RKnee_x'], 10, 100, 2))
+        # plt.show()
+
         self.data_frame.loc[:, :] = data_filter(self.data_frame.values, cut_off_fre, sampling_fre, filter_order)
 
     def resample_to_100hz(self):

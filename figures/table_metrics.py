@@ -26,7 +26,7 @@ def get_score(arr_true, arr_pred, w):
 
 
 if __name__ == '__main__':
-    h5_dir = './results/0107_KAM/IMU+OP'
+    h5_dir = 'results/0107_KAM/IMU+OP'
     with h5py.File(os.path.join(h5_dir, 'results.h5'), 'r') as hf:
         _data_all_sub = {subject: subject_data[:] for subject, subject_data in hf.items()}
         _data_fields = json.loads(hf.attrs['columns'])

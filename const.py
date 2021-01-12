@@ -5,6 +5,7 @@ OPENPOSE_MODEL_PATH = os.environ.get('OPENPOSE_MODEL_PATH')
 VIDEO_ORIGINAL_SAMPLE_RATE = 119.99014859206962
 DATA_PATH = os.environ.get('KAM_DATA_PATH')
 TRIALS = ['baseline', 'fpa', 'step_width', 'trunk_sway']
+TRIALS_PRINT = ['Baseline', 'FPA', 'Step Width', 'Trunk Sway']
 STATIC_TRIALS = ['static_back', 'static_side']
 SUBJECTS = ['s002_wangdianxin', 's004_ouyangjue', 's005_tangansheng', 's006_xusen', 's007_zuogangao', 's008_liyu',
             's009_sunyubo', 's010_handai', 's011_wuxingze', 's012_likaixiang', 's013_zhangxiaohan', 's014_maqichao',

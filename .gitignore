@@ -3,6 +3,7 @@ runs/
 figures/results/
 figures/exports/
 .idea/
+.csv
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
