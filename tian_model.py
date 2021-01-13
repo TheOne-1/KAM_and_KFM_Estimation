@@ -78,13 +78,12 @@ class TianRNN(nn.Module):
     def __init__(self, x_dim, y_dim, hidden_dim=10, nlayer=2):
         super(TianRNN, self).__init__()
         self.hidden_dim = hidden_dim
-        self.i2r = nn.Linear(x_dim, hidden_dim)
-        self.rnn_layer = nn.LSTM(hidden_dim, hidden_dim, nlayer, batch_first=True, bidirectional=True)
+        self.rnn_layer = nn.LSTM(x_dim, hidden_dim, nlayer, batch_first=True, bidirectional=True)
         self.y_dim = y_dim
         self.r2d = nn.Linear(2 * hidden_dim, hidden_dim, bias=False)
         self.d2o = nn.Linear(hidden_dim, y_dim, bias=False)
         self.relu = nn.ReLU()
-        for layer in [self.i2r, self.r2d, self.d2o]:
+        for layer in [self.r2d, self.d2o]:
             nn.init.xavier_normal_(layer.weight)
         for name, param in self.rnn_layer.named_parameters():
             if 'bias' in name:
@@ -93,8 +92,6 @@ class TianRNN(nn.Module):
                 nn.init.xavier_normal_(param)
 
     def forward(self, sequence, lens):
-        sequence = self.i2r(sequence)
-        sequence = self.relu(sequence)
         sequence = pack_padded_sequence(sequence, lens, batch_first=True, enforce_sorted=False)
         lstm_out, _ = self.rnn_layer(sequence)
         lstm_out, _ = pad_packed_sequence(lstm_out, batch_first=True, total_length=152)
@@ -332,15 +329,13 @@ class TianModel(BaseModel):
         y_train_fz, y_validation_fz = y_train['midout_force_z'], y_validation['midout_force_z']
         model_fz = TianRNN(x_train_fz.shape[2], y_train_fz.shape[2]).cuda()
         params = {**sub_model_base_param, **{'target_name': 'midout_force_z', 'fields': ['plate_2_force_z']}}
-        self.build_sub_model(model_fz, x_train_fz, y_train_fz, x_validation_fz, y_validation_fz, validation_weight,
-                             params)
+        self.build_sub_model(model_fz, x_train_fz, y_train_fz, x_validation_fz, y_validation_fz, validation_weight, params)
 
         x_train_fx, x_validation_fx = x_train['force_x'], x_validation['force_x']
         y_train_fx, y_validation_fx = y_train['midout_force_x'], y_validation['midout_force_x']
         model_fx = TianRNN(x_train_fx.shape[2], y_train_fx.shape[2]).cuda()
         params = {**sub_model_base_param, **{'target_name': 'midout_force_x', 'fields': ['plate_2_force_x']}}
-        self.build_sub_model(model_fx, x_train_fx, y_train_fx, x_validation_fx, y_validation_fx, validation_weight,
-                             params)
+        self.build_sub_model(model_fx, x_train_fx, y_train_fx, x_validation_fx, y_validation_fx, validation_weight, params)
 
         model_fx_pre = type(model_fx)(x_train_fx.shape[2], y_train_fx.shape[2]).cuda()
         model_fz_pre = type(model_fz)(x_train_fz.shape[2], y_train_fz.shape[2]).cuda()
@@ -522,9 +517,6 @@ class TianModel(BaseModel):
                     with torch.no_grad():
                         y_validation_pred = nn_model(x_validation, lens)
                         validation_loss.append(loss_fn(y_validation_pred, y_validation).item() / x_validation.shape[0])
-                # plt.figure()
-                # plt.plot(x_validation[0, :, 0].cpu().numpy())
-                # plt.plot(y_validation_pred[0, :, 0].cpu().numpy())
                 return np.mean(validation_loss)
 
             vali_from_train_loss = vali_set_loss(model, vali_from_train_dl, loss_fn)
@@ -707,7 +699,9 @@ if __name__ == "__main__":
     R_FOOT_SHANK_GYR = ["Gyro" + axis + sensor for sensor in ['R_SHANK', 'R_FOOT'] for axis in ['X_', 'Y_', 'Z_']]
 
     run_kam(use_imu=True, use_op=True)
-    run_kfm(use_imu=True, use_op=True)
-
     run_kam(use_imu=False, use_op=True)
+    run_kam(use_imu=True, use_op=False)
+
+    run_kfm(use_imu=True, use_op=True)
     run_kfm(use_imu=False, use_op=True)
+    run_kfm(use_imu=True, use_op=False)

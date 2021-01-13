@@ -1,7 +1,7 @@
 import os
 import h5py
 import json
-from figures.PaperFigures import get_mean_std, format_plot
+from figures.PaperFigures import get_mean_std, format_axis
 from const import SUBJECTS
 import numpy as np
 from const import LINE_WIDTH, FONT_DICT, FONT_SIZE, FONT_DICT, FONT_SIZE, FONT_DICT_LARGE
@@ -27,7 +27,7 @@ def draw_f3(mean_std_kam, mean_std_kfm):
         ax.set_xticklabels(range(0, 101, 25), fontdict=FONT_DICT)
         ax.set_xlabel('Stance Phase (\%)', fontdict=FONT_DICT)
         ax.set_xlim(0, 100)
-        format_plot()
+        format_axis()
 
     def subplot_1_style():
         ax = plt.gca()
@@ -59,10 +59,10 @@ def draw_f3(mean_std_kam, mean_std_kfm):
 
 
 if __name__ == "__main__":
-    with h5py.File('results/0107_KAM/IMU+OP/results.h5', 'r') as hf:
+    with h5py.File('results/0114_KAM/OP/results.h5', 'r') as hf:
         kam_data_all_sub = {subject: subject_data[:] for subject, subject_data in hf.items()}
         kam_data_fields = json.loads(hf.attrs['columns'])
-    with h5py.File('results/0107_KFM/IMU+OP/results.h5', 'r') as hf:
+    with h5py.File('results/0114_KFM/OP/results.h5', 'r') as hf:
         kfm_data_all_sub = {subject: subject_data[:] for subject, subject_data in hf.items()}
         kfm_data_fields = json.loads(hf.attrs['columns'])
 

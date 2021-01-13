@@ -1,7 +1,7 @@
 import os
 import h5py
 import json
-from PaperFigures import get_mean_std, format_plot
+from PaperFigures import get_mean_std, format_axis
 from const import SUBJECTS
 import numpy as np
 from const import LINE_WIDTH, FONT_DICT, FONT_SIZE, FONT_DICT, FONT_SIZE, FONT_DICT_LARGE
