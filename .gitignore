@@ -1,7 +1,6 @@
 config.py
 runs/
 figures/results/
-figures/exports/
 .idea/
 .csv
 
