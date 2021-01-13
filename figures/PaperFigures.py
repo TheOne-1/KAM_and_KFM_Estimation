@@ -7,7 +7,7 @@ import h5py
 import json
 
 
-def format_plot(line_width=LINE_WIDTH):
+def format_axis(line_width=LINE_WIDTH):
     ax = plt.gca()
     ax.spines['top'].set_visible(False)
     ax.spines['right'].set_visible(False)
@@ -15,6 +15,16 @@ def format_plot(line_width=LINE_WIDTH):
     ax.yaxis.set_tick_params(width=line_width)
     ax.spines['left'].set_linewidth(line_width)
     ax.spines['bottom'].set_linewidth(line_width)
+
+
+def hide_axis_add_grid():
+    ax = plt.gca()
+    ax.spines['top'].set_visible(False)
+    ax.spines['right'].set_visible(False)
+    ax.spines['left'].set_visible(False)
+    ax.spines['bottom'].set_visible(False)
+    ax.grid(color='lightgray', linewidth=2)
+    ax.tick_params(color='lightgray', width=2)
 
 
 def get_mean_std(data_array, data_fields, col_name):

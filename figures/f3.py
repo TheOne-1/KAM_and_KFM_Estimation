@@ -1,7 +1,7 @@
 import os
 import h5py
 import json
-from figures.PaperFigures import get_mean_std, format_plot
+from figures.PaperFigures import get_mean_std, format_axis
 from const import SUBJECTS
 import numpy as np
 from const import LINE_WIDTH, FONT_DICT, FONT_SIZE, FONT_DICT, FONT_SIZE, FONT_DICT_LARGE
@@ -27,7 +27,7 @@ def draw_f3(mean_std_kam, mean_std_kfm):
         ax.set_xticklabels(range(0, 101, 25), fontdict=FONT_DICT)
         ax.set_xlabel('Stance Phase (\%)', fontdict=FONT_DICT)
         ax.set_xlim(0, 100)
-        format_plot()
+        format_axis()
 
     def subplot_1_style():
         ax = plt.gca()

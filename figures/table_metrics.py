@@ -15,9 +15,6 @@ def get_score(arr_true, arr_pred, w):
 
     locs = np.where(w.ravel())[0]
     arr_true, arr_pred = arr_true.ravel()[locs], arr_pred.ravel()[locs]
-    plt.figure()
-    plt.plot(arr_true, arr_pred, '.')
-    plt.show()
     r2 = r2_score(arr_true, arr_pred)
     rmse = np.sqrt(mse(arr_true, arr_pred))
     r_rmse = rmse / (arr_true.max() - arr_true.min()) * 100
@@ -27,7 +24,7 @@ def get_score(arr_true, arr_pred, w):
 
 
 if __name__ == '__main__':
-    h5_dir = 'results/0107_KAM/OP'
+    h5_dir = 'results/0114_KAM/IMU+OP'
     with h5py.File(os.path.join(h5_dir, 'results.h5'), 'r') as hf:
         _data_all_sub = {subject: subject_data[:] for subject, subject_data in hf.items()}
         _data_fields = json.loads(hf.attrs['columns'])
