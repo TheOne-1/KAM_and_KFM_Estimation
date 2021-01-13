@@ -1,9 +1,10 @@
 import numpy as np
 import matplotlib.pyplot as plt
-from const import LINE_WIDTH, FONT_DICT_SMALL, FONT_SIZE, FONT_DICT, FONT_DICT_X_SMALL, FONT_DICT_LARGE
-from const import LINE_WIDTH_THICK, FONT_SIZE_LARGE, FORCE_PHASE
+from const import LINE_WIDTH
+from const import LINE_WIDTH_THICK, FONT_SIZE_LARGE, FORCE_PHASE, SUBJECTS
 from base_kam_model import BaseModel
-import pandas as pd
+import h5py
+import json
 
 
 def format_plot(line_width=LINE_WIDTH):
@@ -26,4 +27,13 @@ def get_mean_std(data_array, data_fields, col_name):
     pred_mean, pred_std = pred_stance[:, :, 0].mean(axis=0), pred_stance[:, :, 0].std(axis=0)
     return {'true_mean': true_mean, 'true_std': true_std, 'pred_mean': pred_mean, 'pred_std': pred_std}
 
+
+def get_trial_data(file_path, trial_index, subjects=SUBJECTS):
+    with h5py.File(file_path, 'r') as hf:
+        _data_all = {subject: subject_data[:] for subject, subject_data in hf.items() if subject in subjects}
+        _data_fields = json.loads(hf.attrs['columns'])
+
+    trial_id_col_loc = _data_fields.index('trial_id')
+    trial_data = [data[data[:, 0, trial_id_col_loc] == trial_index, :, :] for data in _data_all.values()]
+    return trial_data, _data_fields
 

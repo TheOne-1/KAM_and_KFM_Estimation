@@ -1,7 +1,4 @@
-import os
-import h5py
-import json
-from PaperFigures import get_mean_std, format_plot
+from PaperFigures import get_mean_std, format_plot, get_trial_data
 from const import SUBJECTS
 import numpy as np
 import pandas as pd
@@ -64,16 +61,6 @@ def save_fig():
     plt.legend(handlelength=3, bbox_to_anchor=(-0.1, 3.2), ncol=2, fontsize=FONT_SIZE,
                frameon=False)
     plt.savefig('exports/f4.png')
-
-
-def get_trial_data(file_path, trial_index):
-    with h5py.File(file_path, 'r') as hf:
-        _data_all = {subject: subject_data[:] for subject, subject_data in hf.items()}
-        _data_fields = json.loads(hf.attrs['columns'])
-
-    trial_id_col_loc = _data_fields.index('trial_id')
-    trial_data = [data[data[:, 0, trial_id_col_loc] == trial_index, :, :] for data in _data_all.values()]
-    return trial_data, _data_fields
 
 
 if __name__ == "__main__":
