@@ -67,9 +67,9 @@ if __name__ == "__main__":
     fig, gs = init_figure()
     for i_moment, moment in enumerate(['KAM', 'KFM']):
         for trial_index, trial_name in enumerate(TRIALS):
-            _data_IMU_OP, _data_fields = get_trial_data('results/0107_' + moment + '/IMU+OP/results.h5', trial_index)
+            _data_IMU_OP, _data_fields = get_trial_data('results/0114_' + moment + '/IMU+OP/results.h5', trial_index)
             mean_std_IMU_OP = get_mean_std(np.concatenate(_data_IMU_OP, axis=0), _data_fields, 'main_output')
-            _data_IMU, _data_fields = get_trial_data('results/0107_' + moment + '/IMU/results.h5', trial_index)
+            _data_IMU, _data_fields = get_trial_data('results/0114_' + moment + '/IMU/results.h5', trial_index)
             mean_std_IMU = get_mean_std(np.concatenate(_data_IMU, axis=0), _data_fields, 'main_output')
             if moment == 'KFM':
                 mean_std_IMU_OP['true_mean'], mean_std_IMU_OP['pred_mean'] = -mean_std_IMU_OP['true_mean'], -mean_std_IMU_OP['pred_mean']

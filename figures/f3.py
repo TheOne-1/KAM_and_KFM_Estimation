@@ -59,10 +59,10 @@ def draw_f3(mean_std_kam, mean_std_kfm):
 
 
 if __name__ == "__main__":
-    with h5py.File('results/0114_KAM/IMU+OP/results.h5', 'r') as hf:
+    with h5py.File('results/0114_KAM/OP/results.h5', 'r') as hf:
         kam_data_all_sub = {subject: subject_data[:] for subject, subject_data in hf.items()}
         kam_data_fields = json.loads(hf.attrs['columns'])
-    with h5py.File('results/0114_KFM/IMU+OP/results.h5', 'r') as hf:
+    with h5py.File('results/0114_KFM/OP/results.h5', 'r') as hf:
         kfm_data_all_sub = {subject: subject_data[:] for subject, subject_data in hf.items()}
         kfm_data_fields = json.loads(hf.attrs['columns'])
 
