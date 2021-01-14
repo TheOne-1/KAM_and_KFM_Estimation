@@ -34,9 +34,12 @@ def get_all_results(h5_dir):
     all_data = np.concatenate(list(_data_all_sub.values()), axis=0)
     all_data = pd.DataFrame(data=all_data.reshape([-1, all_data.shape[2]]), columns=_data_fields)
     all_results = []
-    for trial_index, trial_name in enumerate(TRIALS):
+    for trial_index, trial_name in enumerate(TRIALS + ['all']):
         for subject_index, subject_name in enumerate(SUBJECTS):
-            trial_loc = (all_data['trial_id'] == trial_index) & (all_data['subject_id'] == subject_index)
+            if trial_name == 'all':
+                trial_loc = all_data['subject_id'] == subject_index
+            else:
+                trial_loc = (all_data['trial_id'] == trial_index) & (all_data['subject_id'] == subject_index)
             true_value = all_data['true_main_output'][trial_loc]
             pred_value = all_data['pred_main_output'][trial_loc]
             weight = all_data['force_phase'][trial_loc]
