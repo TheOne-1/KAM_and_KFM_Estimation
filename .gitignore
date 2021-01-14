@@ -2,7 +2,7 @@ config.py
 runs/
 figures/results/
 .idea/
-.csv
+*.csv
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
