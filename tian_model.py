@@ -348,6 +348,7 @@ class TianModel(BaseModel):
 
         four_source_model = FourSourceModel(model_fx, model_fz, model_rx, model_rz, self._data_scalar)
         params = {**sub_model_base_param, **{'target_name': 'main_output', 'fields': ['EXT_KM_Y']}}
+        # self.build_main_model(four_source_model, x_train, y_train, x_validation, y_validation, validation_weight, params)
         params['lr'] = params['lr'] * 0.1
         params['batch_size'] = 200
         self.build_main_model(four_source_model, x_train, y_train, x_validation, y_validation, validation_weight,
@@ -661,7 +662,7 @@ def run_kam(use_imu, use_op):
 def run_kfm(use_imu, use_op):
     """ z -> y, x -> z"""
     input_imu = {'force_y': ACC_AP, 'force_z': ACC_VERTICAL, 'r_y': R_FOOT_SHANK_GYR, 'r_z': R_FOOT_SHANK_GYR}
-    input_vid = {'force_y': VID_90_FIELDS, 'force_z': VID_90_FIELDS, 'r_y': VID_90_FIELDS, 'r_z': ['RKnee_y_90']}
+    input_vid = {'force_y': VID_90_FIELDS, 'force_z': VID_180_FIELDS, 'r_y': VID_90_FIELDS, 'r_z': ['RKnee_y_90']}
 
     x_fields = {'force_y': [], 'force_z': [], 'r_y': [], 'r_z': []}
     if use_imu:
