@@ -24,7 +24,7 @@ def get_score(arr_true, arr_pred, w):
 
 
 def get_overall_mean_std_result(all_results, metric):
-    return '%.3f' % np.mean([result[metric] for result in all_results]) + '(' + '%.3f' % np.std([result[metric] for result in all_results]) + ')'
+    return '%.2f' % np.mean([result[metric] for result in all_results]) + ' (' + '%.2f' % np.std([result[metric] for result in all_results]) + ')'
 
 
 def get_all_results(h5_dir):
