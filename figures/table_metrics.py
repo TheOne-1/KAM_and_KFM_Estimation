@@ -69,8 +69,8 @@ if __name__ == '__main__':
         with open(os.path.join('./exports', target + '_estimation_result.csv'), 'w') as f:
             f_csv = csv.writer(f)
             get_trial_result = lambda all_results, trial_name: list(filter(lambda result: result['trial'] == trial_name, all_results))
-            f_csv.writerow(['Input', *TRIALS_PRINT])
-            for _input, input_name in [[IMU_results, 'IMU'], [IMU_OP_results, 'IMU+OP'], [OP_results, 'OP']]:
+            f_csv.writerow(['', *TRIALS_PRINT])
+            for _input, input_name in [[IMU_results, 'IMU'], [IMU_OP_results, 'Combined'], [OP_results, 'Camera']]:
                 trial_results = [get_overall_mean_std_result(get_trial_result(_input, trial), 'rRMSE') for trial in TRIALS]
                 f_csv.writerow([input_name, *trial_results])
 
