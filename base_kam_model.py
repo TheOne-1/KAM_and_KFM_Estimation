@@ -43,6 +43,7 @@ class BaseModel:
         self._x_fields = x_fields
         self._y_fields = y_fields
         self._weights = {} if weights is None else weights
+        self._base_scalar = base_scalar
         self._data_scalar = {input_name: base_scalar() for input_name in list(x_fields.keys()) + list(y_fields.keys())}
         with h5py.File(data_path, 'r') as hf:
             self._data_all_sub = {subject: subject_data[:] for subject, subject_data in hf.items()}

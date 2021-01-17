@@ -285,9 +285,18 @@ class TianModel(BaseModel):
     def preprocess_train_data(self, x, y, weight):
         y['midout_force_x'], y['midout_force_z'] = -y['midout_force_x'], -y['midout_force_z']
         y['midout_r_x'], y['midout_r_z'] = y['midout_r_x'] / 1000, y['midout_r_z'] / 1000
-        x_need_norm = {k: x[k] for k in set(list(x.keys())) - set(['anthro'])}
-        x.update(
-            **self.normalize_data(x_need_norm, self._data_scalar, 'fit_transform', scalar_mode='by_each_column'))
+        self._x_fields_acc_loc = {}
+        for k in set(list(x.keys())) - set(['anthro']):
+            acc_loc = [self._x_fields[k].index(field) for field in self._x_fields[k] if 'Acc' in field]
+            other_loc = [self._x_fields[k].index(field) for field in self._x_fields[k] if 'Acc' not in field]
+            self._x_fields_acc_loc[k] = {'acc_loc': acc_loc, 'other_loc': other_loc}
+            if len(acc_loc) > 0:
+                x[k][:, :, acc_loc] = self.normalize_array_separately(
+                    x[k][:, :, acc_loc], k+'acc', 'fit_transform', scalar_mode='by_all_columns')
+            if len(other_loc) > 0:
+                x[k][:, :, other_loc] = self.normalize_array_separately(
+                    x[k][:, :, other_loc], k+'other', 'fit_transform', scalar_mode='by_each_column')
+
         y_need_norm = {k: y[k] for k in set(list(y.keys())) - set(['main_output', 'auxiliary_info'])}
         y.update(
             **self.normalize_data(y_need_norm, self._data_scalar, 'fit_transform', scalar_mode='by_each_column'))
@@ -296,11 +305,36 @@ class TianModel(BaseModel):
     def preprocess_validation_test_data(self, x, y, weight):
         y['midout_force_x'], y['midout_force_z'] = -y['midout_force_x'], -y['midout_force_z']
         y['midout_r_x'], y['midout_r_z'] = y['midout_r_x'] / 1000, y['midout_r_z'] / 1000
-        x_need_norm = {k: x[k] for k in set(list(x.keys())) - set(['anthro'])}
-        x.update(**self.normalize_data(x_need_norm, self._data_scalar, 'transform', scalar_mode='by_each_column'))
+        # x_need_norm = {k: x[k] for k in set(list(x.keys())) - set(['anthro'])}
+        # x.update(**self.normalize_data(x_need_norm, self._data_scalar, 'transform', scalar_mode='by_each_column'))
+
+        for k in set(list(x.keys())) - set(['anthro']):
+            acc_loc, other_loc = self._x_fields_acc_loc[k]['acc_loc'], self._x_fields_acc_loc[k]['other_loc']
+            if len(acc_loc) > 0:
+                x[k][:, :, acc_loc] = self.normalize_array_separately(
+                    x[k][:, :, acc_loc], k+'acc', 'transform', scalar_mode='by_all_columns')
+            if len(other_loc) > 0:
+                x[k][:, :, other_loc] = self.normalize_array_separately(
+                    x[k][:, :, other_loc], k+'other', 'transform', scalar_mode='by_each_column')
+
         y_need_norm = {k: y[k] for k in set(list(y.keys())) - set(['main_output', 'auxiliary_info'])}
         y.update(**self.normalize_data(y_need_norm, self._data_scalar, 'transform', scalar_mode='by_each_column'))
         return x, y, weight
+
+    def normalize_array_separately(self, data, name, method, scalar_mode='by_each_column'):
+        if method == 'fit_transform':
+            self._data_scalar[name] = self._base_scalar()
+            # self._data_scalar[name].feature_range = (-10, 10)
+        assert (scalar_mode in ['by_each_column', 'by_all_columns'])
+        input_data = data.copy()
+        original_shape = input_data.shape
+        target_shape = [-1, input_data.shape[2]] if scalar_mode == 'by_each_column' else [-1, 1]
+        input_data[(input_data == 0.).all(axis=2), :] = np.nan
+        input_data = input_data.reshape(target_shape)
+        scaled_data = getattr(self._data_scalar[name], method)(input_data)
+        scaled_data = scaled_data.reshape(original_shape)
+        scaled_data[np.isnan(scaled_data)] = 0.
+        return scaled_data
 
     @staticmethod
     def loss_fun_valid_part(y_pred, y, left, right):
