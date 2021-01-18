@@ -7,7 +7,6 @@ import numpy as np
 from sklearn.metrics import mean_squared_error as mse
 from scipy.stats import pearsonr
 from const import TRIALS, SUBJECTS, TRIALS_PRINT
-import matplotlib.pyplot as plt
 
 
 def get_score(arr_true, arr_pred, w):
@@ -19,8 +18,8 @@ def get_score(arr_true, arr_pred, w):
     rmse = np.sqrt(mse(arr_true, arr_pred))
     r_rmse = rmse / (arr_true.max() - arr_true.min()) * 100
     cor_value = pearsonr(arr_true, arr_pred)[0]
-    rmse = rmse / 9.81 * 1000  # TODO: error-prone code here. Modify generate_combined_data to calculate external KAM.
-    return {'MAE': mae, 'RMSE': rmse, 'rRMSE': r_rmse, 'r':  cor_value}
+    rmse = rmse / 9.81 * 1000
+    return {'RMSE': rmse, 'rRMSE': r_rmse, 'r':  cor_value, 'MAE': mae}
 
 
 def get_overall_mean_std_result(all_results, metric):
@@ -35,7 +34,8 @@ def get_all_results(h5_dir):
     all_data = pd.DataFrame(data=all_data.reshape([-1, all_data.shape[2]]), columns=_data_fields)
     all_results = []
     for trial_index, trial_name in enumerate(TRIALS + ['all']):
-        for subject_index, subject_name in enumerate(SUBJECTS):
+        for subject_name in _data_all_sub:
+            subject_index = SUBJECTS.index(subject_name)
             if trial_name == 'all':
                 trial_loc = all_data['subject_id'] == subject_index
             else:
@@ -53,24 +53,23 @@ def get_all_results(h5_dir):
     mean_std_rRMSE = get_overall_mean_std_result(all_results, 'rRMSE')
     mean_std_RMSE = get_overall_mean_std_result(all_results, 'RMSE')
     mean_std_MAE = get_overall_mean_std_result(all_results,  'MAE')
-    print("Correlation coefficient, rRMSE, RMSE(10^-3) and MAE(10^-3) for overall trials were " +
-          "{}, ".format(mean_std_r) +
-          "{}, ".format(mean_std_rRMSE) +
+    print("MAE(10^-3), RMSE(10^-3), rRMSE(%) and Correlation coefficient for overall trials were " +
+          "{}, respectively.".format(mean_std_MAE) +
           "{}, ".format(mean_std_RMSE) +
-          "{}, respectively.".format(mean_std_MAE))
+          "{}, ".format(mean_std_rRMSE) +
+          "{}, ".format(mean_std_r))
     return all_results
 
 
 if __name__ == '__main__':
-    for target in ['KAM', 'KFM']:
-        IMU_OP_results, IMU_results, OP_results = [get_all_results('results/0114_' + target + '/' + sensor)
-                                                   for sensor in ['IMU+OP', 'IMU', 'OP']]
-
-        with open(os.path.join('./exports', target + '_estimation_result.csv'), 'w') as f:
-            f_csv = csv.writer(f)
+    KAM_results, KFM_results = [get_all_results('results/' + target + '_RESULTS/') for target in ['KAM', 'KFM']]
+    with open(os.path.join('./exports/dianxin_estimation_result.csv'), 'w') as f:
+        f_csv = csv.writer(f)
+        for _input, input_name in [[KAM_results, 'KAM'], [KFM_results, 'KFM']]:
             get_trial_result = lambda all_results, trial_name: list(filter(lambda result: result['trial'] == trial_name, all_results))
-            f_csv.writerow(['', *TRIALS_PRINT])
-            for _input, input_name in [[IMU_results, 'IMU'], [IMU_OP_results, 'Combined'], [OP_results, 'Camera']]:
-                trial_results = [get_overall_mean_std_result(get_trial_result(_input, trial), 'rRMSE') for trial in TRIALS]
-                f_csv.writerow([input_name, *trial_results])
+            f_csv.writerow([input_name, 'MAE(10^-3)', 'RMSE(10^-3)', 'rRMSE(%)', 'r'])
+            metrics = ['MAE', 'RMSE', 'rRMSE', 'r']
+            for trial_index, trial in enumerate(TRIALS):
+                trial_results = [get_overall_mean_std_result(get_trial_result(_input, trial), metric) for metric in metrics]
+                f_csv.writerow([TRIALS_PRINT[trial_index], *trial_results])
 
