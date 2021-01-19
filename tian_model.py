@@ -225,10 +225,10 @@ class TianModel(BaseModel):
             return segment_imu_transformed
         imu_lfoot_col_loc = [self._data_fields.index(field + '_L_FOOT') for field in IMU_FIELDS[:6]]
         imu_lshank_col_loc = [self._data_fields.index(field + '_L_SHANK') for field in IMU_FIELDS[:6]]
-        imu_lthigh_col_loc = [self._data_fields.index(field + '_L_SHANK') for field in IMU_FIELDS[:6]]
+        imu_lthigh_col_loc = [self._data_fields.index(field + '_L_THIGH') for field in IMU_FIELDS[:6]]
         imu_rfoot_col_loc = [self._data_fields.index(field + '_R_FOOT') for field in IMU_FIELDS[:6]]
         imu_rshank_col_loc = [self._data_fields.index(field + '_R_SHANK') for field in IMU_FIELDS[:6]]
-        imu_rthigh_col_loc = [self._data_fields.index(field + '_R_SHANK') for field in IMU_FIELDS[:6]]
+        imu_rthigh_col_loc = [self._data_fields.index(field + '_R_THIGH') for field in IMU_FIELDS[:6]]
         imu_pelvis_col_loc = [self._data_fields.index(field + '_WAIST') for field in IMU_FIELDS[:6]]
         imu_trunk_col_loc = [self._data_fields.index(field + '_CHEST') for field in IMU_FIELDS[:6]]
 
@@ -323,8 +323,7 @@ class TianModel(BaseModel):
 
     def normalize_array_separately(self, data, name, method, scalar_mode='by_each_column'):
         if method == 'fit_transform':
-            self._data_scalar[name] = self._base_scalar()
-            # self._data_scalar[name].feature_range = (-10, 10)
+            self._data_scalar[name] = MinMaxScaler(feature_range=(-3, 3))
         assert (scalar_mode in ['by_each_column', 'by_all_columns'])
         input_data = data.copy()
         original_shape = input_data.shape
@@ -384,7 +383,7 @@ class TianModel(BaseModel):
         params = {**sub_model_base_param, **{'target_name': 'main_output', 'fields': ['EXT_KM_Y']}}
         # self.build_main_model(four_source_model, x_train, y_train, x_validation, y_validation, validation_weight, params)
         params['lr'] = params['lr'] * 0.1
-        params['batch_size'] = 200
+        params['batch_size'] = params['batch_size'] * 10
         self.build_main_model(four_source_model, x_train, y_train, x_validation, y_validation, validation_weight,
                               params)
         res_models = {'four_source_model': four_source_model, 'model_rx_pre': model_rx_pre,
@@ -420,7 +419,7 @@ class TianModel(BaseModel):
             test_ds = TensorDataset(x_fx, x_fz, x_rx, x_rz, x_anthro, y_validation, vali_step_lens)
             test_dl = DataLoader(test_ds, batch_size=batch_size)
             vali_from_test_ds = TensorDataset(x_fx, x_fz, x_rx, x_rz, x_anthro, y_validation, vali_step_lens)
-            num_of_step_for_peek = int(0.1 * len(y_validation))
+            num_of_step_for_peek = int(0.3 * len(y_validation))
             vali_from_test_ds, _ = torch.utils.data.dataset.random_split(vali_from_test_ds, [num_of_step_for_peek, len(
                 y_validation) - num_of_step_for_peek])
             vali_from_test_dl = DataLoader(vali_from_test_ds, batch_size=batch_size)
@@ -664,6 +663,7 @@ def run(x_fields, y_fields, main_output_fields):
     evaluate_fields = {'main_output': main_output_fields}
     model_builder = TianModel(data_path, x_fields, y_fields, weights, evaluate_fields,
                               lambda: MinMaxScaler(feature_range=(-3, 3)))
+                              # lambda: StandardScaler())
     subjects = model_builder.get_all_subjects()
     # model_builder.preprocess_train_evaluation(subjects[:13], subjects[13:], subjects[13:])
     model_builder.cross_validation(subjects)

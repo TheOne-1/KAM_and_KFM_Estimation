@@ -44,7 +44,7 @@ class VideoCsvReader:
     def fill_low_probability_data(self):
         columns_label = self.data_frame.columns.values.reshape([-1, 3]).tolist()
         for x, y, probability in columns_label:
-            self.data_frame.loc[self.data_frame[probability] < 0.6, [x, y, probability]] = np.nan
+            self.data_frame.loc[self.data_frame[probability] < 0.5, [x, y, probability]] = np.nan
         self.data_frame = self.data_frame.interpolate(method='linear', axis=0)
 
     def low_pass_filtering(self, cut_off_fre, sampling_fre, filter_order):
