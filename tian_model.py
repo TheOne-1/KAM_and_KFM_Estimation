@@ -123,7 +123,7 @@ class FourSourceModel(nn.Module):
         out_rz = self.inverse_scaling(out_rz, 'midout_r_z')
         weight = anthro[:, 0, 0].unsqueeze(1).unsqueeze(2)
         height = anthro[:, 0, 1].unsqueeze(1).unsqueeze(2)
-        output = out_fx * out_rz * height - out_fz * out_rx
+        output = out_fx * out_rz - out_fz * out_rx
         output = torch.div(output, weight * height)
         output[zero_padding_loc] = 0
         return output
@@ -154,9 +154,6 @@ class TianModel(BaseModel):
         vid_y_90_col_loc = [self._data_fields.index(marker + '_y_90') for marker in VIDEO_LIST]
         # knee_op_col_loc = self._data_fields.index('RKnee_y_90')
         # knee_vi_col_loc = self._data_fields.index('RFLE_Z')
-        # knee_vi, knee_op_static = [], []
-        # knee_vi_mean, knee_op_static_mean = [], []
-        self.shank_height = {}
         for sub_name, sub_data in self._data_all_sub.items():
             # plt.figure()
             # plt.plot(sub_data[:, :, knee_op_col_loc].ravel(), sub_data[:, :, knee_vi_col_loc].ravel(), '.')
@@ -164,18 +161,8 @@ class TianModel(BaseModel):
             # plt.plot(sub_data[:, :, knee_vi_col_loc].ravel())
             static_side_df = pd.read_csv(DATA_PATH + '/' + sub_name + '/combined/static_side.csv', index_col=0)
             r_ankle_z = np.mean(static_side_df['RAnkle_y_90'])
-            # knee_vi.append(sub_data[:, :, knee_vi_col_loc].ravel())
-            # knee_op_static.append(np.full(sub_data[:, :, knee_vi_col_loc].ravel().shape, np.mean(static_side_df['RAnkle_y_90']) - np.mean(static_side_df['RKnee_y_90'])))
-            # knee_vi_mean.append(np.mean(sub_data[:, :, knee_vi_col_loc])-100)
-            # knee_op_static_mean.append(np.mean(static_side_df['RAnkle_y_90']) - np.mean(static_side_df['RKnee_y_90']))
-            self.shank_height[sub_name] = np.mean(static_side_df['RAnkle_y_90']) - np.mean(static_side_df['RKnee_y_90'])
             sub_data[:, :, vid_y_90_col_loc] = sub_data[:, :, vid_y_90_col_loc] - r_ankle_z
             self._data_all_sub[sub_name] = sub_data
-        # plt.plot(np.concatenate(knee_vi, axis=0))
-        # plt.plot(np.concatenate(knee_op_static, axis=0))
-        # plt.plot(knee_vi_mean)
-        # plt.plot(knee_op_static_mean)
-        # plt.show()
 
     def get_relative_vid_vector(self, scale_180=False):
         midhip_col_loc = [self._data_fields.index('MidHip' + axis + angle) for axis in ['_x', '_y'] for angle in ['_90', '_180']]
@@ -207,9 +194,8 @@ class TianModel(BaseModel):
             marker_data = sub_data[:, :, marker_rknee_col_loc].copy()
             force_data = sub_data[:, :, force_col_loc].copy()
             knee_vector = force_data[:, :, 9:12] - (marker_data[:, :, :3] + marker_data[:, :, 3:6]) / 2
-            knee_z_normed_by_vid = knee_vector[:, :, 2:] / sub_data[0, 0, 1]
-            self._data_all_sub[sub_name] = np.concatenate([sub_data, knee_vector, knee_z_normed_by_vid], axis=2)
-        self._data_fields.extend(['KNEE_X', 'KNEE_Y', 'KNEE_Z', 'KNEE_Z_NORMED_BY_HEIGHT'])
+            self._data_all_sub[sub_name] = np.concatenate([sub_data, knee_vector], axis=2)
+        self._data_fields.extend(['KNEE_X', 'KNEE_Y', 'KNEE_Z'])
 
     def get_rotated_gravityfree_body_weighted_imu(self, ROTATE_IMU=False):
         def transform_segment_imu(segment_imu, segment_ml, segment_y, segment_z=None):
@@ -701,7 +687,7 @@ def run_kam(use_imu, use_op):
         'midout_force_x': ['plate_2_force_x'],
         'midout_force_z': ['plate_2_force_z'],
         'midout_r_x': ['KNEE_X'],
-        'midout_r_z': ['KNEE_Z_NORMED_BY_HEIGHT'],
+        'midout_r_z': ['KNEE_Z'],
         'auxiliary_info': [SUBJECT_ID, TRIAL_ID, FORCE_PHASE]
     }
     run(x_fields, y_fields, main_output_fields)
@@ -748,9 +734,9 @@ if __name__ == "__main__":
     R_FOOT_SHANK_GYR = ["Gyro" + axis + sensor for sensor in ['R_SHANK', 'R_FOOT'] for axis in ['X_', 'Y_', 'Z_']]
 
     run_kam(use_imu=True, use_op=True)
-    # run_kam(use_imu=False, use_op=True)
-    # run_kam(use_imu=True, use_op=False)
-    #
-    # run_kfm(use_imu=True, use_op=True)
-    # run_kfm(use_imu=False, use_op=True)
-    # run_kfm(use_imu=True, use_op=False)
+    run_kam(use_imu=False, use_op=True)
+    run_kam(use_imu=True, use_op=False)
+
+    run_kfm(use_imu=True, use_op=True)
+    run_kfm(use_imu=False, use_op=True)
+    run_kfm(use_imu=True, use_op=False)
