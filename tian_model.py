@@ -1,3 +1,4 @@
+import copy
 import os
 import random
 from base_kam_model import BaseModel
@@ -120,9 +121,9 @@ class FourSourceModel(nn.Module):
         out_fz = self.inverse_scaling(out_fz, 'midout_force_z')
         out_rx = self.inverse_scaling(out_rx, 'midout_r_x')
         out_rz = self.inverse_scaling(out_rz, 'midout_r_z')
-        output = out_fx * out_rz - out_fz * out_rx
         weight = anthro[:, 0, 0].unsqueeze(1).unsqueeze(2)
         height = anthro[:, 0, 1].unsqueeze(1).unsqueeze(2)
+        output = out_fx * out_rz * height - out_fz * out_rx
         output = torch.div(output, weight * height)
         output[zero_padding_loc] = 0
         return output
@@ -153,15 +154,27 @@ class TianModel(BaseModel):
         vid_y_90_col_loc = [self._data_fields.index(marker + '_y_90') for marker in VIDEO_LIST]
         # knee_op_col_loc = self._data_fields.index('RKnee_y_90')
         # knee_vi_col_loc = self._data_fields.index('RFLE_Z')
+        # knee_vi, knee_op_static = [], []
+        # knee_vi_mean, knee_op_static_mean = [], []
+        self.shank_height = {}
         for sub_name, sub_data in self._data_all_sub.items():
             # plt.figure()
             # plt.plot(sub_data[:, :, knee_op_col_loc].ravel(), sub_data[:, :, knee_vi_col_loc].ravel(), '.')
             # plt.plot(sub_data[:, :, knee_op_col_loc].ravel())
             # plt.plot(sub_data[:, :, knee_vi_col_loc].ravel())
             static_side_df = pd.read_csv(DATA_PATH + '/' + sub_name + '/combined/static_side.csv', index_col=0)
-            r_ankle_z = np.median(static_side_df['RAnkle_y_90'])
+            r_ankle_z = np.mean(static_side_df['RAnkle_y_90'])
+            # knee_vi.append(sub_data[:, :, knee_vi_col_loc].ravel())
+            # knee_op_static.append(np.full(sub_data[:, :, knee_vi_col_loc].ravel().shape, np.mean(static_side_df['RAnkle_y_90']) - np.mean(static_side_df['RKnee_y_90'])))
+            # knee_vi_mean.append(np.mean(sub_data[:, :, knee_vi_col_loc])-100)
+            # knee_op_static_mean.append(np.mean(static_side_df['RAnkle_y_90']) - np.mean(static_side_df['RKnee_y_90']))
+            self.shank_height[sub_name] = np.mean(static_side_df['RAnkle_y_90']) - np.mean(static_side_df['RKnee_y_90'])
             sub_data[:, :, vid_y_90_col_loc] = sub_data[:, :, vid_y_90_col_loc] - r_ankle_z
             self._data_all_sub[sub_name] = sub_data
+        # plt.plot(np.concatenate(knee_vi, axis=0))
+        # plt.plot(np.concatenate(knee_op_static, axis=0))
+        # plt.plot(knee_vi_mean)
+        # plt.plot(knee_op_static_mean)
         # plt.show()
 
     def get_relative_vid_vector(self, scale_180=False):
@@ -194,8 +207,9 @@ class TianModel(BaseModel):
             marker_data = sub_data[:, :, marker_rknee_col_loc].copy()
             force_data = sub_data[:, :, force_col_loc].copy()
             knee_vector = force_data[:, :, 9:12] - (marker_data[:, :, :3] + marker_data[:, :, 3:6]) / 2
-            self._data_all_sub[sub_name] = np.concatenate([sub_data, knee_vector], axis=2)
-        self._data_fields.extend(['KNEE_X', 'KNEE_Y', 'KNEE_Z'])
+            knee_z_normed_by_vid = knee_vector[:, :, 2:] / sub_data[0, 0, 1]
+            self._data_all_sub[sub_name] = np.concatenate([sub_data, knee_vector, knee_z_normed_by_vid], axis=2)
+        self._data_fields.extend(['KNEE_X', 'KNEE_Y', 'KNEE_Z', 'KNEE_Z_NORMED_BY_HEIGHT'])
 
     def get_rotated_gravityfree_body_weighted_imu(self, ROTATE_IMU=False):
         def transform_segment_imu(segment_imu, segment_ml, segment_y, segment_z=None):
@@ -305,8 +319,6 @@ class TianModel(BaseModel):
     def preprocess_validation_test_data(self, x, y, weight):
         y['midout_force_x'], y['midout_force_z'] = -y['midout_force_x'], -y['midout_force_z']
         y['midout_r_x'], y['midout_r_z'] = y['midout_r_x'] / 1000, y['midout_r_z'] / 1000
-        # x_need_norm = {k: x[k] for k in set(list(x.keys())) - set(['anthro'])}
-        # x.update(**self.normalize_data(x_need_norm, self._data_scalar, 'transform', scalar_mode='by_each_column'))
 
         for k in set(list(x.keys())) - set(['anthro']):
             acc_loc, other_loc = self._x_fields_acc_loc[k]['acc_loc'], self._x_fields_acc_loc[k]['other_loc']
@@ -370,6 +382,7 @@ class TianModel(BaseModel):
         params = {**sub_model_base_param, **{'target_name': 'midout_force_x', 'fields': ['plate_2_force_x']}}
         self.build_sub_model(model_fx, x_train_fx, y_train_fx, x_validation_fx, y_validation_fx, validation_weight, params)
 
+        four_source_model = FourSourceModel(model_fx, model_fz, model_rx, model_rz, self._data_scalar)
         model_fx_pre = type(model_fx)(x_train_fx.shape[2], y_train_fx.shape[2]).cuda()
         model_fz_pre = type(model_fz)(x_train_fz.shape[2], y_train_fz.shape[2]).cuda()
         model_rx_pre = type(model_rx)(x_train_rx.shape[2], y_train_rx.shape[2]).cuda()
@@ -378,15 +391,15 @@ class TianModel(BaseModel):
         model_fz_pre.load_state_dict(model_fz.state_dict())
         model_rx_pre.load_state_dict(model_rx.state_dict())
         model_rz_pre.load_state_dict(model_rz.state_dict())
+        four_source_model_pre = copy.deepcopy(four_source_model).cuda()
 
-        four_source_model = FourSourceModel(model_fx, model_fz, model_rx, model_rz, self._data_scalar)
         params = {**sub_model_base_param, **{'target_name': 'main_output', 'fields': ['EXT_KM_Y']}}
         # self.build_main_model(four_source_model, x_train, y_train, x_validation, y_validation, validation_weight, params)
         params['lr'] = params['lr'] * 0.1
         params['batch_size'] = params['batch_size'] * 10
         self.build_main_model(four_source_model, x_train, y_train, x_validation, y_validation, validation_weight,
                               params)
-        res_models = {'four_source_model': four_source_model, 'model_rx_pre': model_rx_pre,
+        res_models = {'four_source_model': four_source_model, 'four_source_model_pre': four_source_model_pre, 'model_rx_pre': model_rx_pre,
                       'model_rz_pre': model_rz_pre, 'model_fx_pre': model_fx_pre, 'model_fz_pre': model_fz_pre,
                       'model_rx': model_rx, 'model_rz': model_rz, 'model_fx': model_fx, 'model_fz': model_fz}
         return res_models
@@ -575,7 +588,7 @@ class TianModel(BaseModel):
         eval_after_training(model, test_dl, y_validation, validation_weight, params)
 
     def predict(self, model, x_test):
-        nn_model = model['four_source_model']
+        nn_model, four_source_model_pre = model['four_source_model'], model['four_source_model_pre']
         model_fx_pre, model_fz_pre, model_rx_pre, model_rz_pre = model['model_fx_pre'], model['model_fz_pre'], model['model_rx_pre'], model['model_rz_pre']
         model_fx, model_fz, model_rx, model_rz = model['model_fx'], model['model_fz'], model['model_rx'], model['model_rz']
         self.test_step_lens = self._get_step_len(x_test)
@@ -587,11 +600,12 @@ class TianModel(BaseModel):
         with torch.no_grad():
             test_ds = TensorDataset(x_fx, x_fz, x_rx, x_rz, x_anthro, torch.from_numpy(self.test_step_lens))
             test_dl = DataLoader(test_ds, batch_size=20)
-            y_pred_list = []
+            y_pred_list, y_pred_list_pre = [], []
             y_fx_pre, y_fz_pre, y_rx_pre, y_rz_pre = [], [], [], []
             y_fx, y_fz, y_rx, y_rz = [], [], [], []
             for i_batch, (xb_0, xb_1, xb_2, xb_3, xb_4, lens) in enumerate(test_dl):
                 y_pred_list.append(nn_model(xb_0, xb_1, xb_2, xb_3, xb_4, lens).detach().cpu())
+                y_pred_list_pre.append(four_source_model_pre(xb_0, xb_1, xb_2, xb_3, xb_4, lens).detach().cpu())
                 y_fx_pre.append(model_fx_pre(xb_0, lens).detach().cpu())
                 y_fz_pre.append(model_fz_pre(xb_1, lens).detach().cpu())
                 y_rx_pre.append(model_rx_pre(xb_2, lens).detach().cpu())
@@ -600,11 +614,11 @@ class TianModel(BaseModel):
                 y_fz.append(model_fz(xb_1, lens).detach().cpu())
                 y_rx.append(model_rx(xb_2, lens).detach().cpu())
                 y_rz.append(model_rz(xb_3, lens).detach().cpu())
-            y_pred = torch.cat(y_pred_list)
+            y_pred, y_pred_pre = torch.cat(y_pred_list), torch.cat(y_pred_list_pre)
             y_fx_pre, y_fz_pre, y_rx_pre, y_rz_pre = torch.cat(y_fx_pre), torch.cat(y_fz_pre), torch.cat(y_rx_pre), torch.cat(y_rz_pre)
             y_fx, y_fz, y_rx, y_rz = torch.cat(y_fx), torch.cat(y_fz), torch.cat(y_rx), torch.cat(y_rz)
         y_pred = y_pred.detach().cpu().numpy()
-        return {'main_output': y_pred,
+        return {'main_output': y_pred, 'main_output_pre': y_pred_pre,
                 'midout_force_x': y_fx, 'midout_force_z': y_fz, 'midout_r_x': y_rx, 'midout_r_z': y_rz,
                 'midout_force_x_pre': y_fx_pre, 'midout_force_z_pre': y_fz_pre, 'midout_r_x_pre': y_rx_pre, 'midout_r_z_pre': y_rz_pre}
 
@@ -687,7 +701,7 @@ def run_kam(use_imu, use_op):
         'midout_force_x': ['plate_2_force_x'],
         'midout_force_z': ['plate_2_force_z'],
         'midout_r_x': ['KNEE_X'],
-        'midout_r_z': ['KNEE_Z'],
+        'midout_r_z': ['KNEE_Z_NORMED_BY_HEIGHT'],
         'auxiliary_info': [SUBJECT_ID, TRIAL_ID, FORCE_PHASE]
     }
     run(x_fields, y_fields, main_output_fields)
@@ -734,9 +748,9 @@ if __name__ == "__main__":
     R_FOOT_SHANK_GYR = ["Gyro" + axis + sensor for sensor in ['R_SHANK', 'R_FOOT'] for axis in ['X_', 'Y_', 'Z_']]
 
     run_kam(use_imu=True, use_op=True)
-    run_kam(use_imu=False, use_op=True)
-    run_kam(use_imu=True, use_op=False)
-
-    run_kfm(use_imu=True, use_op=True)
-    run_kfm(use_imu=False, use_op=True)
-    run_kfm(use_imu=True, use_op=False)
+    # run_kam(use_imu=False, use_op=True)
+    # run_kam(use_imu=True, use_op=False)
+    #
+    # run_kfm(use_imu=True, use_op=True)
+    # run_kfm(use_imu=False, use_op=True)
+    # run_kfm(use_imu=True, use_op=False)
