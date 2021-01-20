@@ -321,7 +321,8 @@ class TianModel(BaseModel):
 
     def normalize_array_separately(self, data, name, method, scalar_mode='by_each_column'):
         if method == 'fit_transform':
-            self._data_scalar[name] = MinMaxScaler(feature_range=(-3, 3))
+            # self._data_scalar[name] = MinMaxScaler(feature_range=(-3, 3))
+            self._data_scalar[name] = StandardScaler()
         assert (scalar_mode in ['by_each_column', 'by_all_columns'])
         input_data = data.copy()
         original_shape = input_data.shape
@@ -734,9 +735,9 @@ if __name__ == "__main__":
     R_FOOT_SHANK_GYR = ["Gyro" + axis + sensor for sensor in ['R_SHANK', 'R_FOOT'] for axis in ['X_', 'Y_', 'Z_']]
 
     run_kam(use_imu=True, use_op=True)
-    run_kam(use_imu=False, use_op=True)
     run_kam(use_imu=True, use_op=False)
+    run_kam(use_imu=False, use_op=True)
 
     run_kfm(use_imu=True, use_op=True)
-    run_kfm(use_imu=False, use_op=True)
     run_kfm(use_imu=True, use_op=False)
+    run_kfm(use_imu=False, use_op=True)

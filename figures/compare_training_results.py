@@ -27,10 +27,10 @@ def print_diff(result_dir, true_name, pred_name):
 
 
 if __name__ == "__main__":
-    # result_dir1 = '/home/tan/VideoIMUCombined/experiment_data/KAM/training_results/2021-01-19 20:31:18.466625'
-    # result_dir2 = '/home/tan/VideoIMUCombined/experiment_data/KAM/training_results/2021-01-19 20:31:18.466625'
-    result_dir1 = 'results/0119_KAM/IMU+OP'
-    result_dir2 = 'results/0119_KAM/IMU+OP'
+    result_dir1 = '/home/tan/VideoIMUCombined/experiment_data/KAM/training_results/2021-01-19 21:11:32.748340'
+    result_dir2 = '/home/tan/VideoIMUCombined/experiment_data/KAM/training_results/2021-01-19 21:11:32.748340'
+    # result_dir1 = 'results/0119_KAM/IMU+OP'
+    # result_dir2 = 'results/0119_KAM/IMU+OP'
 
     print('force_x_pre')
     print_diff(result_dir1, 'midout_force_x', 'midout_force_x_pre')

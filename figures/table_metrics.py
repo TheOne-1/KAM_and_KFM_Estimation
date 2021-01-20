@@ -45,10 +45,6 @@ def get_all_results(h5_dir):
             weight = all_data['force_phase'][trial_loc]
             subject_result = get_score(true_value, pred_value, weight)
             all_results.append({'subject': subject_name, 'trial': trial_name, **subject_result})
-    if 'KAM' in h5_dir:
-        pd.DataFrame(all_results).to_csv('./exports/KAM_individual_result_' + h5_dir.split('/')[-1] + '.csv')
-    else:
-        pd.DataFrame(all_results).to_csv('./exports/KFM_individual_result_' + h5_dir.split('/')[-1] + '.csv')
     mean_std_r = get_overall_mean_std_result(all_results, 'r')
     mean_std_rRMSE = get_overall_mean_std_result(all_results, 'rRMSE')
     mean_std_RMSE = get_overall_mean_std_result(all_results, 'RMSE')
@@ -74,3 +70,9 @@ if __name__ == '__main__':
                 trial_results = [get_overall_mean_std_result(get_trial_result(_input, trial), 'rRMSE') for trial in TRIALS]
                 f_csv.writerow([input_name, *trial_results])
 
+        result_df_all_three = pd.DataFrame(IMU_OP_results)[['subject', 'trial']]
+        for results, result_name in zip([IMU_OP_results, IMU_results, OP_results], ['_IMU_OP', '_IMU', '_OP']):
+            result_df = pd.DataFrame(results)[['MAE', 'RMSE', 'rRMSE', 'r']]
+            result_df.columns = [column_name + result_name for column_name in result_df.columns]
+            result_df_all_three = pd.concat([result_df_all_three, result_df], axis=1)
+        result_df_all_three.to_csv('./exports/' + target + '_estimation_result_individual.csv', index=False)
