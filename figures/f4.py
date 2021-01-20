@@ -62,7 +62,7 @@ def organize_fig():
     ax = plt.gca()
     ax.add_patch(patches.Rectangle((-496, -0.6), 616, 1.8, fill=False, clip_on=False, ec='gray'))
     ax.add_patch(patches.Rectangle((-496, 1.3), 616, 1.8, fill=False, clip_on=False, ec='gray'))
-    plt.legend(handlelength=3, bbox_to_anchor=(-0.5, 3.7), ncol=1, fontsize=FONT_SIZE,
+    plt.legend(handlelength=3, bbox_to_anchor=(-1.5, 3.5), ncol=1, fontsize=FONT_SIZE,
                frameon=False, labelspacing=0.2)
 
 

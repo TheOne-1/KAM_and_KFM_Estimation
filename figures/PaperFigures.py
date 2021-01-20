@@ -23,8 +23,8 @@ def hide_axis_add_grid():
     ax.spines['right'].set_visible(False)
     ax.spines['left'].set_visible(False)
     ax.spines['bottom'].set_visible(False)
-    ax.grid(color='lightgray', linewidth=2)
-    ax.tick_params(color='lightgray', width=2)
+    ax.grid(color='lightgray', linewidth=1.5)
+    ax.tick_params(color='lightgray', width=1.5)
 
 
 def get_mean_std(data_array, data_fields, col_name):
