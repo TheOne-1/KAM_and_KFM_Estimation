@@ -27,76 +27,52 @@ def get_overall_mean_std_result(all_results, metric):
     return '%.2f' % np.mean([result[metric] for result in all_results]) + ' (' + '%.2f' % np.std([result[metric] for result in all_results]) + ')'
 
 
-def get_peak_results(all_data, data_fields):
-    i = lambda s: data_fields.index(s)
-    peak_results = np.zeros([all_data.shape[0], 4])
-    for step_index in range(all_data.shape[0]):
-        force_loc = all_data[step_index, :, i('force_phase')] == 1
-        subject_id = all_data[step_index, 0, i('subject_id')]
-        trial_id = all_data[step_index, 0, i('trial_id')]
-        peak_kam_pred = all_data[step_index, force_loc, i('pred_main_output')].max()
-        peak_kam_true = all_data[step_index, force_loc, i('true_main_output')].max()
-        peak_results[step_index, :] = [subject_id, trial_id,  peak_kam_pred, peak_kam_true]
-    return pd.DataFrame(peak_results, columns=['subject_id', 'trial_id', 'pred_main_output', 'true_main_output'])
-
-
 def get_all_results(h5_dir):
     with h5py.File(os.path.join(h5_dir, 'results.h5'), 'r') as hf:
         _data_all_sub = {subject: subject_data[:] for subject, subject_data in hf.items()}
         _data_fields = json.loads(hf.attrs['columns'])
     all_data = np.concatenate(list(_data_all_sub.values()), axis=0)
-    peak_kams = get_peak_results(all_data, _data_fields)
     all_data = pd.DataFrame(data=all_data.reshape([-1, all_data.shape[2]]), columns=_data_fields)
-    profile_results, peak_results = [], []
+    all_results = []
     for trial_index, trial_name in enumerate(TRIALS + ['all']):
         for subject_index, subject_name in enumerate(SUBJECTS):
             if trial_name == 'all':
                 trial_loc = all_data['subject_id'] == subject_index
-                p_trial_loc = peak_kams['subject_id'] == subject_index
             else:
                 trial_loc = (all_data['trial_id'] == trial_index) & (all_data['subject_id'] == subject_index)
-                p_trial_loc = (peak_kams['trial_id'] == trial_index) & (peak_kams['subject_id'] == subject_index)
             true_value = all_data['true_main_output'][trial_loc]
             pred_value = all_data['pred_main_output'][trial_loc]
             weight = all_data['force_phase'][trial_loc]
-            profile_results.append({'subject': subject_name, 'trial': trial_name, **get_score(true_value, pred_value, weight)})
-
-            p_true_value = peak_kams['true_main_output'][p_trial_loc]
-            p_pred_value = peak_kams['pred_main_output'][p_trial_loc]
-            p_weight = np.ones(p_true_value.shape)
-            peak_results.append({'subject': subject_name, 'trial': trial_name, **get_score(p_true_value, p_pred_value, p_weight)})
-
-    def print_trial_results(results):
-        mean_std_r = get_overall_mean_std_result(results, 'r')
-        mean_std_rRMSE = get_overall_mean_std_result(results, 'rRMSE')
-        mean_std_RMSE = get_overall_mean_std_result(results, 'RMSE')
-        mean_std_MAE = get_overall_mean_std_result(results, 'MAE')
-        print("Correlation coefficient, rRMSE, RMSE(10^-3) and MAE(10^-3) for overall trials were " +
-              "{}, ".format(mean_std_r) +
-              "{}, ".format(mean_std_rRMSE) +
-              "{}, ".format(mean_std_RMSE) +
-              "{}, respectively.".format(mean_std_MAE))
-
-    print('Profile KAM', end=' ')
-    print_trial_results(profile_results)
-    print('Peak KAM', end=' ')
-    print_trial_results(peak_results)
-    return profile_results
+            subject_result = get_score(true_value, pred_value, weight)
+            all_results.append({'subject': subject_name, 'trial': trial_name, **subject_result})
+    mean_std_r = get_overall_mean_std_result(all_results, 'r')
+    mean_std_rRMSE = get_overall_mean_std_result(all_results, 'rRMSE')
+    mean_std_RMSE = get_overall_mean_std_result(all_results, 'RMSE')
+    mean_std_MAE = get_overall_mean_std_result(all_results, 'MAE')
+    print("Correlation coefficient, rRMSE, RMSE(10^-3) and MAE(10^-3) for overall trials were " +
+          "{}, ".format(mean_std_r) +
+          "{}, ".format(mean_std_rRMSE) +
+          "{}, ".format(mean_std_RMSE) +
+          "{}, respectively.".format(mean_std_MAE))
+    return all_results
 
 
 if __name__ == '__main__':
     for target in ['KAM', 'KFM']:
-        IMU_OP_results, IMU_results, OP_results = [get_all_results('results/0107_' + target + '/' + sensor)
+        IMU_OP_results, IMU_results, OP_results = [get_all_results('results/0114_' + target + '/' + sensor)
                                                    for sensor in ['IMU+OP', 'IMU', 'OP']]
 
-        with open(os.path.join('./exports', target + '_estimation_result.csv'), 'w') as f:
-            f_csv = csv.writer(f)
-            get_trial_result = lambda all_results, trial_name: list(filter(lambda result: result['trial'] == trial_name, all_results))
-            f_csv.writerow(['', *TRIALS_PRINT])
-            for _input, input_name in [[IMU_results, 'IMU'], [IMU_OP_results, 'Combined'], [OP_results, 'Camera']]:
-                trial_results = [get_overall_mean_std_result(get_trial_result(_input, trial), 'rRMSE') for trial in TRIALS]
-                f_csv.writerow([input_name, *trial_results])
+        get_trial_result = lambda all_results, trial_name: list(filter(lambda result: result['trial'] == trial_name, all_results))
+        results = {}
+        for _input, input_name in [[IMU_results, 'IMU'], [IMU_OP_results, 'Combined'], [OP_results, 'Camera']]:
+            trial_results = {trial: get_overall_mean_std_result(get_trial_result(_input, trial), 'rRMSE') for trial in TRIALS}
+            results[input_name] = trial_results
 
+        for trial_index, trial in enumerate(TRIALS):
+            print('& '+TRIALS_PRINT[trial_index], end=' ')
+            for source in ['Combined', 'IMU', 'Camera']:
+                print(' & ' + results[source][trial], end='')
+            print('\\\\')
         result_df_all_three = pd.DataFrame(IMU_OP_results)[['subject', 'trial']]
         for results, result_name in zip([IMU_OP_results, IMU_results, OP_results], ['_IMU_OP', '_IMU', '_OP']):
             result_df = pd.DataFrame(results)[['MAE', 'RMSE', 'rRMSE', 'r']]
