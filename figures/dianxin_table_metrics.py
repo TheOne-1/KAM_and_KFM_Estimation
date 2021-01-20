@@ -54,15 +54,15 @@ def get_all_results(h5_dir):
     mean_std_RMSE = get_overall_mean_std_result(all_results, 'RMSE')
     mean_std_MAE = get_overall_mean_std_result(all_results,  'MAE')
     print("MAE(10^-3), RMSE(10^-3), rRMSE(%) and Correlation coefficient for overall trials were " +
-          "{}, respectively.".format(mean_std_MAE) +
+          "{}, ".format(mean_std_MAE) +
           "{}, ".format(mean_std_RMSE) +
           "{}, ".format(mean_std_rRMSE) +
-          "{}, ".format(mean_std_r))
+          "{}, respectively.".format(mean_std_r))
     return all_results
 
 
 if __name__ == '__main__':
-    KAM_results, KFM_results = [get_all_results('results/' + target + '_RESULTS/') for target in ['KAM', 'KFM']]
+    KAM_results, KFM_results = [get_all_results('results/' + target + '_12sub/') for target in ['KAM', 'KFM']]
     with open(os.path.join('./exports/dianxin_estimation_result.csv'), 'w') as f:
         f_csv = csv.writer(f)
         for _input, input_name in [[KAM_results, 'KAM'], [KFM_results, 'KFM']]:
