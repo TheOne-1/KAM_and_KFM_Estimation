@@ -48,7 +48,7 @@ def get_all_results(h5_dir):
     mean_std_r = get_overall_mean_std_result(all_results, 'r')
     mean_std_rRMSE = get_overall_mean_std_result(all_results, 'rRMSE')
     mean_std_RMSE = get_overall_mean_std_result(all_results, 'RMSE')
-    mean_std_MAE = get_overall_mean_std_result(all_results,  'MAE')
+    mean_std_MAE = get_overall_mean_std_result(all_results, 'MAE')
     print("Correlation coefficient, rRMSE, RMSE(10^-3) and MAE(10^-3) for overall trials were " +
           "{}, ".format(mean_std_r) +
           "{}, ".format(mean_std_rRMSE) +
@@ -62,14 +62,17 @@ if __name__ == '__main__':
         IMU_OP_results, IMU_results, OP_results = [get_all_results('results/0114_' + target + '/' + sensor)
                                                    for sensor in ['IMU+OP', 'IMU', 'OP']]
 
-        with open(os.path.join('./exports', target + '_estimation_result.csv'), 'w') as f:
-            f_csv = csv.writer(f)
-            get_trial_result = lambda all_results, trial_name: list(filter(lambda result: result['trial'] == trial_name, all_results))
-            f_csv.writerow(['', *TRIALS_PRINT])
-            for _input, input_name in [[IMU_results, 'IMU'], [IMU_OP_results, 'Combined'], [OP_results, 'Camera']]:
-                trial_results = [get_overall_mean_std_result(get_trial_result(_input, trial), 'rRMSE') for trial in TRIALS]
-                f_csv.writerow([input_name, *trial_results])
+        get_trial_result = lambda all_results, trial_name: list(filter(lambda result: result['trial'] == trial_name, all_results))
+        results = {}
+        for _input, input_name in [[IMU_results, 'IMU'], [IMU_OP_results, 'Combined'], [OP_results, 'Camera']]:
+            trial_results = {trial: get_overall_mean_std_result(get_trial_result(_input, trial), 'rRMSE') for trial in TRIALS}
+            results[input_name] = trial_results
 
+        for trial_index, trial in enumerate(TRIALS):
+            print('& '+TRIALS_PRINT[trial_index], end=' ')
+            for source in ['Combined', 'IMU', 'Camera']:
+                print(' & ' + results[source][trial], end='')
+            print('\\\\')
         result_df_all_three = pd.DataFrame(IMU_OP_results)[['subject', 'trial']]
         for results, result_name in zip([IMU_OP_results, IMU_results, OP_results], ['_IMU_OP', '_IMU', '_OP']):
             result_df = pd.DataFrame(results)[['MAE', 'RMSE', 'rRMSE', 'r']]
