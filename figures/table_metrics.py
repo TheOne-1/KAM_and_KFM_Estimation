@@ -59,7 +59,7 @@ def get_all_results(h5_dir):
 
 if __name__ == '__main__':
     for target in ['KAM', 'KFM']:
-        IMU_OP_results, IMU_results, OP_results = [get_all_results('results/0114_' + target + '/' + sensor)
+        IMU_OP_results, IMU_results, OP_results = [get_all_results('results/0120_' + target + '/' + sensor)
                                                    for sensor in ['IMU+OP', 'IMU', 'OP']]
 
         get_trial_result = lambda all_results, trial_name: list(filter(lambda result: result['trial'] == trial_name, all_results))
