@@ -168,10 +168,10 @@ class TianModel(BaseModel):
         midhip_col_loc = [self._data_fields.index('MidHip' + axis + angle) for axis in ['_x', '_y'] for angle in ['_90', '_180']]
         key_points_to_process = ["LShoulder", "RShoulder", "RKnee", "LKnee", "RAnkle", "LAnkle"]
         for sub_name, sub_data in self._data_all_sub.items():
-            midhip_180_data = sub_data[:, :, midhip_col_loc]
+            midhip_90_and_180_data = sub_data[:, :, midhip_col_loc]
             for key_point in key_points_to_process:
                 key_point_col_loc = [self._data_fields.index(key_point + axis + angle) for axis in ['_x', '_y'] for angle in ['_90', '_180']]
-                sub_data[:, :, key_point_col_loc] = sub_data[:, :, key_point_col_loc] - midhip_180_data
+                sub_data[:, :, key_point_col_loc] = sub_data[:, :, key_point_col_loc] - midhip_90_and_180_data
             self._data_all_sub[sub_name] = sub_data
         if scale_180:
             self.scale_vid_180_vectors_via_vid_90()
@@ -675,6 +675,10 @@ def run_kam(use_imu, use_op):
     input_imu = {'force_x': ACC_ML, 'force_z': ACC_VERTICAL, 'r_x': R_FOOT_SHANK_GYR, 'r_z': R_FOOT_SHANK_GYR}
     input_vid = {'force_x': VID_180_FIELDS, 'force_z': VID_180_FIELDS, 'r_x': VID_180_FIELDS, 'r_z': ['RKnee_y_90']}
 
+    if USE_ALL_FEATURES:
+        input_imu = {'force_x': ACC_GYR_ALL, 'force_z': ACC_GYR_ALL, 'r_x': ACC_GYR_ALL, 'r_z': ACC_GYR_ALL}
+        input_vid = {'force_x': VID_ALL, 'force_z': VID_ALL, 'r_x': VID_ALL, 'r_z': VID_ALL}
+
     x_fields = {'force_x': [], 'force_z': [], 'r_x': [], 'r_z': []}
     if use_imu:
         x_fields = {k: x_fields[k] + input_imu[k] for k in list(x_fields.keys())}
@@ -698,6 +702,10 @@ def run_kfm(use_imu, use_op):
     """ z -> y, x -> z"""
     input_imu = {'force_y': ACC_AP, 'force_z': ACC_VERTICAL, 'r_y': R_FOOT_SHANK_GYR, 'r_z': R_FOOT_SHANK_GYR}
     input_vid = {'force_y': VID_90_FIELDS, 'force_z': VID_180_FIELDS, 'r_y': VID_90_FIELDS, 'r_z': ['RKnee_y_90']}
+
+    if USE_ALL_FEATURES:
+        input_imu = {'force_y': ACC_GYR_ALL, 'force_z': ACC_GYR_ALL, 'r_y': ACC_GYR_ALL, 'r_z': ACC_GYR_ALL}
+        input_vid = {'force_y': VID_ALL, 'force_z': VID_ALL, 'r_y': VID_ALL, 'r_z': VID_ALL}
 
     x_fields = {'force_y': [], 'force_z': [], 'r_y': [], 'r_z': []}
     if use_imu:
@@ -731,8 +739,11 @@ if __name__ == "__main__":
     VID_180_FIELDS = [loc + axis + '_180' for loc in ["LShoulder", "RShoulder", "RKnee", "LKnee", "RAnkle", "LAnkle"]
                       for axis in ['_x', '_y']]
     VID_90_FIELDS = [loc + axis + '_90' for loc in ["LShoulder", "RShoulder", "RKnee", "LKnee", "RAnkle", "LAnkle"] for axis in ['_x', '_y']]
-    VID_90_R_LIMB_FIELDS = [loc + axis + '_90' for loc in ["RShoulder", "RKnee", "RAnkle"] for axis in ['_x', '_y']]
     R_FOOT_SHANK_GYR = ["Gyro" + axis + sensor for sensor in ['R_SHANK', 'R_FOOT'] for axis in ['X_', 'Y_', 'Z_']]
+
+    ACC_GYR_ALL = [field + '_' + sensor for sensor in SENSOR_LIST for field in IMU_FIELDS[:6]]
+    VID_ALL = VID_90_FIELDS + VID_180_FIELDS + ['RKnee_y_90']
+    USE_ALL_FEATURES = False
 
     run_kam(use_imu=True, use_op=True)
     run_kam(use_imu=True, use_op=False)
