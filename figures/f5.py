@@ -62,7 +62,7 @@ if __name__ == "__main__":
     for i_moment, moment in enumerate(['KAM', 'KFM']):
         sel_feature_df = pd.read_csv('results/0122_' + moment + '/estimation_result_individual.csv')
         sel_feature_df = sel_feature_df[sel_feature_df['trial'] == 'all']
-        all_feature_df = pd.read_csv('results/0120_used_all_the_features_' + moment + '/estimation_result_individual.csv')
+        all_feature_df = pd.read_csv('results/0122_used_all_the_features_' + moment + '/estimation_result_individual.csv')
         all_feature_df = all_feature_df[all_feature_df['trial'] == 'all']
         for data_modal in ['IMU_OP', 'IMU', 'OP']:
             sel_feature_result = sel_feature_df[target_matric + data_modal]

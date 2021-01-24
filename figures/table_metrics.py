@@ -44,7 +44,7 @@ def get_all_results(h5_dir):
 
 
 if __name__ == '__main__':
-    result_date = 'results/0122_'       # _used_all_the_features_
+    result_date = 'results/0122_used_all_the_features_'       # used_all_the_features_
     for target in ['KAM', 'KFM']:
         IMU_OP_results, IMU_results, OP_results = [get_all_results(result_date + target + '/' + sensor)
                                                    for sensor in ['IMU+OP', 'IMU', 'OP']]

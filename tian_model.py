@@ -78,6 +78,7 @@ class TianCNN(nn.Module):
 class TianRNN(nn.Module):
     def __init__(self, x_dim, y_dim, hidden_dim=10, nlayer=2):
         super(TianRNN, self).__init__()
+        torch.manual_seed(0)
         self.hidden_dim = hidden_dim
         self.rnn_layer = nn.LSTM(x_dim, hidden_dim, nlayer, batch_first=True, bidirectional=True)
         self.y_dim = y_dim
@@ -146,7 +147,7 @@ class TianModel(BaseModel):
         self.train_step_lens, self.validation_step_lens, self.test_step_lens = [None] * 3
         self.vid_static_cali()
         self.get_relative_vid_vector()
-        self.get_rotated_gravityfree_body_weighted_imu()
+        self.get_body_weighted_imu()
         self.add_additional_columns()
         self.iter = 0
 
@@ -197,105 +198,49 @@ class TianModel(BaseModel):
             self._data_all_sub[sub_name] = np.concatenate([sub_data, knee_vector], axis=2)
         self._data_fields.extend(['KNEE_X', 'KNEE_Y', 'KNEE_Z'])
 
-    def get_rotated_gravityfree_body_weighted_imu(self, ROTATE_IMU=False):
-        def transform_segment_imu(segment_imu, segment_ml, segment_y, segment_z=None):
-            data_shape_ori = segment_imu.shape
-            segment_acc, segment_gyr = segment_imu[:, :, :3].reshape([-1, 3]), segment_imu[:, :, 3:].reshape([-1, 3])
-            segment_ml = segment_ml.reshape([-1, 3])
-            if segment_z is None:
-                segment_y = segment_y.reshape([-1, 3])
-                segment_z = np.cross(segment_ml, segment_y)
-                segment_x = np.cross(segment_y, segment_z)
-            else:
-                segment_z = segment_z.reshape([-1, 3])
-                segment_y = np.cross(segment_z, segment_ml)
-                segment_x = np.cross(segment_y, segment_z)
-
-            fun_norm_vect = lambda v: v / np.linalg.norm(v)
-            segment_x = np.apply_along_axis(fun_norm_vect, 1, segment_x)
-            segment_y = np.apply_along_axis(fun_norm_vect, 1, segment_y)
-            segment_z = np.apply_along_axis(fun_norm_vect, 1, segment_z)
-
-            dcm_mat = np.array([segment_x, segment_y, segment_z])
-            dcm_mat = np.swapaxes(dcm_mat, 0, 1)
-            segment_acc_rotated = np.array(list(map(np.matmul, dcm_mat, segment_acc)))
-            segment_gyr_rotated = np.array(list(map(np.matmul, dcm_mat, segment_gyr)))
-            segment_imu_transformed = np.column_stack([segment_acc_rotated, segment_gyr_rotated]).reshape(data_shape_ori)
-            segment_imu_transformed[np.isnan(segment_imu_transformed)] = 0
-            return segment_imu_transformed
-        imu_lfoot_col_loc = [self._data_fields.index(field + '_L_FOOT') for field in IMU_FIELDS[:6]]
-        imu_lshank_col_loc = [self._data_fields.index(field + '_L_SHANK') for field in IMU_FIELDS[:6]]
-        imu_lthigh_col_loc = [self._data_fields.index(field + '_L_THIGH') for field in IMU_FIELDS[:6]]
-        imu_rfoot_col_loc = [self._data_fields.index(field + '_R_FOOT') for field in IMU_FIELDS[:6]]
-        imu_rshank_col_loc = [self._data_fields.index(field + '_R_SHANK') for field in IMU_FIELDS[:6]]
-        imu_rthigh_col_loc = [self._data_fields.index(field + '_R_THIGH') for field in IMU_FIELDS[:6]]
-        imu_pelvis_col_loc = [self._data_fields.index(field + '_WAIST') for field in IMU_FIELDS[:6]]
-        imu_trunk_col_loc = [self._data_fields.index(field + '_CHEST') for field in IMU_FIELDS[:6]]
-
-        marker_lknee_col_loc = [self._data_fields.index(field_name) for field_name in LKNEE_MARKER_FIELDS]
-        marker_lankle_col_loc = [self._data_fields.index(field_name) for field_name in LANKLE_MARKER_FIELDS]
-        marker_lhip_col_loc = [self._data_fields.index(field_name) for field_name in LHIP_MARKER_FIELDS]
-        marker_rknee_col_loc = [self._data_fields.index(field_name) for field_name in RKNEE_MARKER_FIELDS]
-        marker_rankle_col_loc = [self._data_fields.index(field_name) for field_name in RANKLE_MARKER_FIELDS]
-        marker_rhip_col_loc = [self._data_fields.index(field_name) for field_name in RHIP_MARKER_FIELDS]
-        marker_asis_col_loc = [self._data_fields.index(field_name) for field_name in ASIS_MARKER_FIELDS]
-        marker_psis_col_loc = [self._data_fields.index(field_name) for field_name in PSIS_MARKER_FIELDS]
-        marker_shoulder_col_loc = [self._data_fields.index(field_name) for field_name in SHOULDER_MARKER_FIELDS]
-        marker_spine_col_loc = [self._data_fields.index(field_name) for field_name in SPINE_MARKER_FIELDS]
-
+    def get_body_weighted_imu(self):
         weight_col_loc = self._data_fields.index(SUBJECT_WEIGHT)
         for sub_name, sub_data in self._data_all_sub.items():
-            if ROTATE_IMU:
-                lshank_ml = sub_data[:, :, marker_lknee_col_loc[:3]] - sub_data[:, :, marker_lknee_col_loc[3:]]
-                lshank_y = (sub_data[:, :, marker_lknee_col_loc[:3]] + sub_data[:, :, marker_lknee_col_loc[3:]]) / 2 - \
-                           (sub_data[:, :, marker_lankle_col_loc[:3]] + sub_data[:, :, marker_lankle_col_loc[3:]]) / 2
-                sub_data[:, :, imu_lshank_col_loc] = transform_segment_imu(sub_data[:, :, imu_lshank_col_loc], lshank_ml, lshank_y)
-                lthigh_ml = lshank_ml
-                lthigh_y = sub_data[:, :, marker_lhip_col_loc] - \
-                           (sub_data[:, :, marker_lknee_col_loc[:3]] + sub_data[:, :, marker_lknee_col_loc[3:]]) / 2
-                sub_data[:, :, imu_lthigh_col_loc] = transform_segment_imu(sub_data[:, :, imu_lthigh_col_loc], lthigh_ml, lthigh_y)
-                trunk_ml = sub_data[:, :, marker_shoulder_col_loc[:3]] - sub_data[:, :, marker_shoulder_col_loc[3:]]
-                trunk_y = sub_data[:, :, marker_spine_col_loc[:3]] - sub_data[:, :, marker_spine_col_loc[3:]]
-                sub_data[:, :, imu_trunk_col_loc] = transform_segment_imu(sub_data[:, :, imu_trunk_col_loc], trunk_ml, trunk_y)
-                pelvis_ml = sub_data[:, :, marker_asis_col_loc[:3]] - sub_data[:, :, marker_asis_col_loc[3:]]
-                pelvis_z = (sub_data[:, :, marker_asis_col_loc[:3]] + sub_data[:, :, marker_asis_col_loc[3:]]) / 2 - \
-                           (sub_data[:, :, marker_psis_col_loc[:3]] + sub_data[:, :, marker_psis_col_loc[3:]]) / 2
-                sub_data[:, :, imu_pelvis_col_loc] = transform_segment_imu(sub_data[:, :, imu_pelvis_col_loc], pelvis_ml, None, pelvis_z)
-                rshank_ml = sub_data[:, :, marker_rknee_col_loc[:3]] - sub_data[:, :, marker_rknee_col_loc[3:]]
-                rshank_y = (sub_data[:, :, marker_rknee_col_loc[:3]] + sub_data[:, :, marker_rknee_col_loc[3:]]) / 2 - \
-                          (sub_data[:, :, marker_rankle_col_loc[:3]] + sub_data[:, :, marker_rankle_col_loc[3:]]) / 2
-                sub_data[:, :, imu_rshank_col_loc] = transform_segment_imu(sub_data[:, :, imu_rshank_col_loc], rshank_ml, rshank_y)
-                rthigh_ml = rshank_ml
-                rthigh_y = sub_data[:, :, marker_rhip_col_loc] - \
-                          (sub_data[:, :, marker_rknee_col_loc[:3]] + sub_data[:, :, marker_rknee_col_loc[3:]]) / 2
-                sub_data[:, :, imu_rthigh_col_loc] = transform_segment_imu(sub_data[:, :, imu_rthigh_col_loc], rthigh_ml, rthigh_y)
-
             sub_weight = sub_data[0, 0, weight_col_loc]
-            sub_data[:, :, imu_lfoot_col_loc[:3]] = sub_data[:, :, imu_lfoot_col_loc[:3]] * sub_weight * SEGMENT_MASS_PERCENT['L_FOOT'] / 100
-            sub_data[:, :, imu_lshank_col_loc[:3]] = sub_data[:, :, imu_lshank_col_loc[:3]] * sub_weight * SEGMENT_MASS_PERCENT['L_SHANK'] / 100
-            sub_data[:, :, imu_lthigh_col_loc[:3]] = sub_data[:, :, imu_lthigh_col_loc[:3]] * sub_weight * SEGMENT_MASS_PERCENT['L_THIGH'] / 100
-            sub_data[:, :, imu_rfoot_col_loc[:3]] = sub_data[:, :, imu_rfoot_col_loc[:3]] * sub_weight * SEGMENT_MASS_PERCENT['R_FOOT'] / 100
-            sub_data[:, :, imu_rshank_col_loc[:3]] = sub_data[:, :, imu_rshank_col_loc[:3]] * sub_weight * SEGMENT_MASS_PERCENT['R_SHANK'] / 100
-            sub_data[:, :, imu_rthigh_col_loc[:3]] = sub_data[:, :, imu_rthigh_col_loc[:3]] * sub_weight * SEGMENT_MASS_PERCENT['R_THIGH'] / 100
-            sub_data[:, :, imu_pelvis_col_loc[:3]] = sub_data[:, :, imu_pelvis_col_loc[:3]] * sub_weight * SEGMENT_MASS_PERCENT['WAIST'] / 100
-            sub_data[:, :, imu_trunk_col_loc[:3]] = sub_data[:, :, imu_trunk_col_loc[:3]] * sub_weight * SEGMENT_MASS_PERCENT['CHEST'] / 100
+            if USE_ALL_FEATURES:
+                segment_weight_list = [sub_weight * SEGMENT_MASS_PERCENT[segment] / 100 for segment in SENSOR_LIST]
+                segment_weights = np.full([sub_data.shape[0], sub_data.shape[1], len(SENSOR_LIST)], segment_weight_list)
+                self._data_all_sub[sub_name] = np.concatenate([sub_data, segment_weights], axis=2)
+                if 'L_FOOT_WEIGHT' not in self._data_fields:
+                    self._data_fields.extend(SEGMENT_WEIGHTS)
+            else:
+                imu_lfoot_col_loc = [self._data_fields.index(field + '_L_FOOT') for field in IMU_FIELDS[:6]]
+                imu_lshank_col_loc = [self._data_fields.index(field + '_L_SHANK') for field in IMU_FIELDS[:6]]
+                imu_lthigh_col_loc = [self._data_fields.index(field + '_L_THIGH') for field in IMU_FIELDS[:6]]
+                imu_rfoot_col_loc = [self._data_fields.index(field + '_R_FOOT') for field in IMU_FIELDS[:6]]
+                imu_rshank_col_loc = [self._data_fields.index(field + '_R_SHANK') for field in IMU_FIELDS[:6]]
+                imu_rthigh_col_loc = [self._data_fields.index(field + '_R_THIGH') for field in IMU_FIELDS[:6]]
+                imu_pelvis_col_loc = [self._data_fields.index(field + '_WAIST') for field in IMU_FIELDS[:6]]
+                imu_trunk_col_loc = [self._data_fields.index(field + '_CHEST') for field in IMU_FIELDS[:6]]
 
-            self._data_all_sub[sub_name] = sub_data
+                sub_data[:, :, imu_lfoot_col_loc[:3]] = sub_data[:, :, imu_lfoot_col_loc[:3]] * sub_weight * SEGMENT_MASS_PERCENT['L_FOOT'] / 100
+                sub_data[:, :, imu_lshank_col_loc[:3]] = sub_data[:, :, imu_lshank_col_loc[:3]] * sub_weight * SEGMENT_MASS_PERCENT['L_SHANK'] / 100
+                sub_data[:, :, imu_lthigh_col_loc[:3]] = sub_data[:, :, imu_lthigh_col_loc[:3]] * sub_weight * SEGMENT_MASS_PERCENT['L_THIGH'] / 100
+                sub_data[:, :, imu_rfoot_col_loc[:3]] = sub_data[:, :, imu_rfoot_col_loc[:3]] * sub_weight * SEGMENT_MASS_PERCENT['R_FOOT'] / 100
+                sub_data[:, :, imu_rshank_col_loc[:3]] = sub_data[:, :, imu_rshank_col_loc[:3]] * sub_weight * SEGMENT_MASS_PERCENT['R_SHANK'] / 100
+                sub_data[:, :, imu_rthigh_col_loc[:3]] = sub_data[:, :, imu_rthigh_col_loc[:3]] * sub_weight * SEGMENT_MASS_PERCENT['R_THIGH'] / 100
+                sub_data[:, :, imu_pelvis_col_loc[:3]] = sub_data[:, :, imu_pelvis_col_loc[:3]] * sub_weight * SEGMENT_MASS_PERCENT['WAIST'] / 100
+                sub_data[:, :, imu_trunk_col_loc[:3]] = sub_data[:, :, imu_trunk_col_loc[:3]] * sub_weight * SEGMENT_MASS_PERCENT['CHEST'] / 100
+                self._data_all_sub[sub_name] = sub_data
 
     def preprocess_train_data(self, x, y, weight):
         y['midout_force_x'], y['midout_force_z'] = -y['midout_force_x'], -y['midout_force_z']
         y['midout_r_x'], y['midout_r_z'] = y['midout_r_x'] / 1000, y['midout_r_z'] / 1000
-        self._x_fields_acc_loc = {}
+        self._x_fields_loc_and_mode = {}
         for k in set(list(x.keys())) - set(['anthro']):
             acc_loc = [self._x_fields[k].index(field) for field in self._x_fields[k] if 'Acc' in field]
-            other_loc = [self._x_fields[k].index(field) for field in self._x_fields[k] if 'Acc' not in field]
-            self._x_fields_acc_loc[k] = {'acc_loc': acc_loc, 'other_loc': other_loc}
-            if len(acc_loc) > 0:
-                x[k][:, :, acc_loc] = self.normalize_array_separately(
-                    x[k][:, :, acc_loc], k+'acc', 'fit_transform', scalar_mode='by_all_columns')
-            if len(other_loc) > 0:
-                x[k][:, :, other_loc] = self.normalize_array_separately(
-                    x[k][:, :, other_loc], k+'other', 'fit_transform', scalar_mode='by_each_column')
+            weight_loc = [self._x_fields[k].index(field) for field in self._x_fields[k] if 'WEIGHT' in field]
+            other_loc = [self._x_fields[k].index(field) for field in self._x_fields[k] if 'Acc' not in field and 'WEIGHT' not in field]
+            self._x_fields_loc_and_mode[k] = ([acc_loc, weight_loc, other_loc], ['acc', 'weight', 'other'], ['by_all_columns', 'by_all_columns', 'by_each_column'])
+            for loc, loc_name, mode in zip(*self._x_fields_loc_and_mode[k]):
+                if len(loc) > 0:
+                    x[k][:, :, loc] = self.normalize_array_separately(
+                        x[k][:, :, loc], k+loc_name, 'fit_transform', scalar_mode=mode)
 
         y_need_norm = {k: y[k] for k in set(list(y.keys())) - set(['main_output', 'auxiliary_info'])}
         y.update(
@@ -307,13 +252,10 @@ class TianModel(BaseModel):
         y['midout_r_x'], y['midout_r_z'] = y['midout_r_x'] / 1000, y['midout_r_z'] / 1000
 
         for k in set(list(x.keys())) - set(['anthro']):
-            acc_loc, other_loc = self._x_fields_acc_loc[k]['acc_loc'], self._x_fields_acc_loc[k]['other_loc']
-            if len(acc_loc) > 0:
-                x[k][:, :, acc_loc] = self.normalize_array_separately(
-                    x[k][:, :, acc_loc], k+'acc', 'transform', scalar_mode='by_all_columns')
-            if len(other_loc) > 0:
-                x[k][:, :, other_loc] = self.normalize_array_separately(
-                    x[k][:, :, other_loc], k+'other', 'transform', scalar_mode='by_each_column')
+            for loc, loc_name, mode in zip(*self._x_fields_loc_and_mode[k]):
+                if len(loc) > 0:
+                    x[k][:, :, loc] = self.normalize_array_separately(
+                        x[k][:, :, loc], k+loc_name, 'transform', scalar_mode=mode)
 
         y_need_norm = {k: y[k] for k in set(list(y.keys())) - set(['main_output', 'auxiliary_info'])}
         y.update(**self.normalize_data(y_need_norm, self._data_scalar, 'transform', scalar_mode='by_each_column'))
@@ -370,15 +312,11 @@ class TianModel(BaseModel):
         self.build_sub_model(model_fx, x_train_fx, y_train_fx, x_validation_fx, y_validation_fx, validation_weight, params)
 
         four_source_model = FourSourceModel(model_fx, model_fz, model_rx, model_rz, self._data_scalar)
-        model_fx_pre = type(model_fx)(x_train_fx.shape[2], y_train_fx.shape[2]).cuda()
-        model_fz_pre = type(model_fz)(x_train_fz.shape[2], y_train_fz.shape[2]).cuda()
-        model_rx_pre = type(model_rx)(x_train_rx.shape[2], y_train_rx.shape[2]).cuda()
-        model_rz_pre = type(model_rz)(x_train_rz.shape[2], y_train_rz.shape[2]).cuda()
-        model_fx_pre.load_state_dict(model_fx.state_dict())
-        model_fz_pre.load_state_dict(model_fz.state_dict())
-        model_rx_pre.load_state_dict(model_rx.state_dict())
-        model_rz_pre.load_state_dict(model_rz.state_dict())
         four_source_model_pre = copy.deepcopy(four_source_model).cuda()
+        model_fx_pre = copy.deepcopy(model_fx).cuda()
+        model_fz_pre = copy.deepcopy(model_fz).cuda()
+        model_rx_pre = copy.deepcopy(model_rx).cuda()
+        model_rz_pre = copy.deepcopy(model_rz).cuda()
 
         params = {**sub_model_base_param, **{'target_name': 'main_output', 'fields': ['EXT_KM_Y']}}
         # self.build_main_model(four_source_model, x_train, y_train, x_validation, y_validation, validation_weight, params)
@@ -676,7 +614,7 @@ def run_kam(use_imu, use_op):
     input_vid = {'force_x': VID_180_FIELDS, 'force_z': VID_180_FIELDS, 'r_x': VID_180_FIELDS, 'r_z': ['RKnee_y_90']}
 
     if USE_ALL_FEATURES:
-        input_imu = {'force_x': ACC_GYR_ALL, 'force_z': ACC_GYR_ALL, 'r_x': ACC_GYR_ALL, 'r_z': ACC_GYR_ALL}
+        input_imu = {'force_x': ACC_ALL_GYR_LEG, 'force_z': ACC_ALL_GYR_LEG, 'r_x': ACC_ALL_GYR_LEG, 'r_z': ACC_ALL_GYR_LEG}
         input_vid = {'force_x': VID_ALL, 'force_z': VID_ALL, 'r_x': VID_ALL, 'r_z': VID_ALL}
 
     x_fields = {'force_x': [], 'force_z': [], 'r_x': [], 'r_z': []}
@@ -704,7 +642,7 @@ def run_kfm(use_imu, use_op):
     input_vid = {'force_y': VID_90_FIELDS, 'force_z': VID_180_FIELDS, 'r_y': VID_90_FIELDS, 'r_z': ['RKnee_y_90']}
 
     if USE_ALL_FEATURES:
-        input_imu = {'force_y': ACC_GYR_ALL, 'force_z': ACC_GYR_ALL, 'r_y': ACC_GYR_ALL, 'r_z': ACC_GYR_ALL}
+        input_imu = {'force_y': ACC_ALL_GYR_LEG, 'force_z': ACC_ALL_GYR_LEG, 'r_y': ACC_ALL_GYR_LEG, 'r_z': ACC_ALL_GYR_LEG}
         input_vid = {'force_y': VID_ALL, 'force_z': VID_ALL, 'r_y': VID_ALL, 'r_z': VID_ALL}
 
     x_fields = {'force_y': [], 'force_z': [], 'r_y': [], 'r_z': []}
@@ -742,8 +680,11 @@ if __name__ == "__main__":
     R_FOOT_SHANK_GYR = ["Gyro" + axis + sensor for sensor in ['R_SHANK', 'R_FOOT'] for axis in ['X_', 'Y_', 'Z_']]
 
     ACC_GYR_ALL = [field + '_' + sensor for sensor in SENSOR_LIST for field in IMU_FIELDS[:6]]
+    SEGMENT_WEIGHTS = [segment + '_WEIGHT' for segment in SENSOR_LIST]
+    ACC_GYR_WEIGHTS_ALL = ACC_GYR_ALL + SEGMENT_WEIGHTS
+    ACC_ALL_GYR_LEG = ACC_ML + ACC_AP + ACC_VERTICAL + R_FOOT_SHANK_GYR
     VID_ALL = VID_90_FIELDS + VID_180_FIELDS + ['RKnee_y_90']
-    USE_ALL_FEATURES = False
+    USE_ALL_FEATURES = True
 
     run_kam(use_imu=True, use_op=True)
     run_kam(use_imu=True, use_op=False)
