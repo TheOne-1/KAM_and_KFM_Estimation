@@ -117,16 +117,16 @@ class FourSourceModel(nn.Module):
         out_fz = self.model_fz(x_fz, lens)
         out_rx = self.model_rx(x_rx, lens)
         out_rz = self.model_rz(x_rz, lens)
-        zero_padding_loc = (out_fx == 0.) & (out_fz == 0.) & (out_rx == 0.) & (out_rz == 0.)
-        out_fx = self.inverse_scaling(out_fx, 'midout_force_x')
-        out_fz = self.inverse_scaling(out_fz, 'midout_force_z')
-        out_rx = self.inverse_scaling(out_rx, 'midout_r_x')
-        out_rz = self.inverse_scaling(out_rz, 'midout_r_z')
-        weight = anthro[:, 0, 0].unsqueeze(1).unsqueeze(2)
-        height = anthro[:, 0, 1].unsqueeze(1).unsqueeze(2)
+        # zero_padding_loc = (out_fx == 0.) & (out_fz == 0.) & (out_rx == 0.) & (out_rz == 0.)
+        # out_fx = self.inverse_scaling(out_fx, 'midout_force_x')
+        # out_fz = self.inverse_scaling(out_fz, 'midout_force_z')
+        # out_rx = self.inverse_scaling(out_rx, 'midout_r_x')
+        # out_rz = self.inverse_scaling(out_rz, 'midout_r_z')
+        # weight = anthro[:, 0, 0].unsqueeze(1).unsqueeze(2)
+        # height = anthro[:, 0, 1].unsqueeze(1).unsqueeze(2)
         output = out_fx * out_rz - out_fz * out_rx
-        output = torch.div(output, weight * height)
-        output[zero_padding_loc] = 0
+        # output = torch.div(output, weight * height)
+        # output[zero_padding_loc] = 0
         return output
 
     def inverse_scaling(self, data, fields):
@@ -153,13 +153,7 @@ class TianModel(BaseModel):
 
     def vid_static_cali(self):
         vid_y_90_col_loc = [self._data_fields.index(marker + '_y_90') for marker in VIDEO_LIST]
-        # knee_op_col_loc = self._data_fields.index('RKnee_y_90')
-        # knee_vi_col_loc = self._data_fields.index('RFLE_Z')
         for sub_name, sub_data in self._data_all_sub.items():
-            # plt.figure()
-            # plt.plot(sub_data[:, :, knee_op_col_loc].ravel(), sub_data[:, :, knee_vi_col_loc].ravel(), '.')
-            # plt.plot(sub_data[:, :, knee_op_col_loc].ravel())
-            # plt.plot(sub_data[:, :, knee_vi_col_loc].ravel())
             static_side_df = pd.read_csv(DATA_PATH + '/' + sub_name + '/combined/static_side.csv', index_col=0)
             r_ankle_z = np.mean(static_side_df['RAnkle_y_90'])
             sub_data[:, :, vid_y_90_col_loc] = sub_data[:, :, vid_y_90_col_loc] - r_ankle_z
@@ -229,8 +223,6 @@ class TianModel(BaseModel):
                 self._data_all_sub[sub_name] = sub_data
 
     def preprocess_train_data(self, x, y, weight):
-        y['midout_force_x'], y['midout_force_z'] = -y['midout_force_x'], -y['midout_force_z']
-        y['midout_r_x'], y['midout_r_z'] = y['midout_r_x'] / 1000, y['midout_r_z'] / 1000
         self._x_fields_loc_and_mode = {}
         for k in set(list(x.keys())) - set(['anthro']):
             acc_loc = [self._x_fields[k].index(field) for field in self._x_fields[k] if 'Acc' in field]
@@ -242,24 +234,31 @@ class TianModel(BaseModel):
                     x[k][:, :, loc] = self.normalize_array_separately(
                         x[k][:, :, loc], k+loc_name, 'fit_transform', scalar_mode=mode)
 
-        y_need_norm = {k: y[k] for k in set(list(y.keys())) - set(['main_output', 'auxiliary_info'])}
-        y.update(
-            **self.normalize_data(y_need_norm, self._data_scalar, 'fit_transform', scalar_mode='by_each_column'))
+        x, y = self.norm_f_by_weight_r_by_height(x, y)
+        # y_need_norm = {k: y[k] for k in set(list(y.keys())) - set(['main_output', 'auxiliary_info'])}
+        # y.update(
+        #     **self.normalize_data(y_need_norm, self._data_scalar, 'fit_transform', scalar_mode='by_each_column'))
         return x, y, weight
 
     def preprocess_validation_test_data(self, x, y, weight):
-        y['midout_force_x'], y['midout_force_z'] = -y['midout_force_x'], -y['midout_force_z']
-        y['midout_r_x'], y['midout_r_z'] = y['midout_r_x'] / 1000, y['midout_r_z'] / 1000
-
         for k in set(list(x.keys())) - set(['anthro']):
             for loc, loc_name, mode in zip(*self._x_fields_loc_and_mode[k]):
                 if len(loc) > 0:
                     x[k][:, :, loc] = self.normalize_array_separately(
                         x[k][:, :, loc], k+loc_name, 'transform', scalar_mode=mode)
-
-        y_need_norm = {k: y[k] for k in set(list(y.keys())) - set(['main_output', 'auxiliary_info'])}
-        y.update(**self.normalize_data(y_need_norm, self._data_scalar, 'transform', scalar_mode='by_each_column'))
+        x, y = self.norm_f_by_weight_r_by_height(x, y)
+        # y_need_norm = {k: y[k] for k in set(list(y.keys())) - set(['main_output', 'auxiliary_info'])}
+        # y.update(**self.normalize_data(y_need_norm, self._data_scalar, 'transform', scalar_mode='by_each_column'))
         return x, y, weight
+
+    def norm_f_by_weight_r_by_height(self, x, y):
+        sub_height = x['anthro'][:, 0, self._x_fields['anthro'].index(SUBJECT_HEIGHT)]
+        sub_weight = x['anthro'][:, 0, self._x_fields['anthro'].index(SUBJECT_WEIGHT)]
+        y['midout_r_x'][:, :, 0] = y['midout_r_x'][:, :, 0] / (1000 * sub_height[:, np.newaxis])
+        y['midout_r_z'][:, :, 0] = y['midout_r_z'][:, :, 0] / (1000 * sub_height[:, np.newaxis])
+        y['midout_force_x'][:, :, 0] = -y['midout_force_x'][:, :, 0] / sub_weight[:, np.newaxis]
+        y['midout_force_z'][:, :, 0] = -y['midout_force_z'][:, :, 0] / sub_weight[:, np.newaxis]
+        return x, y
 
     def normalize_array_separately(self, data, name, method, scalar_mode='by_each_column'):
         if method == 'fit_transform':
@@ -468,9 +467,9 @@ class TianModel(BaseModel):
                     y_pred_list.append(model(xb, lens).detach().cpu())
                 y_pred = torch.cat(y_pred_list)
             y_pred = {params.target_name: y_pred.detach().cpu().numpy()}
-            y_pred = self.normalize_data(y_pred, self._data_scalar, 'inverse_transform', 'by_each_column')
+            # y_pred = self.normalize_data(y_pred, self._data_scalar, 'inverse_transform', 'by_each_column')
             y_true = {params.target_name: y_validation}
-            y_true = self.normalize_data(y_true, self._data_scalar, 'inverse_transform', 'by_each_column')
+            # y_true = self.normalize_data(y_true, self._data_scalar, 'inverse_transform', 'by_each_column')
             all_scores = BaseModel.get_all_scores(y_true, y_pred, {params.target_name: params.fields},
                                                   validation_weight)
             all_scores = [{'subject': 'all', **scores} for scores in all_scores]
@@ -684,12 +683,12 @@ if __name__ == "__main__":
     ACC_GYR_WEIGHTS_ALL = ACC_GYR_ALL + SEGMENT_WEIGHTS
     ACC_ALL_GYR_LEG = ACC_ML + ACC_AP + ACC_VERTICAL + R_FOOT_SHANK_GYR
     VID_ALL = VID_90_FIELDS + VID_180_FIELDS + ['RKnee_y_90']
-    USE_ALL_FEATURES = True
+    USE_ALL_FEATURES = False
 
     run_kam(use_imu=True, use_op=True)
-    run_kam(use_imu=True, use_op=False)
-    run_kam(use_imu=False, use_op=True)
-
-    run_kfm(use_imu=True, use_op=True)
-    run_kfm(use_imu=True, use_op=False)
-    run_kfm(use_imu=False, use_op=True)
+    # run_kam(use_imu=True, use_op=False)
+    # run_kam(use_imu=False, use_op=True)
+    #
+    # run_kfm(use_imu=True, use_op=True)
+    # run_kfm(use_imu=True, use_op=False)
+    # run_kfm(use_imu=False, use_op=True)
