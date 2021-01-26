@@ -613,7 +613,7 @@ def run_kam(use_imu, use_op):
     input_vid = {'force_x': VID_180_FIELDS, 'force_z': VID_180_FIELDS, 'r_x': VID_180_FIELDS, 'r_z': ['RKnee_y_90']}
 
     if USE_ALL_FEATURES:
-        input_imu = {'force_x': ACC_ALL_GYR_LEG, 'force_z': ACC_ALL_GYR_LEG, 'r_x': ACC_ALL_GYR_LEG, 'r_z': ACC_ALL_GYR_LEG}
+        input_imu = {'force_x': ACC_GYR_ALL, 'force_z': ACC_GYR_ALL, 'r_x': ACC_GYR_ALL, 'r_z': ACC_GYR_ALL}
         input_vid = {'force_x': VID_ALL, 'force_z': VID_ALL, 'r_x': VID_ALL, 'r_z': VID_ALL}
 
     x_fields = {'force_x': [], 'force_z': [], 'r_x': [], 'r_z': []}
@@ -641,7 +641,7 @@ def run_kfm(use_imu, use_op):
     input_vid = {'force_y': VID_90_FIELDS, 'force_z': VID_180_FIELDS, 'r_y': VID_90_FIELDS, 'r_z': ['RKnee_y_90']}
 
     if USE_ALL_FEATURES:
-        input_imu = {'force_y': ACC_ALL_GYR_LEG, 'force_z': ACC_ALL_GYR_LEG, 'r_y': ACC_ALL_GYR_LEG, 'r_z': ACC_ALL_GYR_LEG}
+        input_imu = {'force_y': ACC_GYR_ALL, 'force_z': ACC_GYR_ALL, 'r_y': ACC_GYR_ALL, 'r_z': ACC_GYR_ALL}
         input_vid = {'force_y': VID_ALL, 'force_z': VID_ALL, 'r_y': VID_ALL, 'r_z': VID_ALL}
 
     x_fields = {'force_y': [], 'force_z': [], 'r_y': [], 'r_z': []}
@@ -683,12 +683,12 @@ if __name__ == "__main__":
     ACC_GYR_WEIGHTS_ALL = ACC_GYR_ALL + SEGMENT_WEIGHTS
     ACC_ALL_GYR_LEG = ACC_ML + ACC_AP + ACC_VERTICAL + R_FOOT_SHANK_GYR
     VID_ALL = VID_90_FIELDS + VID_180_FIELDS + ['RKnee_y_90']
-    USE_ALL_FEATURES = False
+    USE_ALL_FEATURES = True
 
     run_kam(use_imu=True, use_op=True)
-    # run_kam(use_imu=True, use_op=False)
-    # run_kam(use_imu=False, use_op=True)
-    #
-    # run_kfm(use_imu=True, use_op=True)
-    # run_kfm(use_imu=True, use_op=False)
-    # run_kfm(use_imu=False, use_op=True)
+    run_kam(use_imu=True, use_op=False)
+    run_kam(use_imu=False, use_op=True)
+
+    run_kfm(use_imu=True, use_op=True)
+    run_kfm(use_imu=True, use_op=False)
+    run_kfm(use_imu=False, use_op=True)

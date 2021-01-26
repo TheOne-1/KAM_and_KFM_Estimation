@@ -10,7 +10,7 @@ from PaperFigures import get_score
 
 
 def get_overall_mean_std_result(all_results, metric):
-    return '%.2f' % np.mean([result[metric] for result in all_results]) + ' (' + '%.2f' % np.std([result[metric] for result in all_results]) + ')'
+    return np.mean([result[metric] for result in all_results]), np.std([result[metric] for result in all_results])
 
 
 def get_all_results(h5_dir):
@@ -31,20 +31,18 @@ def get_all_results(h5_dir):
             weight = all_data['force_phase'][trial_loc]
             subject_result = get_score(true_value, pred_value, weight)
             all_results.append({'subject': subject_name, 'trial': trial_name, **subject_result})
-    mean_std_r = get_overall_mean_std_result(all_results, 'r')
-    mean_std_rRMSE = get_overall_mean_std_result(all_results, 'rRMSE')
     mean_std_RMSE = get_overall_mean_std_result(all_results, 'RMSE')
-    mean_std_MAE = get_overall_mean_std_result(all_results, 'MAE')
-    print("Correlation coefficient, rRMSE, RMSE(10^-3) and MAE(10^-3) for overall trials were " +
-          "{}, ".format(mean_std_r) +
-          "{}, ".format(mean_std_rRMSE) +
-          "{}, ".format(mean_std_RMSE) +
-          "{}, respectively.".format(mean_std_MAE))
+    mean_std_rRMSE = get_overall_mean_std_result(all_results, 'rRMSE')
+    mean_std_r = get_overall_mean_std_result(all_results, 'r')
+    print("Overall RMSE (10^-3), rRMSE, and correlation coefficient were " +
+          "%.1f ± %.1f, " % mean_std_RMSE +
+          "%.1f ± %.1f, " % mean_std_rRMSE +
+          "and %.2f ± %.2f" % mean_std_r)
     return all_results
 
 
 if __name__ == '__main__':
-    result_date = 'results/0122_used_all_the_features_'       # used_all_the_features_
+    result_date = 'results/0122_'       # used_all_the_features_
     for target in ['KAM', 'KFM']:
         IMU_OP_results, IMU_results, OP_results = [get_all_results(result_date + target + '/' + sensor)
                                                    for sensor in ['IMU+OP', 'IMU', 'OP']]
@@ -55,11 +53,6 @@ if __name__ == '__main__':
             trial_results = {trial: get_overall_mean_std_result(get_trial_result(_input, trial), 'rRMSE') for trial in TRIALS}
             results[input_name] = trial_results
 
-        for trial_index, trial in enumerate(TRIALS):
-            print('& '+TRIALS_PRINT[trial_index], end=' ')
-            for source in ['Combined', 'IMU', 'Camera']:
-                print(' & ' + results[source][trial], end='')
-            print('\\\\')
         result_df_all_three = pd.DataFrame(IMU_OP_results)[['subject', 'trial']]
         for results, result_name in zip([IMU_OP_results, IMU_results, OP_results], ['_IMU_OP', '_IMU', '_OP']):
             result_df = pd.DataFrame(results)[['MAE', 'RMSE', 'rRMSE', 'r']]
