@@ -18,10 +18,10 @@ def draw_f3(mean_std_kam, mean_std_kfm):
         axis_x = range(arr_true_mean.shape[0])
         ax.plot(axis_x, arr_true_mean, color='green', label='Laboratory Force Plate \& Optical Motion Capture', linewidth=LINE_WIDTH*2)
         ax.fill_between(axis_x, arr_true_mean - arr_true_std, arr_true_mean + arr_true_std,
-                        facecolor='green', alpha=0.3)
-        ax.plot(axis_x, arr_pred_mean, color='peru', label='Portable IMU \& Smartphone Camera', linewidth=LINE_WIDTH*2)
+                        facecolor='green', alpha=0.4)
+        ax.plot(axis_x, arr_pred_mean, '--', color='peru', label='Portable IMU \& Smartphone Camera', linewidth=LINE_WIDTH*2)
         ax.fill_between(axis_x, arr_pred_mean - arr_pred_std, arr_pred_mean + arr_pred_std,
-                        facecolor='peru', alpha=0.3)
+                        facecolor='peru', alpha=0.4)
         ax.tick_params(labelsize=FONT_DICT['fontsize'])
         ax.set_xticks(range(0, 101, 25))
         ax.set_xticklabels(range(0, 101, 25), fontdict=FONT_DICT)
@@ -53,7 +53,7 @@ def draw_f3(mean_std_kam, mean_std_kfm):
     draw_subplot(fig.add_subplot(gs[1, 1]), mean_std_kfm)
     subplot_2_style()
     plt.tight_layout(rect=[0.01, 0.01, 0.99, 0.99], w_pad=3)
-    plt.legend(handlelength=3, bbox_to_anchor=(-0.1, 1.3), ncol=1, fontsize=FONT_SIZE,
+    plt.legend(handlelength=2.6, bbox_to_anchor=(0., 1.27), ncol=1, fontsize=FONT_SIZE,
                frameon=False)
     plt.savefig('exports/f3.png')
 

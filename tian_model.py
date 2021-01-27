@@ -76,9 +76,9 @@ class TianCNN(nn.Module):
 
 
 class TianRNN(nn.Module):
-    def __init__(self, x_dim, y_dim, hidden_dim=10, nlayer=2):
+    def __init__(self, x_dim, y_dim, seed=0, hidden_dim=10, nlayer=2):
         super(TianRNN, self).__init__()
-        torch.manual_seed(0)
+        torch.manual_seed(seed)
         self.hidden_dim = hidden_dim
         self.rnn_layer = nn.LSTM(x_dim, hidden_dim, nlayer, batch_first=True, bidirectional=True)
         self.y_dim = y_dim
@@ -117,16 +117,16 @@ class FourSourceModel(nn.Module):
         out_fz = self.model_fz(x_fz, lens)
         out_rx = self.model_rx(x_rx, lens)
         out_rz = self.model_rz(x_rz, lens)
-        # zero_padding_loc = (out_fx == 0.) & (out_fz == 0.) & (out_rx == 0.) & (out_rz == 0.)
-        # out_fx = self.inverse_scaling(out_fx, 'midout_force_x')
-        # out_fz = self.inverse_scaling(out_fz, 'midout_force_z')
-        # out_rx = self.inverse_scaling(out_rx, 'midout_r_x')
-        # out_rz = self.inverse_scaling(out_rz, 'midout_r_z')
-        # weight = anthro[:, 0, 0].unsqueeze(1).unsqueeze(2)
-        # height = anthro[:, 0, 1].unsqueeze(1).unsqueeze(2)
+        zero_padding_loc = (out_fx == 0.) & (out_fz == 0.) & (out_rx == 0.) & (out_rz == 0.)
+        out_fx = self.inverse_scaling(out_fx, 'midout_force_x')
+        out_fz = self.inverse_scaling(out_fz, 'midout_force_z')
+        out_rx = self.inverse_scaling(out_rx, 'midout_r_x')
+        out_rz = self.inverse_scaling(out_rz, 'midout_r_z')
+        weight = anthro[:, 0, 0].unsqueeze(1).unsqueeze(2)
+        height = anthro[:, 0, 1].unsqueeze(1).unsqueeze(2)
         output = out_fx * out_rz - out_fz * out_rx
-        # output = torch.div(output, weight * height)
-        # output[zero_padding_loc] = 0
+        output = torch.div(output, weight * height)
+        output[zero_padding_loc] = 0
         return output
 
     def inverse_scaling(self, data, fields):
@@ -234,10 +234,11 @@ class TianModel(BaseModel):
                     x[k][:, :, loc] = self.normalize_array_separately(
                         x[k][:, :, loc], k+loc_name, 'fit_transform', scalar_mode=mode)
 
-        x, y = self.norm_f_by_weight_r_by_height(x, y)
-        # y_need_norm = {k: y[k] for k in set(list(y.keys())) - set(['main_output', 'auxiliary_info'])}
-        # y.update(
-        #     **self.normalize_data(y_need_norm, self._data_scalar, 'fit_transform', scalar_mode='by_each_column'))
+        y['midout_force_x'], y['midout_force_z'] = -y['midout_force_x'], -y['midout_force_z']
+        y['midout_r_x'], y['midout_r_z'] = y['midout_r_x'] / 1000, y['midout_r_z'] / 1000
+        y_need_norm = {k: y[k] for k in set(list(y.keys())) - set(['main_output', 'auxiliary_info'])}
+        y.update(
+            **self.normalize_data(y_need_norm, self._data_scalar, 'fit_transform', scalar_mode='by_each_column'))
         return x, y, weight
 
     def preprocess_validation_test_data(self, x, y, weight):
@@ -246,19 +247,11 @@ class TianModel(BaseModel):
                 if len(loc) > 0:
                     x[k][:, :, loc] = self.normalize_array_separately(
                         x[k][:, :, loc], k+loc_name, 'transform', scalar_mode=mode)
-        x, y = self.norm_f_by_weight_r_by_height(x, y)
-        # y_need_norm = {k: y[k] for k in set(list(y.keys())) - set(['main_output', 'auxiliary_info'])}
-        # y.update(**self.normalize_data(y_need_norm, self._data_scalar, 'transform', scalar_mode='by_each_column'))
+        y['midout_force_x'], y['midout_force_z'] = -y['midout_force_x'], -y['midout_force_z']
+        y['midout_r_x'], y['midout_r_z'] = y['midout_r_x'] / 1000, y['midout_r_z'] / 1000
+        y_need_norm = {k: y[k] for k in set(list(y.keys())) - set(['main_output', 'auxiliary_info'])}
+        y.update(**self.normalize_data(y_need_norm, self._data_scalar, 'transform', scalar_mode='by_each_column'))
         return x, y, weight
-
-    def norm_f_by_weight_r_by_height(self, x, y):
-        sub_height = x['anthro'][:, 0, self._x_fields['anthro'].index(SUBJECT_HEIGHT)]
-        sub_weight = x['anthro'][:, 0, self._x_fields['anthro'].index(SUBJECT_WEIGHT)]
-        y['midout_r_x'][:, :, 0] = y['midout_r_x'][:, :, 0] / (1000 * sub_height[:, np.newaxis])
-        y['midout_r_z'][:, :, 0] = y['midout_r_z'][:, :, 0] / (1000 * sub_height[:, np.newaxis])
-        y['midout_force_x'][:, :, 0] = -y['midout_force_x'][:, :, 0] / sub_weight[:, np.newaxis]
-        y['midout_force_z'][:, :, 0] = -y['midout_force_z'][:, :, 0] / sub_weight[:, np.newaxis]
-        return x, y
 
     def normalize_array_separately(self, data, name, method, scalar_mode='by_each_column'):
         if method == 'fit_transform':
@@ -288,25 +281,25 @@ class TianModel(BaseModel):
 
         x_train_rx, x_validation_rx = x_train['r_x'], x_validation['r_x']
         y_train_rx, y_validation_rx = y_train['midout_r_x'], y_validation['midout_r_x']
-        model_rx = TianRNN(x_train_rx.shape[2], y_train_rx.shape[2]).cuda()
+        model_rx = TianRNN(x_train_rx.shape[2], y_train_rx.shape[2], 0).cuda()
         params = {**sub_model_base_param, **{'target_name': 'midout_r_x', 'fields': ['KNEE_X']}}
         self.build_sub_model(model_rx, x_train_rx, y_train_rx, x_validation_rx, y_validation_rx, validation_weight, params)
 
         x_train_rz, x_validation_rz = x_train['r_z'], x_validation['r_z']
         y_train_rz, y_validation_rz = y_train['midout_r_z'], y_validation['midout_r_z']
-        model_rz = TianRNN(x_train_rz.shape[2], y_train_rz.shape[2]).cuda()
+        model_rz = TianRNN(x_train_rz.shape[2], y_train_rz.shape[2], 1).cuda()
         params = {**sub_model_base_param, **{'target_name': 'midout_r_z', 'fields': ['KNEE_Z']}}
         self.build_sub_model(model_rz, x_train_rz, y_train_rz, x_validation_rz, y_validation_rz, validation_weight, params)
 
         x_train_fz, x_validation_fz = x_train['force_z'], x_validation['force_z']
         y_train_fz, y_validation_fz = y_train['midout_force_z'], y_validation['midout_force_z']
-        model_fz = TianRNN(x_train_fz.shape[2], y_train_fz.shape[2]).cuda()
+        model_fz = TianRNN(x_train_fz.shape[2], y_train_fz.shape[2], 2).cuda()
         params = {**sub_model_base_param, **{'target_name': 'midout_force_z', 'fields': ['plate_2_force_z']}}
         self.build_sub_model(model_fz, x_train_fz, y_train_fz, x_validation_fz, y_validation_fz, validation_weight, params)
 
         x_train_fx, x_validation_fx = x_train['force_x'], x_validation['force_x']
         y_train_fx, y_validation_fx = y_train['midout_force_x'], y_validation['midout_force_x']
-        model_fx = TianRNN(x_train_fx.shape[2], y_train_fx.shape[2]).cuda()
+        model_fx = TianRNN(x_train_fx.shape[2], y_train_fx.shape[2], 3).cuda()
         params = {**sub_model_base_param, **{'target_name': 'midout_force_x', 'fields': ['plate_2_force_x']}}
         self.build_sub_model(model_fx, x_train_fx, y_train_fx, x_validation_fx, y_validation_fx, validation_weight, params)
 
@@ -467,9 +460,9 @@ class TianModel(BaseModel):
                     y_pred_list.append(model(xb, lens).detach().cpu())
                 y_pred = torch.cat(y_pred_list)
             y_pred = {params.target_name: y_pred.detach().cpu().numpy()}
-            # y_pred = self.normalize_data(y_pred, self._data_scalar, 'inverse_transform', 'by_each_column')
+            y_pred = self.normalize_data(y_pred, self._data_scalar, 'inverse_transform', 'by_each_column')
             y_true = {params.target_name: y_validation}
-            # y_true = self.normalize_data(y_true, self._data_scalar, 'inverse_transform', 'by_each_column')
+            y_true = self.normalize_data(y_true, self._data_scalar, 'inverse_transform', 'by_each_column')
             all_scores = BaseModel.get_all_scores(y_true, y_pred, {params.target_name: params.fields},
                                                   validation_weight)
             all_scores = [{'subject': 'all', **scores} for scores in all_scores]
@@ -683,7 +676,7 @@ if __name__ == "__main__":
     ACC_GYR_WEIGHTS_ALL = ACC_GYR_ALL + SEGMENT_WEIGHTS
     ACC_ALL_GYR_LEG = ACC_ML + ACC_AP + ACC_VERTICAL + R_FOOT_SHANK_GYR
     VID_ALL = VID_90_FIELDS + VID_180_FIELDS + ['RKnee_y_90']
-    USE_ALL_FEATURES = True
+    USE_ALL_FEATURES = False
 
     run_kam(use_imu=True, use_op=True)
     run_kam(use_imu=True, use_op=False)
