@@ -149,7 +149,6 @@ class TianModel(BaseModel):
         self.get_relative_vid_vector()
         self.get_body_weighted_imu()
         self.add_additional_columns()
-        self.iter = 0
 
     def vid_static_cali(self):
         vid_y_90_col_loc = [self._data_fields.index(marker + '_y_90') for marker in VIDEO_LIST]
@@ -534,7 +533,7 @@ class TianModel(BaseModel):
 
     def save_temp_result(self, test_sub_y, pred_sub_y, test_sub_weight, models, test_sub_name):
         # save model
-        save_path = os.path.join(self.result_dir, test_sub_name)
+        save_path = os.path.join(self.result_dir, 'sub_models', test_sub_name)
         os.mkdir(save_path)
         for model_name, model in models.items():
             torch.save(model.state_dict(), os.path.join(save_path, model_name + '.pth'))
@@ -679,9 +678,9 @@ if __name__ == "__main__":
     #
     # run_kam(input_imu=input_imu_8_all, input_vid={})
     # run_kam(input_imu=input_imu_3_all, input_vid={})
-    run_kam(input_imu=input_imu_1_all, input_vid={})
-    run_kam(input_imu=input_imu_8_all, input_vid=input_vid_2)
-    run_kam(input_imu=input_imu_3_all, input_vid=input_vid_2)
+    # run_kam(input_imu=input_imu_1_all, input_vid={})
+    # run_kam(input_imu=input_imu_8_all, input_vid=input_vid_2)
+    # run_kam(input_imu=input_imu_3_all, input_vid=input_vid_2)
     run_kam(input_imu=input_imu_1_all, input_vid=input_vid_2)
 
 
