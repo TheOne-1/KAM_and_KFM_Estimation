@@ -7,7 +7,7 @@ import matplotlib.lines as lines
 import matplotlib.pyplot as plt
 from matplotlib import rc
 import pandas as pd
-from scipy.stats import ttest_ind
+from scipy.stats import ttest_rel
 
 
 def draw_f5(mean_sel, std_sel, mean_all, std_all):
@@ -59,7 +59,6 @@ def print_results(mean_sel, mean_all):
     print('{:4.2f}\% and {:4.2f}\%'.format(-(mean_sel[2] - mean_all[2]), -(mean_sel[5] - mean_all[5])))
 
 
-
 def save_fig():
     plt.savefig('exports/f5.png')
 
@@ -67,12 +66,12 @@ def save_fig():
 if __name__ == "__main__":
     target_matric = 'rRMSE_'
     mean_sel, std_sel, mean_all, std_all = [], [], [], []
+    p_values = []
     for i_moment, moment in enumerate(['KAM', 'KFM']):
         sel_feature_df = pd.read_csv('results/0122_' + moment + '/estimation_result_individual.csv')
         sel_feature_df = sel_feature_df[sel_feature_df['trial'] == 'all']
         all_feature_df = pd.read_csv('results/0122_used_all_the_features_' + moment + '/estimation_result_individual.csv')
         all_feature_df = all_feature_df[all_feature_df['trial'] == 'all']
-        p_values = []
         for data_modal in ['IMU_OP', 'IMU', 'OP']:
             sel_feature_result = sel_feature_df[target_matric + data_modal]
             mean_sel.append(sel_feature_result.mean())
@@ -80,8 +79,9 @@ if __name__ == "__main__":
             all_feature_result = all_feature_df[target_matric + data_modal]
             mean_all.append(all_feature_result.mean())
             std_all.append(all_feature_result.std())
-            p_values.append(ttest_ind(sel_feature_result, all_feature_result))
+            p_values.append(round(ttest_rel(sel_feature_result, all_feature_result).pvalue, 3))
     draw_f5(mean_sel, std_sel, mean_all, std_all)
     print_results(mean_sel, mean_all)
+    print(p_values)
     save_fig()
     plt.show()

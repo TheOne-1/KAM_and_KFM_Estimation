@@ -4,7 +4,7 @@ import json
 import csv
 import pandas as pd
 import numpy as np
-from const import TRIALS, SUBJECTS, TRIALS_PRINT
+from const import TRIALS, SUBJECTS, SENSOR_COMBINATION
 import matplotlib.pyplot as plt
 from PaperFigures import get_score
 
@@ -13,8 +13,8 @@ def get_overall_mean_std_result(all_results, metric):
     return np.mean([result[metric] for result in all_results]), np.std([result[metric] for result in all_results])
 
 
-def get_all_results(h5_dir):
-    with h5py.File(os.path.join(h5_dir, 'results.h5'), 'r') as hf:
+def get_all_results(test_folder_dir, test_condition):
+    with h5py.File(os.path.join(test_folder_dir, test_condition, 'results.h5'), 'r') as hf:
         _data_all_sub = {subject: subject_data[:] for subject, subject_data in hf.items()}
         _data_fields = json.loads(hf.attrs['columns'])
     all_data = np.concatenate(list(_data_all_sub.values()), axis=0)
@@ -37,25 +37,25 @@ def get_all_results(h5_dir):
     print("Overall RMSE (10^-3), rRMSE, and correlation coefficient were " +
           "%.1f ± %.1f, " % mean_std_RMSE +
           "%.1f ± %.1f, " % mean_std_rRMSE +
-          "and %.2f ± %.2f" % mean_std_r)
+          "and %.2f ± %.2f" % mean_std_r +
+          " for {} condition".format(test_condition))
     return all_results
 
 
 if __name__ == '__main__':
-    result_date = 'results/0122_'       # used_all_the_features_
+    result_date = 'results/0127_'       # all_feature_
     for target in ['KAM', 'KFM']:
-        IMU_OP_results, IMU_results, OP_results = [get_all_results(result_date + target + '/' + sensor)
-                                                   for sensor in ['IMU+OP', 'IMU', 'OP']]
+        combo_result = [get_all_results(result_date + target, sensor) for sensor in SENSOR_COMBINATION]
 
         get_trial_result = lambda all_results, trial_name: list(filter(lambda result: result['trial'] == trial_name, all_results))
         results = {}
-        for _input, input_name in [[IMU_results, 'IMU'], [IMU_OP_results, 'Combined'], [OP_results, 'Camera']]:
+        for _input, input_name in zip(combo_result, SENSOR_COMBINATION):
             trial_results = {trial: get_overall_mean_std_result(get_trial_result(_input, trial), 'rRMSE') for trial in TRIALS}
             results[input_name] = trial_results
 
-        result_df_all_three = pd.DataFrame(IMU_OP_results)[['subject', 'trial']]
-        for results, result_name in zip([IMU_OP_results, IMU_results, OP_results], ['_IMU_OP', '_IMU', '_OP']):
+        result_df_all_three = pd.DataFrame(combo_result[0])[['subject', 'trial']]
+        for results, result_name in zip(combo_result, SENSOR_COMBINATION):
             result_df = pd.DataFrame(results)[['MAE', 'RMSE', 'rRMSE', 'r']]
-            result_df.columns = [column_name + result_name for column_name in result_df.columns]
+            result_df.columns = [column_name + '_' + result_name for column_name in result_df.columns]
             result_df_all_three = pd.concat([result_df_all_three, result_df], axis=1)
         result_df_all_three.to_csv(result_date + target + '/estimation_result_individual.csv', index=False)
