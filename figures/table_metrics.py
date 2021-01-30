@@ -43,7 +43,7 @@ def get_all_results(test_folder_dir, test_condition):
 
 
 if __name__ == '__main__':
-    result_date = 'results/0127_'       # all_feature_
+    result_date = 'results/0127_selected_feature_'       # all_feature_
     for target in ['KAM', 'KFM']:
         combo_result = [get_all_results(result_date + target, sensor) for sensor in SENSOR_COMBINATION]
 

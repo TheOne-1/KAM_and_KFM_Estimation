@@ -18,6 +18,8 @@ from torch.nn.utils.rnn import pack_padded_sequence, pad_packed_sequence
 from sklearn.preprocessing import MinMaxScaler, StandardScaler
 from types import SimpleNamespace
 import pandas as pd
+import datetime
+
 
 RKNEE_MARKER_FIELDS = [marker + axis for marker in ['RFME', 'RFLE'] for axis in ['_X', '_Y', '_Z']]
 RANKLE_MARKER_FIELDS = [marker + axis for marker in ['RTAM', 'RFAL'] for axis in ['_X', '_Y', '_Z']]
@@ -580,12 +582,12 @@ class TianModel(BaseModel):
             self.representative_profile_curves(arr1, arr2, title, r_rmse)
 
 
-def run(x_fields, y_fields, main_output_fields):
+def run(x_fields, y_fields, main_output_fields, result_dir):
     weights = {key: [FORCE_PHASE] * len(y_fields[key]) for key in y_fields.keys()}
     weights.update({key: [FORCE_PHASE] * len(x_fields[key]) for key in x_fields.keys()})
     evaluate_fields = {'main_output': main_output_fields}
     model_builder = TianModel(data_path, x_fields, y_fields, weights, evaluate_fields,
-                              lambda: MinMaxScaler(feature_range=(-3, 3)))
+                              lambda: MinMaxScaler(feature_range=(-3, 3)), result_dir=result_dir)
                               # lambda: StandardScaler())
     subjects = model_builder.get_all_subjects()
     # model_builder.preprocess_train_evaluation(subjects[:13], subjects[13:], subjects[13:])
@@ -593,7 +595,7 @@ def run(x_fields, y_fields, main_output_fields):
     plt.show()
 
 
-def run_kam(input_imu, input_vid):
+def run_kam(input_imu, input_vid, result_dir):
     x_fields = {'force_x': [], 'force_z': [], 'r_x': [], 'r_z': []}
 
     if len(input_imu.items()) > 0:
@@ -611,14 +613,17 @@ def run_kam(input_imu, input_vid):
         'midout_r_z': ['KNEE_Z'],
         'auxiliary_info': [SUBJECT_ID, TRIAL_ID, FORCE_PHASE]
     }
-    run(x_fields, y_fields, main_output_fields)
+    run(x_fields, y_fields, main_output_fields, result_dir)
 
 
-def run_kfm(input_imu, input_vid):
+def run_kfm(input_imu, input_vid, result_dir):
     """ z -> y, x -> z"""
     x_fields = {'force_y': [], 'force_z': [], 'r_y': [], 'r_z': []}
-    x_fields = {k: x_fields[k] + input_imu[k] for k in list(x_fields.keys())}
-    x_fields = {k: x_fields[k] + input_vid[k] for k in list(x_fields.keys())}
+    if len(input_imu.items()) > 0:
+        x_fields = {k: x_fields[k] + input_imu[k] for k in list(x_fields.keys())}
+    if len(input_vid.items()) > 0:
+        x_fields = {k: x_fields[k] + input_vid[k] for k in list(x_fields.keys())}
+    x_fields['anthro'] = STATIC_DATA
 
     main_output_fields = ['EXT_KM_X']
     y_fields = {
@@ -635,7 +640,7 @@ def run_kfm(input_imu, input_vid):
     y_fields_renamed = {'midout_force_x': y_fields['midout_force_z'], 'midout_force_z': y_fields['midout_force_y'],
                         'midout_r_x': y_fields['midout_r_z'], 'midout_r_z': y_fields['midout_r_y'],
                         'main_output': y_fields['main_output'], 'auxiliary_info': y_fields['auxiliary_info']}
-    run(x_fields_renamed, y_fields_renamed, main_output_fields)
+    run(x_fields_renamed, y_fields_renamed, main_output_fields, result_dir)
 
 
 if __name__ == "__main__":
@@ -651,8 +656,8 @@ if __name__ == "__main__":
     ACC_ML_3 = ["AccelX_" + sensor for sensor in ['L_FOOT', 'R_FOOT', 'WAIST']]
     ACC_AP_3 = ["AccelZ_" + sensor for sensor in ['L_FOOT', 'R_FOOT', 'WAIST']]
     ACC_VERTICAL_3 = ["AccelY_" + sensor for sensor in ['L_FOOT', 'R_FOOT', 'WAIST']]
+    # ACC_ML_1, ACC_AP_1, ACC_VERTICAL_1 = 'AccelX_WAIST', 'AccelZ_WAIST', 'AccelY_WAIST'
     R_FOOT_GYR = ["Gyro" + axis + 'R_FOOT' for axis in ['X_', 'Y_', 'Z_']]
-
 
     ACC_GYR_ALL = [field + '_' + sensor for sensor in SENSOR_LIST for field in IMU_FIELDS[:6]]
     ACC_GYR_3 = [field + '_' + sensor for sensor in ['L_FOOT', 'R_FOOT', 'WAIST'] for field in IMU_FIELDS[:6]]
@@ -664,23 +669,47 @@ if __name__ == "__main__":
 
     input_imu_8_selected = {'force_x': ACC_ML, 'force_y': ACC_AP, 'force_z': ACC_VERTICAL, 'r_x': R_FOOT_SHANK_GYR, 'r_y': R_FOOT_SHANK_GYR, 'r_z': R_FOOT_SHANK_GYR}
     input_imu_3_selected = {'force_x': ACC_ML_3, 'force_y': ACC_AP_3, 'force_z': ACC_VERTICAL_3, 'r_x': R_FOOT_GYR, 'r_y': R_FOOT_GYR, 'r_z': R_FOOT_GYR}
+    input_imu_1_selected = {'force_x': ACC_GYR_1, 'force_y': ACC_GYR_1, 'force_z': ACC_GYR_1, 'r_x': ACC_GYR_1, 'r_y': ACC_GYR_1, 'r_z': ACC_GYR_1}
     input_vid_2 = {'force_x': VID_180_FIELDS, 'force_y': VID_90_FIELDS, 'force_z': VID_180_FIELDS, 'r_x': VID_180_FIELDS, 'r_y': VID_90_FIELDS, 'r_z': ['RKnee_y_90']}
 
     input_imu_8_all = {'force_x': ACC_GYR_ALL, 'force_y': ACC_GYR_ALL, 'force_z': ACC_GYR_ALL, 'r_x': ACC_GYR_ALL, 'r_y': ACC_GYR_ALL, 'r_z': ACC_GYR_ALL}
     input_imu_3_all = {'force_x': ACC_GYR_3, 'force_y': ACC_GYR_3, 'force_z': ACC_GYR_3, 'r_x': ACC_GYR_3, 'r_y': ACC_GYR_3, 'r_z': ACC_GYR_3}
     input_imu_1_all = {'force_x': ACC_GYR_1, 'force_y': ACC_GYR_1, 'force_z': ACC_GYR_1, 'r_x': ACC_GYR_1, 'r_y': ACC_GYR_1, 'r_z': ACC_GYR_1}
 
-    # run_kam(input_imu={}, input_vid=input_vid_2)
-    # run_kam(input_imu=input_imu_8_selected, input_vid={})
-    # run_kam(input_imu=input_imu_3_selected, input_vid={})
-    # run_kam(input_imu=input_imu_8_selected, input_vid=input_vid_2)
-    # run_kam(input_imu=input_imu_3_selected, input_vid=input_vid_2)
+    """ Use selected IMU channels """
+    result_date = '0129_selected_feature_'
+    # run_kam(input_imu=input_imu_8_selected, input_vid={}, result_dir=result_date + 'KAM/8IMU')
+    # run_kam(input_imu=input_imu_3_selected, input_vid={}, result_dir=result_date + 'KAM/3IMU')
+    # run_kam(input_imu=input_imu_1_selected, input_vid={}, result_dir=result_date + 'KAM/1IMU')
+    # run_kam(input_imu=input_imu_8_selected, input_vid=input_vid_2, result_dir=result_date + 'KAM/8IMU_2camera')
+    # run_kam(input_imu=input_imu_3_selected, input_vid=input_vid_2, result_dir=result_date + 'KAM/8IMU_2camera')
+    # run_kam(input_imu=input_imu_1_selected, input_vid=input_vid_2, result_dir=result_date + 'KAM/8IMU_2camera')
+    # run_kam(input_imu={}, input_vid=input_vid_2, result_dir=result_date + 'KAM/2camera')
+
+    # run_kfm(input_imu=input_imu_8_selected, input_vid={}, result_dir=result_date + 'KFM/8IMU')
+    run_kfm(input_imu=input_imu_3_selected, input_vid={}, result_dir=result_date + 'KFM/3IMU')
+    # run_kfm(input_imu=input_imu_1_selected, input_vid={}, result_dir=result_date + 'KFM/1IMU')
+    # run_kfm(input_imu=input_imu_8_selected, input_vid=input_vid_2, result_dir=result_date + 'KFM/8IMU_2camera')
+    # run_kfm(input_imu=input_imu_3_selected, input_vid=input_vid_2, result_dir=result_date + 'KFM/3IMU_2camera')
+    # run_kfm(input_imu=input_imu_1_selected, input_vid=input_vid_2, result_dir=result_date + 'KFM/1IMU_2camera')
+    # run_kfm(input_imu={}, input_vid=input_vid_2, result_dir=result_date + 'KFM/2camera')
+
+    # """ Use all the IMU channels """
+    # result_date = '0129_all_feature'
+    # run_kam(input_imu=input_imu_8_all, input_vid={}, result_dir=result_date + 'KAM/8IMU')
+    # run_kam(input_imu=input_imu_3_all, input_vid={}, result_dir=result_date + 'KAM/3IMU')
+    # run_kam(input_imu=input_imu_1_all, input_vid={}, result_dir=result_date + 'KAM/1IMU')
+    # run_kam(input_imu=input_imu_8_all, input_vid=input_vid_2, result_dir=result_date + 'KAM/8IMU_2camera')
+    # run_kam(input_imu=input_imu_3_all, input_vid=input_vid_2, result_dir=result_date + 'KAM/8IMU_2camera')
+    # run_kam(input_imu=input_imu_1_all, input_vid=input_vid_2, result_dir=result_date + 'KAM/8IMU_2camera')
+    # run_kam(input_imu={}, input_vid=input_vid_2, result_dir=result_date + 'KAM/2camera')
     #
-    # run_kam(input_imu=input_imu_8_all, input_vid={})
-    # run_kam(input_imu=input_imu_3_all, input_vid={})
-    # run_kam(input_imu=input_imu_1_all, input_vid={})
-    # run_kam(input_imu=input_imu_8_all, input_vid=input_vid_2)
-    # run_kam(input_imu=input_imu_3_all, input_vid=input_vid_2)
-    run_kam(input_imu=input_imu_1_all, input_vid=input_vid_2)
+    # run_kfm(input_imu=input_imu_8_all, input_vid={}, result_dir=result_date + 'KFM/8IMU')
+    # run_kfm(input_imu=input_imu_3_all, input_vid={}, result_dir=result_date + 'KFM/3IMU')
+    # run_kfm(input_imu=input_imu_1_all, input_vid={}, result_dir=result_date + 'KFM/1IMU')
+    # run_kfm(input_imu=input_imu_8_all, input_vid=input_vid_2, result_dir=result_date + 'KFM/8IMU_2camera')
+    # run_kfm(input_imu=input_imu_3_all, input_vid=input_vid_2, result_dir=result_date + 'KFM/3IMU_2camera')
+    # run_kfm(input_imu=input_imu_1_all, input_vid=input_vid_2, result_dir=result_date + 'KFM/1IMU_2camera')
+    # run_kfm(input_imu={}, input_vid=input_vid_2, result_dir=result_date + 'KFM/2camera')
 
 
