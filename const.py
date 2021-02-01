@@ -76,4 +76,4 @@ FONT_DICT_X_SMALL = {'fontsize': 15, 'fontname': 'DejaVu Sans'}
 LINE_WIDTH = 2
 LINE_WIDTH_THICK = 3
 
-SENSOR_COMBINATION = ['8IMU', '3IMU', '2camera', '8IMU_2camera', '3IMU_2camera']
+SENSOR_COMBINATION = ['8IMU_2camera', '8IMU', '3IMU_2camera', '3IMU', '1IMU_2camera', '1IMU', '2camera']

@@ -79,7 +79,7 @@ if __name__ == "__main__":
             all_feature_result = all_feature_df[target_matric + data_modal]
             mean_all.append(all_feature_result.mean())
             std_all.append(all_feature_result.std())
-            p_values.append(round(ttest_rel(sel_feature_result, all_feature_result).pvalue, 3))
+            p_values.append(round(ttest_rel(sel_feature_result, all_feature_result).pvalue, 4))
     draw_f5(mean_sel, std_sel, mean_all, std_all)
     print_results(mean_sel, mean_all)
     print(p_values)

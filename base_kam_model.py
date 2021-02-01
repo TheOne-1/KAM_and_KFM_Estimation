@@ -35,7 +35,7 @@ class BaseModel:
             self._evaluate_fields = y_fields
         else:
             self._evaluate_fields = evaluate_fields
-        os.mkdir(self.result_dir)
+        os.makedirs(self.result_dir)
         os.mkdir(os.path.join(self.result_dir, 'sub_figs'))
         os.mkdir(os.path.join(self.result_dir, 'sub_models'))
         add_file_handler(logging, os.path.join(self.result_dir, 'training_log'))

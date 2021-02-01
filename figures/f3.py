@@ -52,17 +52,17 @@ def draw_f3(mean_std_kam, mean_std_kfm):
     subplot_1_style()
     draw_subplot(fig.add_subplot(gs[1, 1]), mean_std_kfm)
     subplot_2_style()
-    plt.tight_layout(rect=[0.01, 0.01, 0.99, 0.99], w_pad=3)
+    plt.tight_layout(rect=[0., 0., 1, 1], w_pad=3)
     plt.legend(handlelength=2.6, bbox_to_anchor=(0., 1.27), ncol=1, fontsize=FONT_SIZE,
                frameon=False)
     plt.savefig('exports/f3.png')
 
 
 if __name__ == "__main__":
-    with h5py.File('results/0122_KAM/OP/results.h5', 'r') as hf:
+    with h5py.File('results/0131_all_feature_KAM/8IMU_2camera/results.h5', 'r') as hf:
         kam_data_all_sub = {subject: subject_data[:] for subject, subject_data in hf.items()}
         kam_data_fields = json.loads(hf.attrs['columns'])
-    with h5py.File('results/0122_KFM/OP/results.h5', 'r') as hf:
+    with h5py.File('results/0131_all_feature_KFM/8IMU_2camera/results.h5', 'r') as hf:
         kfm_data_all_sub = {subject: subject_data[:] for subject, subject_data in hf.items()}
         kfm_data_fields = json.loads(hf.attrs['columns'])
 
