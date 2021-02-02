@@ -35,11 +35,13 @@ class BaseModel:
             self._evaluate_fields = y_fields
         else:
             self._evaluate_fields = evaluate_fields
-        os.mkdir(self.result_dir)
+        os.makedirs(self.result_dir)
+        os.mkdir(os.path.join(self.result_dir, 'sub_figs'))
+        os.mkdir(os.path.join(self.result_dir, 'sub_models'))
         add_file_handler(logging, os.path.join(self.result_dir, 'training_log'))
         logging.info("Current commit is {}".format(execute_cmd("git rev-parse HEAD")))
         logging.info("Load data from h5 file {}".format(data_path))
-        logging.debug("Load data with input fields {}, output fields {}".format(x_fields, y_fields))
+        logging.info("Load data with input fields {}, output fields {}".format(x_fields, y_fields))
         self._x_fields = x_fields
         self._y_fields = y_fields
         self._weights = {} if weights is None else weights
@@ -284,7 +286,7 @@ class BaseModel:
         axs[1, 1].text(0.4, 0.9, np.round(np.mean(metric), 3), transform=axs[1, 1].transAxes)
         axs[1, 1].set_title('general performance')
         plt.tight_layout()
-        plt.savefig(os.path.join(self.result_dir, title))
+        plt.savefig(os.path.join(self.result_dir, 'sub_figs', title))
         plt.close()
         # plt.show(block=False)
 
