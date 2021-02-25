@@ -1,4 +1,4 @@
-from PaperFigures import get_mean_std, hide_axis_add_grid, get_data
+from figures.PaperFigures import get_mean_std, hide_axis_add_grid, get_data
 from const import SUBJECTS
 import numpy as np
 import matplotlib.patches as patches
@@ -16,17 +16,17 @@ def init_figure():
     return fig, gs
 
 
-def draw_subplot(ax, trial_index, mean_std_IMU_OP, mean_std_IMU):
+def draw_subplot(ax, trial_index, mean_std_IMU_OP):
     arr_true_mean = mean_std_IMU_OP['true_mean']
     arr_pred_mean_IMU_OP = mean_std_IMU_OP['pred_mean']
-    arr_pred_mean_IMU = mean_std_IMU['pred_mean']
+    # arr_pred_mean_IMU = mean_std_IMU['pred_mean']
 
     axis_x = range(arr_true_mean.shape[0])
     ax.plot(axis_x, arr_true_mean, color='green', label='Laboratory Force Plate \& Optical Motion Capture',
             linewidth=LINE_WIDTH * 1)
     ax.plot(axis_x, arr_pred_mean_IMU_OP, color='peru', label='Portable IMU \& Smartphone Camera',
             linewidth=LINE_WIDTH * 1)
-    ax.plot(axis_x, arr_pred_mean_IMU, '--', color='peru', label='Portable IMU', linewidth=LINE_WIDTH * 1)
+    # ax.plot(axis_x, arr_pred_mean_IMU, '--', color='peru', label='Portable IMU', linewidth=LINE_WIDTH * 1)
     ax.tick_params(labelsize=FONT_DICT['fontsize'])
     ax.set_xticks(range(0, 101, 25))
     ax.set_xticklabels(['0\%', '', '50\%', '', '100\%'], fontdict=FONT_DICT)
@@ -74,18 +74,12 @@ if __name__ == "__main__":
     fig, gs = init_figure()
     for i_moment, moment in enumerate(['KAM', 'KFM']):
         for trial_index, trial_name in enumerate(TRIALS):
-            _data_IMU_OP, _data_fields = get_data('results/0120_' + moment + '/IMU+OP/results.h5', trial_index,
-                                                  SUBJECTS[1])
+            _data_IMU_OP, _data_fields = get_data('results/0131_all_feature_' + moment + '/8IMU_2camera/results.h5', trial_index, SUBJECTS[4])
             mean_std_IMU_OP = get_mean_std(np.concatenate(_data_IMU_OP, axis=0), _data_fields, 'main_output')
-            _data_IMU, _data_fields = get_data('results/0120_' + moment + '/IMU/results.h5', trial_index,
-                                               SUBJECTS[1])
-            mean_std_IMU = get_mean_std(np.concatenate(_data_IMU, axis=0), _data_fields, 'main_output')
             if moment == 'KFM':
                 mean_std_IMU_OP['true_mean'], mean_std_IMU_OP['pred_mean'] = -mean_std_IMU_OP['true_mean'], - \
                 mean_std_IMU_OP['pred_mean']
-                mean_std_IMU['true_mean'], mean_std_IMU['pred_mean'] = -mean_std_IMU['true_mean'], -mean_std_IMU[
-                    'pred_mean']
-            draw_subplot(fig.add_subplot(gs[i_moment + 1, trial_index]), trial_index, mean_std_IMU_OP, mean_std_IMU)
+            draw_subplot(fig.add_subplot(gs[i_moment + 1, trial_index]), trial_index, mean_std_IMU_OP)
     organize_fig()
     save_fig()
     plt.show()

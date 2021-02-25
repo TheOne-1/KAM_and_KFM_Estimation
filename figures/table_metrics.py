@@ -6,7 +6,7 @@ import pandas as pd
 import numpy as np
 from const import TRIALS, SUBJECTS, SENSOR_COMBINATION
 import matplotlib.pyplot as plt
-from PaperFigures import get_score
+from figures.PaperFigures import get_score
 
 
 def append_mean_results_in_the_end(all_results):
@@ -56,12 +56,6 @@ if __name__ == '__main__':
     result_date = 'results/0131_all_feature_'       # all_feature_
     for target in ['KAM', 'KFM']:
         combo_result = [get_all_results(result_date + target, sensor) for sensor in SENSOR_COMBINATION]
-
-        # get_trial_result = lambda all_results, trial_name: list(filter(lambda result: result['trial'] == trial_name, all_results))
-        # results = {}
-        # for _input, input_name in zip(combo_result, SENSOR_COMBINATION):
-        #     trial_results = {trial: get_metric_mean_std_result(get_trial_result(_input, trial), 'rRMSE') for trial in TRIALS}
-        #     results[input_name] = trial_results
 
         result_df_all_three = pd.DataFrame(combo_result[0])[['subject', 'trial']]
         for results, result_name in zip(combo_result, SENSOR_COMBINATION):

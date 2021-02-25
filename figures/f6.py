@@ -1,17 +1,16 @@
-from PaperFigures import format_axis
+from figures.PaperFigures import format_axis
 from const import LINE_WIDTH, FONT_DICT, FONT_SIZE, FONT_DICT_LARGE, SENSOR_COMBINATION
 import matplotlib.lines as lines
 import matplotlib.pyplot as plt
 from matplotlib import rc
 import pandas as pd
 from scipy.stats import ttest_rel
-from scikit_posthocs import posthoc_tukey, posthoc_ttest
 from statsmodels.stats.multicomp import pairwise_tukeyhsd
 import prettytable as pt
 import numpy as np
 
 
-SENSOR_COMBINATION_SORTED = ['8IMU_2camera', '3IMU_2camera', '8IMU', '3IMU', '2camera']
+SENSOR_COMBINATION_SORTED = ['8IMU_2camera', '3IMU_2camera', '8IMU', '1IMU_2camera', '3IMU', '2camera', '1IMU']
 
 
 def format_errorbar_cap(caplines):
@@ -21,46 +20,45 @@ def format_errorbar_cap(caplines):
         caplines[i_cap].set_markeredgewidth(LINE_WIDTH)
 
 
-def draw_f6(mean_sel, std_sel, title):
+def draw_f6_various_imus(_mean, _std, title):
     def format_ticks():
         ax = plt.gca()
         ax.set_ylabel('Relative Root Mean Square Error (\%)', fontdict=FONT_DICT_LARGE)
-        ax.set_ylim(0, 9)
-        ax.set_yticks(range(0, 10, 1))
-        ax.set_yticklabels(range(0, 10, 1), fontdict=FONT_DICT_LARGE)
-        ax.set_xlim(-1, 9)
-        ax.set_xticks(range(0, 9, 2))
-        ax.set_xticklabels(['8 IMUs \&\n2 Cameras', '3 IMUs \&\n2 Cameras', '8 IMUs',
-                            '3 IMUs', '2 Cameras'], fontdict=FONT_DICT_LARGE)
+        ax.set_ylim(0, 12)
+        ax.set_yticks(range(0, 13, 2))
+        ax.set_yticklabels(range(0, 13, 2), fontdict=FONT_DICT_LARGE)
+        ax.set_xlim(-1, 13)
+        ax.set_xticks(range(0, 13, 2))
+        ax.set_xticklabels(['8 IMUs \&\n2 Cameras', '3 IMUs \&\n2 Cameras', '8 IMUs', '1 IMU \&\n2 Cameras',
+                            '3 IMUs', '2 Cameras', '1 IMU'], fontdict=FONT_DICT_LARGE)
 
     rc('text', usetex=True)
-    fig = plt.figure(figsize=(9, 9))
+    fig = plt.figure(figsize=(13, 7))
     format_axis()
     format_ticks()
-    sel_locs = range(0, 9, 2)
-    # bar_colors = ['red', 'orange', 'green', 'blue', 'slategrey']
-
-    for i_condition in range(5):
-        bar_sel = plt.bar(sel_locs[i_condition], mean_sel[i_condition],
-                          color=[0.8, 0.3, 0.3], width=0.6)
-    ebar, caplines, barlinecols = plt.errorbar(sel_locs, mean_sel, std_sel,
+    sel_locs = range(0, 13, 2)
+    for i_condition in range(7):
+        _bars = plt.bar(sel_locs[i_condition], _mean[i_condition], color=[0.8, 0.3, 0.3], width=0.6)
+    ebar, caplines, barlinecols = plt.errorbar(sel_locs, _mean, _std,
                                                capsize=0, ecolor='black', fmt='none', lolims=True,
                                                elinewidth=LINE_WIDTH)
     format_errorbar_cap(caplines)
     plt.tight_layout(rect=[0.01, 0.01, 0.99, 0.96], w_pad=2, h_pad=3)
+    plt.grid()
+    plt.title(title, fontsize=30)
 
 
 def draw_f6_kam_and_kfm(mean_, std_, sigifi_sign_fun):
     def format_ticks():
         ax = plt.gca()
         ax.set_ylabel('Relative Root Mean Square Error (\%)', fontdict=FONT_DICT_LARGE)
-        ax.set_xlabel('KAM Estimation \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ KFM Estimation', fontdict=FONT_DICT_LARGE, labelpad=12)
+        ax.set_xlabel('KAM Estimation \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ KFM Estimation', fontdict=FONT_DICT_LARGE, labelpad=14)
         ax.set_ylim(0, 12)
         ax.set_yticks(range(0, 13, 2))
         ax.set_yticklabels(range(0, 13, 2), fontdict=FONT_DICT_LARGE)
         ax.set_xlim(-1, 12)
         ax.set_xticks([0, 2, 4, 7, 9, 11])
-        ax.set_xticklabels(['IMU \&\n Camera', 'IMU', 'Camera', 'IMU \&\n Camera', 'IMU', 'Camera'], fontdict=FONT_DICT_LARGE)
+        ax.set_xticklabels(['IMU \&\n Camera', 'IMU \n Alone', 'Camera \n Alone', 'IMU \&\n Camera', 'IMU \n Alone', 'Camera \n Alone'], fontdict=FONT_DICT_LARGE)
 
     rc('text', usetex=True)
     fig = plt.figure(figsize=(9, 9))
@@ -76,12 +74,12 @@ def draw_f6_kam_and_kfm(mean_, std_, sigifi_sign_fun):
                                                capsize=0, ecolor='black', fmt='none', lolims=True,
                                                elinewidth=LINE_WIDTH)
     format_errorbar_cap(caplines)
-    plt.tight_layout(rect=[0.01, 0.01, 0.99, 0.96], w_pad=2, h_pad=3)
+    plt.tight_layout(rect=[0., 0., 1, 1], w_pad=2, h_pad=3)
     # plt.legend([bar_[0], bar_[-1]],
     #            ['KAM estimation', 'KFM estimation'],
     #            handlelength=3, bbox_to_anchor=(0.3, 0.95), ncol=1, fontsize=FONT_SIZE,
     #            frameon=False, labelspacing=0.2)
-    l2 = lines.Line2D([0.54, 0.54], [0.01, 0.9], linestyle='--', transform=fig.transFigure, color='gray')
+    l2 = lines.Line2D([0.54, 0.54], [0.01, 0.96], linestyle='--', transform=fig.transFigure, color='gray')
     fig.lines.extend([l2])
 
 
@@ -128,6 +126,11 @@ def print_pairwise_tukeyhsd(combo_results):
     print(results)
 
 
+def print_mean_rrmse(mean_values):
+    for value in mean_values:
+        print('{:.1f} \%'.format(value))
+
+
 def save_fig(name):
     plt.savefig('exports/' + name + '.png')
 
@@ -138,14 +141,15 @@ if __name__ == "__main__":
     for i_moment, moment in enumerate(['KAM', 'KFM']):
         test_df = pd.read_csv('results/0131_all_feature_' + moment + '/estimation_result_individual.csv')        # 0127_all_feature_ 0127_selected_feature_
         test_df = test_df[test_df['trial'] == 'all']
-        combo_results = []
-        mean_moment, sem_moment = [], []
 
+        """ Figure showing results of 8, 3, and 1 IMU for discussion """
+        combo_results = []
         for sensor_combo in SENSOR_COMBINATION_SORTED:
             combo_result = test_df[target_matric + sensor_combo]
             combo_results.append(combo_result)
         print('\nP values for {} estimation'.format(moment))
         print_paired_t_test(combo_results)
+        draw_f6_various_imus([result.mean() for result in combo_results], [result.sem() for result in combo_results], moment)
 
         for sensor_combo in ['8IMU_2camera', '8IMU', '2camera']:
             combo_result = test_df[target_matric + sensor_combo]
@@ -153,6 +157,7 @@ if __name__ == "__main__":
             sem_compare_8.append(combo_result.sem())
 
     """ A KAM & KFM joint figure """
-    draw_f6_kam_and_kfm(mean_compare_8, sem_compare_8, sigifi_sign_8)
-    save_fig('f6')
+    # print_mean_rrmse(mean_compare_8)
+    # draw_f6_kam_and_kfm(mean_compare_8, sem_compare_8, sigifi_sign_8)
+    # save_fig('f6')
     plt.show()
