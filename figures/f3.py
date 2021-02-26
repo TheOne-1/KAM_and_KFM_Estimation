@@ -40,7 +40,7 @@ def draw_f3(mean_std_kam, mean_std_kfm):
     def subplot_2_style():
         ax = plt.gca()
         ax.set_ylabel('Knee Flexion Moment (BW X BH)', fontdict=FONT_DICT)
-        ax.set_ylim(-0.21, 0.81)
+        ax.set_ylim(-0.22, 0.82)
         ticks = [-0.2, 0., 0.2, 0.4, 0.6, 0.8]
         ax.set_yticks(ticks)
         ax.set_yticklabels(ticks, fontdict=FONT_DICT)
