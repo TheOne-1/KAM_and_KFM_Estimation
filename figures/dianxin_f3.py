@@ -18,7 +18,7 @@ def draw_f3(mean_std_kam, mean_std_kfm):
         arr_true_mean, arr_true_std, arr_pred_mean, arr_pred_std = mean_std['true_mean'], mean_std['true_std'], \
                                                                    mean_std['pred_mean'], mean_std['pred_std']
         axis_x = range(arr_true_mean.shape[0])
-        ax.plot(axis_x, arr_true_mean, color='green', label='参考真值', linewidth=LINE_WIDTH*2)
+        ax.plot(axis_x, arr_true_mean, color='green', label='真值', linewidth=LINE_WIDTH*2)
         ax.fill_between(axis_x, arr_true_mean - arr_true_std, arr_true_mean + arr_true_std,
                         facecolor='green', alpha=0.3)
         ax.plot(axis_x, arr_pred_mean, color='peru', label='估计值', linewidth=LINE_WIDTH*2)
