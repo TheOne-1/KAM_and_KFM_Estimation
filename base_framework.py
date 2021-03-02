@@ -7,7 +7,7 @@ import prettytable as pt
 import matplotlib.pyplot as plt
 from typing import List
 from customized_logger import logger as logging, add_file_handler
-from sklearn.preprocessing import MinMaxScaler  # , StandardScaler
+from sklearn.preprocessing import MinMaxScaler
 from sklearn.utils import shuffle
 from sklearn.metrics import r2_score, mean_squared_error as mse
 from scipy.stats import pearsonr
@@ -20,7 +20,7 @@ def execute_cmd(cmd):
     return os.popen(cmd).read()
 
 
-class BaseModel:
+class BaseFramework:
     def __init__(self, data_path, x_fields, y_fields, weights=None, evaluate_fields=None, base_scalar=MinMaxScaler, result_dir=None):
         """
         x_fileds: a dict contains input names and input fields
@@ -192,7 +192,7 @@ class BaseModel:
         for i_output in range(y.shape[2]):
             for j_row in range(y.shape[0]):
                 data_array = y[j_row, weight[j_row, :, i_output] == 1, i_output]
-                y_resampled[j_row, :, i_output] = BaseModel.resample_one_array(data_array, resampled_len)
+                y_resampled[j_row, :, i_output] = BaseFramework.resample_one_array(data_array, resampled_len)
         return y_resampled, np.full(y_resampled.shape, 1)
 
     @staticmethod

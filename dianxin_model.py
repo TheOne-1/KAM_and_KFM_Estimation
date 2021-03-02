@@ -10,7 +10,7 @@ from keras.layers import concatenate, LeakyReLU
 from sklearn.preprocessing import StandardScaler  # MinMaxScaler,
 from keras.callbacks import Callback, ReduceLROnPlateau
 from keras.optimizers import Adam
-from base_kam_model import BaseModel
+from base_framework import BaseFramework
 from customized_logger import logger as logging
 from const import DATA_PATH, SENSOR_LIST, SUBJECT_WEIGHT, SUBJECT_HEIGHT, KAM_PHASE, VIDEO_DATA_FIELDS, R_KAM_COLUMN
 from const import extract_imu_fields, extract_right_force_fields, SEGMENT_DATA_FIELDS
@@ -20,9 +20,9 @@ for gpu in gpus:
     tf.config.experimental.set_memory_growth(gpu, True)
 
 
-class DXKamModel(BaseModel):
+class DXKamFramework(BaseFramework):
     def __init__(self, *args, **kwargs):
-        BaseModel.__init__(self, *args, **kwargs)
+        BaseFramework.__init__(self, *args, **kwargs)
         self.print_model = True
 
     def train_model(self, x_train, y_train, x_validation=None, y_validation=None, validation_weight=None):
@@ -50,12 +50,12 @@ class DXKamModel(BaseModel):
     def get_all_scores(self, y_true, y_pred, weights=None):
         y_true = self.normalize_data(y_true, self._data_scalar, 'inverse_transform', 'by_each_column')
         y_pred = self.normalize_data(y_pred, self._data_scalar, 'inverse_transform', 'by_each_column')
-        return BaseModel.get_all_scores(y_true, y_pred, self._y_fields, weights)
+        return BaseFramework.get_all_scores(y_true, y_pred, self._y_fields, weights)
 
     def customized_analysis(self, sub_y_true, sub_y_pred, all_scores):
         sub_y_true = self.normalize_data(sub_y_true, self._data_scalar, 'inverse_transform', 'by_each_column')
         sub_y_pred = self.normalize_data(sub_y_pred, self._data_scalar, 'inverse_transform', 'by_each_column')
-        return BaseModel.customized_analysis(self, sub_y_true, sub_y_pred, all_scores)
+        return BaseFramework.customized_analysis(self, sub_y_true, sub_y_pred, all_scores)
 
     def preprocess_train_data(self, x, y, weight):
         x1 = {'main_input_acc': x['main_input_acc'], 'main_input_gyr': x['main_input_gyr']}
@@ -152,7 +152,7 @@ if __name__ == "__main__":
 
         data_set = os.path.join(DATA_PATH, '40samples+stance.h5')
         result_dir = "_".join(SENSOR_LIST)
-        dx_model = DXKamModel(data_set, x_fields, y_fields, y_weights, StandardScaler, result_dir=result_dir)
+        dx_model = DXKamFramework(data_set, x_fields, y_fields, y_weights, StandardScaler, result_dir=result_dir)
         subject_list = dx_model.get_all_subjects()
         result = dx_model.cross_validation(subject_list)
         all_results.append([SENSOR_LIST, result])

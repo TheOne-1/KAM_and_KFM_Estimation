@@ -1,7 +1,7 @@
 import copy
 import os
 import random
-from base_kam_model import BaseModel
+from base_framework import BaseFramework
 from torch.optim.lr_scheduler import ExponentialLR
 import torch
 import torch.nn as nn
@@ -12,69 +12,12 @@ import numpy as np
 import time
 import json
 import h5py
-from const import IMU_FIELDS, SENSOR_LIST, DATA_PATH, VIDEO_LIST, SUBJECT_WEIGHT, SUBJECT_HEIGHT, FORCE_PHASE, \
+from const import IMU_FIELDS, SENSOR_LIST, DATA_PATH, VIDEO_LIST, SUBJECT_WEIGHT, FORCE_PHASE, RKNEE_MARKER_FIELDS, \
     FORCE_DATA_FIELDS, STATIC_DATA, SEGMENT_MASS_PERCENT, SUBJECT_ID, TRIAL_ID
 from torch.nn.utils.rnn import pack_padded_sequence, pad_packed_sequence
 from sklearn.preprocessing import MinMaxScaler, StandardScaler
 from types import SimpleNamespace
 import pandas as pd
-import datetime
-
-
-RKNEE_MARKER_FIELDS = [marker + axis for marker in ['RFME', 'RFLE'] for axis in ['_X', '_Y', '_Z']]
-RANKLE_MARKER_FIELDS = [marker + axis for marker in ['RTAM', 'RFAL'] for axis in ['_X', '_Y', '_Z']]
-RHIP_MARKER_FIELDS = [marker + axis for marker in ['RFT'] for axis in ['_X', '_Y', '_Z']]
-LKNEE_MARKER_FIELDS = [marker + axis for marker in ['LFLE', 'LFME'] for axis in ['_X', '_Y', '_Z']]
-LANKLE_MARKER_FIELDS = [marker + axis for marker in ['LFAL', 'LTAM'] for axis in ['_X', '_Y', '_Z']]
-LHIP_MARKER_FIELDS = [marker + axis for marker in ['LFT'] for axis in ['_X', '_Y', '_Z']]
-ASIS_MARKER_FIELDS = [marker + axis for marker in ['LIAS', 'RIAS'] for axis in ['_X', '_Y', '_Z']]
-PSIS_MARKER_FIELDS = [marker + axis for marker in ['LIPS', 'RIPS'] for axis in ['_X', '_Y', '_Z']]
-SHOULDER_MARKER_FIELDS = [marker + axis for marker in ['LAC', 'RAC'] for axis in ['_X', '_Y', '_Z']]
-SPINE_MARKER_FIELDS = [marker + axis for marker in ['CV7', 'MAI'] for axis in ['_X', '_Y', '_Z']]
-
-
-class TianCNN(nn.Module):
-    def __init__(self, x_dim, y_dim):
-        super().__init__()
-        kernel_num = 32
-        self.conv1 = nn.Conv1d(x_dim, 8 * kernel_num, kernel_size=3, stride=1, bias=False)
-        self.drop1 = nn.Dropout(p=0.2)
-        self.pool1 = nn.MaxPool1d(2)
-        self.conv2 = nn.Conv1d(8 * kernel_num, 2 * kernel_num, kernel_size=3, stride=1, bias=False)
-        self.drop2 = nn.Dropout(p=0.2)
-        self.pool2 = nn.MaxPool1d(2)
-        self.conv3 = nn.Conv1d(2 * kernel_num, kernel_num, kernel_size=3, stride=1, bias=False)
-        self.drop3 = nn.Dropout(p=0.2)
-        self.pool3 = nn.AvgPool1d(2)
-        self.conv4 = nn.Conv1d(kernel_num, kernel_num, kernel_size=3, stride=1, bias=False)
-        self.drop4 = nn.Dropout(p=0.2)
-        self.pool4 = nn.AvgPool1d(2)
-        self.relu = nn.ReLU()
-        self.flatten = nn.Flatten()
-        self.conv2output = nn.Linear(64, y_dim * 152, bias=False)
-        self.drop = nn.Dropout(p=0.1)
-        self.y_dim = y_dim
-        self.x_dim = x_dim
-
-    def forward(self, sequence, lens):
-        sequence = sequence[:, 30:100, :]  # take part of the data
-        sequence.transpose_(1, 2)
-        sequence = self.relu(self.conv1(sequence))
-        sequence = self.drop1(sequence)
-        sequence = self.pool1(sequence)
-        sequence = self.relu(self.conv2(sequence))
-        sequence = self.drop2(sequence)
-        sequence = self.pool2(sequence)
-        sequence = self.relu(self.conv3(sequence))
-        sequence = self.drop3(sequence)
-        sequence = self.pool3(sequence)
-        sequence = self.relu(self.conv4(sequence))
-        sequence = self.drop4(sequence)
-        sequence = self.pool4(sequence)
-        sequence = self.flatten(sequence)
-        output = self.conv2output(sequence)
-        output = torch.reshape(output, (-1, 152, self.y_dim))
-        return output
 
 
 class TianRNN(nn.Module):
@@ -143,9 +86,9 @@ class FourSourceModel(nn.Module):
         return data
 
 
-class TianModel(BaseModel):
+class TianFramework(BaseFramework):
     def __init__(self,  *args, **kwargs):
-        BaseModel.__init__(self,  *args, **kwargs)
+        BaseFramework.__init__(self, *args, **kwargs)
         self.train_step_lens, self.validation_step_lens, self.test_step_lens = [None] * 3
         self.vid_static_cali()
         self.get_relative_vid_vector()
@@ -160,7 +103,7 @@ class TianModel(BaseModel):
             sub_data[:, :, vid_y_90_col_loc] = sub_data[:, :, vid_y_90_col_loc] - r_ankle_z
             self._data_all_sub[sub_name] = sub_data
 
-    def get_relative_vid_vector(self, scale_180=False):
+    def get_relative_vid_vector(self):
         midhip_col_loc = [self._data_fields.index('MidHip' + axis + angle) for axis in ['_x', '_y'] for angle in ['_90', '_180']]
         key_points_to_process = ["LShoulder", "RShoulder", "RKnee", "LKnee", "RAnkle", "LAnkle"]
         for sub_name, sub_data in self._data_all_sub.items():
@@ -168,19 +111,6 @@ class TianModel(BaseModel):
             for key_point in key_points_to_process:
                 key_point_col_loc = [self._data_fields.index(key_point + axis + angle) for axis in ['_x', '_y'] for angle in ['_90', '_180']]
                 sub_data[:, :, key_point_col_loc] = sub_data[:, :, key_point_col_loc] - midhip_90_and_180_data
-            self._data_all_sub[sub_name] = sub_data
-        if scale_180:
-            self.scale_vid_180_vectors_via_vid_90()
-
-    def scale_vid_180_vectors_via_vid_90(self):
-        midhip_90_x_loc = self._data_fields.index('MidHip_x_90')
-        key_points_to_process = ["LShoulder", "RShoulder", "RKnee", "LKnee", "RAnkle", "LAnkle"]
-        for sub_name, sub_data in self._data_all_sub.items():
-            midhip_90_x = sub_data[:, :, midhip_90_x_loc]
-            for key_point in key_points_to_process:
-                key_point_col_loc = [self._data_fields.index(key_point + axis + angle) for axis in ['_x', '_y'] for angle in ['_180']]
-                sub_data[:, :, key_point_col_loc[0]] = sub_data[:, :, key_point_col_loc[0]] / (2060 - midhip_90_x)
-                sub_data[:, :, key_point_col_loc[1]] = sub_data[:, :, key_point_col_loc[1]] / (2060 - midhip_90_x)
             self._data_all_sub[sub_name] = sub_data
 
     def add_additional_columns(self):
@@ -261,13 +191,6 @@ class TianModel(BaseModel):
         scaled_data = scaled_data.reshape(original_shape)
         scaled_data[np.isnan(scaled_data)] = 0.
         return scaled_data
-
-    @staticmethod
-    def loss_fun_valid_part(y_pred, y, left, right):
-        y_pred_valid = y_pred[:, left:-right]
-        y_valid = y[:, left:-right]
-        loss_positive = (y_pred_valid - y_valid).pow(2).sum()
-        return loss_positive
 
     def train_model(self, x_train, y_train, x_validation=None, y_validation=None, validation_weight=None):
         sub_model_base_param = {'epoch': 5, 'batch_size': 20, 'lr': 3e-3, 'weight_decay': 3e-4, 'use_ratio': 100}
@@ -367,8 +290,8 @@ class TianModel(BaseModel):
                     y_pred_list.append(model(xb_0, xb_1, xb_2, xb_3, xb_4, lens).detach().cpu())
                 y_pred = torch.cat(y_pred_list)
             y_pred = {params.target_name: y_pred.detach().cpu().numpy()}
-            all_scores = BaseModel.get_all_scores(y_validation, y_pred, {params.target_name: params.fields},
-                                                  validation_weight)
+            all_scores = BaseFramework.get_all_scores(y_validation, y_pred, {params.target_name: params.fields},
+                                                      validation_weight)
             all_scores = [{'subject': 'all', **scores} for scores in all_scores]
             self.print_table(all_scores)
             if show_plots:
@@ -457,8 +380,8 @@ class TianModel(BaseModel):
             y_pred = self.normalize_data(y_pred, self._data_scalar, 'inverse_transform', 'by_each_column')
             y_true = {params.target_name: y_validation}
             y_true = self.normalize_data(y_true, self._data_scalar, 'inverse_transform', 'by_each_column')
-            all_scores = BaseModel.get_all_scores(y_true, y_pred, {params.target_name: params.fields},
-                                                  validation_weight)
+            all_scores = BaseFramework.get_all_scores(y_true, y_pred, {params.target_name: params.fields},
+                                                      validation_weight)
             all_scores = [{'subject': 'all', **scores} for scores in all_scores]
             self.print_table(all_scores)
             if show_plots:
@@ -586,8 +509,8 @@ def run(x_fields, y_fields, main_output_fields, result_dir):
     weights = {key: [FORCE_PHASE] * len(y_fields[key]) for key in y_fields.keys()}
     weights.update({key: [FORCE_PHASE] * len(x_fields[key]) for key in x_fields.keys()})
     evaluate_fields = {'main_output': main_output_fields}
-    model_builder = TianModel(data_path, x_fields, y_fields, weights, evaluate_fields,
-                              lambda: MinMaxScaler(feature_range=(-3, 3)), result_dir=result_dir)
+    model_builder = TianFramework(data_path, x_fields, y_fields, weights, evaluate_fields,
+                                  lambda: MinMaxScaler(feature_range=(-3, 3)), result_dir=result_dir)
                               # lambda: StandardScaler())
     subjects = model_builder.get_all_subjects()
     # model_builder.preprocess_train_evaluation(subjects[:13], subjects[13:], subjects[13:])
@@ -656,7 +579,6 @@ if __name__ == "__main__":
     ACC_ML_3 = ["AccelX_" + sensor for sensor in ['L_FOOT', 'R_FOOT', 'WAIST']]
     ACC_AP_3 = ["AccelZ_" + sensor for sensor in ['L_FOOT', 'R_FOOT', 'WAIST']]
     ACC_VERTICAL_3 = ["AccelY_" + sensor for sensor in ['L_FOOT', 'R_FOOT', 'WAIST']]
-    # ACC_ML_1, ACC_AP_1, ACC_VERTICAL_1 = 'AccelX_WAIST', 'AccelZ_WAIST', 'AccelY_WAIST'
     R_FOOT_GYR = ["Gyro" + axis + 'R_FOOT' for axis in ['X_', 'Y_', 'Z_']]
 
     ACC_GYR_ALL = [field + '_' + sensor for sensor in SENSOR_LIST for field in IMU_FIELDS[:6]]

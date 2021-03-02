@@ -2,7 +2,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 from const import LINE_WIDTH
 from const import LINE_WIDTH_THICK, FONT_SIZE_LARGE, FORCE_PHASE, SUBJECTS
-from base_kam_model import BaseModel
+from base_framework import BaseFramework
 import h5py
 import json
 from sklearn.metrics import mean_squared_error as mse
@@ -33,8 +33,8 @@ def get_mean_std(data_array, data_fields, col_name):
     true_index, pred_index = data_fields.index('true_' + col_name), data_fields.index('pred_' + col_name)
     weight_index = data_fields.index(FORCE_PHASE)
 
-    true_stance, _ = BaseModel.keep_stance_then_resample(data_array[:, :, true_index:true_index+1], data_array[:, :, weight_index:weight_index+1], 101)
-    pred_stance, _ = BaseModel.keep_stance_then_resample(data_array[:, :, pred_index:pred_index+1], data_array[:, :, weight_index:weight_index+1], 101)
+    true_stance, _ = BaseFramework.keep_stance_then_resample(data_array[:, :, true_index:true_index + 1], data_array[:, :, weight_index:weight_index + 1], 101)
+    pred_stance, _ = BaseFramework.keep_stance_then_resample(data_array[:, :, pred_index:pred_index + 1], data_array[:, :, weight_index:weight_index + 1], 101)
     true_mean, true_std = true_stance[:, :, 0].mean(axis=0), true_stance[:, :, 0].std(axis=0)
     pred_mean, pred_std = pred_stance[:, :, 0].mean(axis=0), pred_stance[:, :, 0].std(axis=0)
     return {'true_mean': true_mean, 'true_std': true_std, 'pred_mean': pred_mean, 'pred_std': pred_std}
