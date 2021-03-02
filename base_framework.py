@@ -89,10 +89,10 @@ class BaseFramework:
                 rmse = np.round(np.mean(np.concatenate([res['rmse'] for res in field_results])), 3)
                 mae = np.round(np.mean(np.concatenate([res['mae'] for res in field_results])), 3)
                 r_rmse = np.round(np.mean(np.concatenate([res['r_rmse'] for res in field_results])), 3)
-                sr_rmse = np.round(np.mean(np.concatenate([res['sr_rmse'] for res in field_results])), 3)
+                # sr_rmse = np.round(np.mean(np.concatenate([res['sr_rmse'] for res in field_results])), 3)
                 cor_value = np.round(np.mean(np.concatenate([res['cor_value'] for res in field_results])), 3)
                 mean_results += [{'output': output_name, 'field': field, 'r2': r2, 'rmse': rmse, 'mae': mae,
-                                  'r_rmse': r_rmse, 'sr_rmse': sr_rmse, 'cor_value': cor_value}]
+                                  'r_rmse': r_rmse, 'cor_value': cor_value}]
         self.print_table(mean_results)
         return mean_results
 
@@ -138,13 +138,13 @@ class BaseFramework:
             all_scores = self.get_all_scores(test_sub_y, pred_sub_y, self._evaluate_fields, test_sub_weight)
             all_scores = [{'subject': test_sub_name, **scores} for scores in all_scores]
             self.customized_analysis(test_sub_y, pred_sub_y, all_scores)
-            self.save_temp_result(test_sub_y, pred_sub_y, test_sub_weight, model, test_sub_name)
+            self.save_model_and_results(test_sub_y, pred_sub_y, test_sub_weight, model, test_sub_name)
             test_results += all_scores
         self.print_table(test_results)
         return test_results
 
     @staticmethod
-    def save_temp_result(test_sub_y, pred_sub_y, test_sub_weight, model, test_sub_name):
+    def save_model_and_results(test_sub_y, pred_sub_y, test_sub_weight, model, test_sub_name):
         pass
 
     def customized_analysis(self, sub_y_true, sub_y_pred, all_scores):
@@ -216,7 +216,7 @@ class BaseFramework:
     @staticmethod
     def get_all_scores(y_true, y_pred, y_fields, weights=None):
         def get_column_score(arr_true, arr_pred, w):
-            r2, rmse, mae, r_rmse, sr_rmse, cor_value = [np.zeros(arr_true.shape[0]) for _ in range(6)]
+            r2, rmse, mae, r_rmse, cor_value = [np.zeros(arr_true.shape[0]) for _ in range(5)]
             for i in range(arr_true.shape[0]):
                 arr_true_i = arr_true[i, w[i, :]]
                 arr_pred_i = arr_pred[i, w[i, :]]
@@ -225,14 +225,12 @@ class BaseFramework:
                 rmse[i] = np.sqrt(mse(arr_true_i, arr_pred_i))
                 mae[i] = np.mean(abs((arr_true_i - arr_pred_i)))
                 r_rmse[i] = rmse[i] / (arr_true_i.max() - arr_true_i.min())
-                sr_rmse[i] = rmse[i] / (0.5*(arr_true_i.max() - arr_true_i.min() + arr_pred_i.max() - arr_pred_i.min()))
                 cor_value[i] = pearsonr(arr_true_i, arr_pred_i)[0]
 
             locs = np.where(w.ravel())[0]
             r2_all = r2_score(arr_true.ravel()[locs], arr_pred.ravel()[locs])
             r2_all = np.full(r2.shape, r2_all)
-            return {'r2': r2, 'r2_all': r2_all, 'rmse': rmse, 'mae': mae, 'r_rmse': r_rmse, 'sr_rmse': sr_rmse,
-                    'cor_value': cor_value}
+            return {'r2': r2, 'r2_all': r2_all, 'rmse': rmse, 'mae': mae, 'r_rmse': r_rmse, 'cor_value': cor_value}
 
         scores = []
         weights = {} if weights is None else weights

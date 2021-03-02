@@ -48,12 +48,10 @@ L_PLATE_FORCE_Z, R_PLATE_FORCE_Z = ['plate_1_force_z', 'plate_2_force_z']
 
 TARGETS_LIST = R_KAM_COLUMN, _, _, _ = ["RIGHT_KNEE_ADDUCTION_MOMENT", "RIGHT_KNEE_FLEXION_MOMENT",
                                         "RIGHT_KNEE_ADDUCTION_ANGLE", "RIGHT_KNEE_ADDUCTION_VELOCITY"]
-EXT_KFM, EXT_KAM, _ = EXT_KNEE_MOMENT = ['EXT_KM_X', 'EXT_KM_Y', 'EXT_KM_Z']
+EXT_KNEE_MOMENT = ['EXT_KM_X', 'EXT_KM_Y', 'EXT_KM_Z']
 
 JOINT_LIST = [marker + '_' + axis for axis in ['X', 'Y', 'Z'] for marker in sum(SEGMENT_DEFINITIONS.values(), [])]
 
-extract_right_force_fields = lambda types, axes: ['plate_2_' + data_type + '_' + axis
-                                                  for data_type in types for axis in axes]
 FORCE_DATA_FIELDS = ['plate_' + num + '_' + data_type + '_' + axis for num in ['1', '2']
                      for data_type in ['force', 'cop'] for axis in ['x', 'y', 'z']]
 
@@ -79,4 +77,4 @@ LINE_WIDTH_THICK = 3
 SENSOR_COMBINATION = ['8IMU_2camera', '8IMU', '3IMU_2camera', '3IMU', '1IMU_2camera', '1IMU', '2camera']
 
 RKNEE_MARKER_FIELDS = [marker + axis for marker in ['RFME', 'RFLE'] for axis in ['_X', '_Y', '_Z']]
-LEVER_ARM_FIELDS = ['LEVER_ARM_X', 'LEVER_ARM_Y', 'LEVER_ARM_Z']
+LEVER_ARM_FIELDS = ['r_x', 'r_y', 'r_z']

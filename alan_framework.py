@@ -2,7 +2,6 @@ import copy
 import os
 import random
 from base_framework import BaseFramework
-from torch.optim.lr_scheduler import ExponentialLR
 import torch
 import torch.nn as nn
 from customized_logger import logger as logging
@@ -132,31 +131,14 @@ class TianFramework(BaseFramework):
                 sub_data[:, :, segment_imu_col_loc[:3]] =\
                     sub_data[:, :, segment_imu_col_loc[:3]] * sub_weight * SEGMENT_MASS_PERCENT[segment] / 100
 
-            # imu_lfoot_col_loc = [self._data_fields.index(field + '_L_FOOT') for field in IMU_FIELDS[:6]]
-            # imu_lshank_col_loc = [self._data_fields.index(field + '_L_SHANK') for field in IMU_FIELDS[:6]]
-            # imu_lthigh_col_loc = [self._data_fields.index(field + '_L_THIGH') for field in IMU_FIELDS[:6]]
-            # imu_rfoot_col_loc = [self._data_fields.index(field + '_R_FOOT') for field in IMU_FIELDS[:6]]
-            # imu_rshank_col_loc = [self._data_fields.index(field + '_R_SHANK') for field in IMU_FIELDS[:6]]
-            # imu_rthigh_col_loc = [self._data_fields.index(field + '_R_THIGH') for field in IMU_FIELDS[:6]]
-            # imu_pelvis_col_loc = [self._data_fields.index(field + '_WAIST') for field in IMU_FIELDS[:6]]
-            # imu_trunk_col_loc = [self._data_fields.index(field + '_CHEST') for field in IMU_FIELDS[:6]]
-            # sub_data[:, :, imu_lfoot_col_loc[:3]] = sub_data[:, :, imu_lfoot_col_loc[:3]] * sub_weight * SEGMENT_MASS_PERCENT['L_FOOT'] / 100
-            # sub_data[:, :, imu_lshank_col_loc[:3]] = sub_data[:, :, imu_lshank_col_loc[:3]] * sub_weight * SEGMENT_MASS_PERCENT['L_SHANK'] / 100
-            # sub_data[:, :, imu_lthigh_col_loc[:3]] = sub_data[:, :, imu_lthigh_col_loc[:3]] * sub_weight * SEGMENT_MASS_PERCENT['L_THIGH'] / 100
-            # sub_data[:, :, imu_rfoot_col_loc[:3]] = sub_data[:, :, imu_rfoot_col_loc[:3]] * sub_weight * SEGMENT_MASS_PERCENT['R_FOOT'] / 100
-            # sub_data[:, :, imu_rshank_col_loc[:3]] = sub_data[:, :, imu_rshank_col_loc[:3]] * sub_weight * SEGMENT_MASS_PERCENT['R_SHANK'] / 100
-            # sub_data[:, :, imu_rthigh_col_loc[:3]] = sub_data[:, :, imu_rthigh_col_loc[:3]] * sub_weight * SEGMENT_MASS_PERCENT['R_THIGH'] / 100
-            # sub_data[:, :, imu_pelvis_col_loc[:3]] = sub_data[:, :, imu_pelvis_col_loc[:3]] * sub_weight * SEGMENT_MASS_PERCENT['WAIST'] / 100
-            # sub_data[:, :, imu_trunk_col_loc[:3]] = sub_data[:, :, imu_trunk_col_loc[:3]] * sub_weight * SEGMENT_MASS_PERCENT['CHEST'] / 100
             self._data_all_sub[sub_name] = sub_data
 
     def preprocess_train_data(self, x, y, weight):
         self._x_fields_loc_and_mode = {}
         for k in set(list(x.keys())) - set(['anthro']):
             acc_loc = [self._x_fields[k].index(field) for field in self._x_fields[k] if 'Acc' in field]
-            weight_loc = [self._x_fields[k].index(field) for field in self._x_fields[k] if 'WEIGHT' in field]
-            other_loc = [self._x_fields[k].index(field) for field in self._x_fields[k] if 'Acc' not in field and 'WEIGHT' not in field]
-            self._x_fields_loc_and_mode[k] = ([acc_loc, weight_loc, other_loc], ['acc', 'weight', 'other'], ['by_all_columns', 'by_all_columns', 'by_each_column'])
+            other_loc = [self._x_fields[k].index(field) for field in self._x_fields[k] if 'Acc' not in field]
+            self._x_fields_loc_and_mode[k] = ([acc_loc, other_loc], ['acc', 'other'], ['by_all_columns', 'by_each_column'])
             for loc, loc_name, mode in zip(*self._x_fields_loc_and_mode[k]):
                 if len(loc) > 0:
                     x[k][:, :, loc] = self.normalize_array_separately(
@@ -201,37 +183,13 @@ class TianFramework(BaseFramework):
 
         sub_models = []
         for i_target, target, field in zip([0, 1, 2, 3], ['force_x', 'force_z', 'r_x', 'r_z'],
-                                           ['plate_2_force_x', 'plate_2_force_z', 'LEVER_ARM_X', 'LEVER_ARM_Z']):
+                                           ['plate_2_force_x', 'plate_2_force_z', 'r_x', 'r_z']):
             x_train_sub, x_validation_sub = x_train[target], x_validation[target]
             y_train_sub, y_validation_sub = y_train['midout_'+target], y_validation['midout_'+target]
             model_sub = TianRNN(x_train_sub.shape[2], y_train_sub.shape[2], i_target).cuda()
             params = {**sub_model_hyper_param, **{'target_name': 'midout_'+target, 'fields': [field]}}
             self.build_sub_model(model_sub, x_train_sub, y_train_sub, x_validation_sub, y_validation_sub, validation_weight, params)
             sub_models.append(model_sub)
-
-        # x_train_rx, x_validation_rx = x_train['r_x'], x_validation['r_x']
-        # y_train_rx, y_validation_rx = y_train['midout_r_x'], y_validation['midout_r_x']
-        # model_rx = TianRNN(x_train_rx.shape[2], y_train_rx.shape[2], 0).cuda()
-        # params = {**sub_model_hyper_param, **{'target_name': 'midout_r_x', 'fields': ['LEVER_ARM_X']}}
-        # self.build_sub_model(model_rx, x_train_rx, y_train_rx, x_validation_rx, y_validation_rx, validation_weight, params)
-        #
-        # x_train_rz, x_validation_rz = x_train['r_z'], x_validation['r_z']
-        # y_train_rz, y_validation_rz = y_train['midout_r_z'], y_validation['midout_r_z']
-        # model_rz = TianRNN(x_train_rz.shape[2], y_train_rz.shape[2], 1).cuda()
-        # params = {**sub_model_hyper_param, **{'target_name': 'midout_r_z', 'fields': ['LEVER_ARM_Z']}}
-        # self.build_sub_model(model_rz, x_train_rz, y_train_rz, x_validation_rz, y_validation_rz, validation_weight, params)
-        #
-        # x_train_fz, x_validation_fz = x_train['force_z'], x_validation['force_z']
-        # y_train_fz, y_validation_fz = y_train['midout_force_z'], y_validation['midout_force_z']
-        # model_fz = TianRNN(x_train_fz.shape[2], y_train_fz.shape[2], 2).cuda()
-        # params = {**sub_model_hyper_param, **{'target_name': 'midout_force_z', 'fields': ['plate_2_force_z']}}
-        # self.build_sub_model(model_fz, x_train_fz, y_train_fz, x_validation_fz, y_validation_fz, validation_weight, params)
-        #
-        # x_train_fx, x_validation_fx = x_train['force_x'], x_validation['force_x']
-        # y_train_fx, y_validation_fx = y_train['midout_force_x'], y_validation['midout_force_x']
-        # model_fx = TianRNN(x_train_fx.shape[2], y_train_fx.shape[2], 3).cuda()
-        # params = {**sub_model_hyper_param, **{'target_name': 'midout_force_x', 'fields': ['plate_2_force_x']}}
-        # self.build_sub_model(model_fx, x_train_fx, y_train_fx, x_validation_fx, y_validation_fx, validation_weight, params)
 
         model_fx, model_fz, model_rx, model_rz = sub_models
         four_source_model = FourSourceModel(model_fx, model_fz, model_rx, model_rz, self._data_scalar)
@@ -280,12 +238,12 @@ class TianFramework(BaseFramework):
             return train_dl, vali_from_train_dl, vali_from_test_dl, test_dl
 
         def train(model, train_dl, optimizer, loss_fn, params):
-            for i_batch, (xb_0, xb_1, xb_2, xb_3, xb_4, yb, lens) in enumerate(train_dl):
+            for i_batch, (xb_fx, xb_fz, xb_rx, xb_rz, xb_anthro, yb, lens) in enumerate(train_dl):
                 n = random.randint(1, 100)
                 if n > params.use_ratio:
                     continue  # increase the speed of epoch
                 optimizer.zero_grad()
-                y_pred = model(xb_0, xb_1, xb_2, xb_3, xb_4, lens)
+                y_pred = model(xb_fx, xb_fz, xb_rx, xb_rz, xb_anthro, lens)
                 train_loss = loss_fn(y_pred, yb)
                 train_loss.backward()
                 optimizer.step()
@@ -293,8 +251,8 @@ class TianFramework(BaseFramework):
         def eval_after_training(model, test_dl, y_validation, validation_weight, params, show_plots=False):
             with torch.no_grad():
                 y_pred_list = []
-                for i_batch, (xb_0, xb_1, xb_2, xb_3, xb_4, yb, lens) in enumerate(test_dl):
-                    y_pred_list.append(model(xb_0, xb_1, xb_2, xb_3, xb_4, lens).detach().cpu())
+                for i_batch, (xb_fx, xb_1, xb_rx, xb_rz, xb_anthro, yb, lens) in enumerate(test_dl):
+                    y_pred_list.append(model(xb_fx, xb_1, xb_rx, xb_rz, xb_anthro, lens).detach().cpu())
                 y_pred = torch.cat(y_pred_list)
             y_pred = {params.target_name: y_pred.detach().cpu().numpy()}
             all_scores = BaseFramework.get_all_scores(y_validation, y_pred, {params.target_name: params.fields},
@@ -309,10 +267,10 @@ class TianFramework(BaseFramework):
         def eval_during_training(model, vali_from_train_dl, vali_from_test_dl, loss_fn, epoch_end_time, i_epoch):
             def vali_set_loss(nn_model, validation_dl, loss_fn):
                 validation_loss = []
-                for xb_0, xb_1, xb_2, xb_3, xb_4, yb, lens in validation_dl:
+                for xb_fx, xb_fz, xb_rx, xb_rz, xb_anthro, yb, lens in validation_dl:
                     with torch.no_grad():
-                        yb_pred = nn_model(xb_0, xb_1, xb_2, xb_3, xb_4, lens)
-                        validation_loss.append(loss_fn(yb_pred, yb).item() / xb_0.shape[0])
+                        yb_pred = nn_model(xb_fx, xb_fz, xb_rx, xb_rz, xb_anthro, lens)
+                        validation_loss.append(loss_fn(yb_pred, yb).item() / xb_fx.shape[0])
                 return np.mean(validation_loss)
 
             vali_from_train_loss = vali_set_loss(model, vali_from_train_dl, loss_fn)
@@ -326,14 +284,12 @@ class TianFramework(BaseFramework):
             params.batch_size)
         loss_fn = torch.nn.MSELoss(reduction='sum')
         optimizer = torch.optim.Adam(model.parameters(), lr=params.lr, weight_decay=params.weight_decay)
-        scheduler = ExponentialLR(optimizer, gamma=1)
         logging.info('\tEpoch | Vali_train_Loss | Vali_test_Loss | Duration\t\t')
         epoch_end_time = time.time()
         for i_epoch in range(params.epoch):
             eval_during_training(model, vali_from_train_dl, vali_from_test_dl, loss_fn, epoch_end_time, i_epoch)
             epoch_end_time = time.time()
             train(model, train_dl, optimizer, loss_fn, params)
-            scheduler.step()
         eval_after_training(model, test_dl, y_validation, validation_weight, params)
 
     def build_sub_model(self, model, x_train, y_train, x_validation, y_validation, validation_weight, params):
@@ -418,19 +374,16 @@ class TianFramework(BaseFramework):
             params.batch_size)
         loss_fn = torch.nn.MSELoss(reduction='sum')
         optimizer = torch.optim.Adam(model.parameters(), lr=params.lr)
-        scheduler = ExponentialLR(optimizer, gamma=1)
         logging.info('\tEpoch | Vali_train_Loss | Vali_test_Loss | Duration\t\t')
         epoch_end_time = time.time()
         for i_epoch in range(params.epoch):
             eval_during_training(model, vali_from_train_dl, vali_from_test_dl, loss_fn, epoch_end_time, i_epoch)
             epoch_end_time = time.time()
             train(model, train_dl, optimizer, loss_fn, params)
-            scheduler.step()
         eval_after_training(model, test_dl, y_validation, validation_weight, params)
 
     def predict(self, model, x_test):
         nn_model, four_source_model_pre = model['four_source_model'], model['four_source_model_pre']
-        # model_fx_pre, model_fz_pre, model_rx_pre, model_rz_pre = model['model_fx_pre'], model['model_fz_pre'], model['model_rx_pre'], model['model_rz_pre']
         model_fx, model_fz, model_rx, model_rz = model['model_fx'], model['model_fz'], model['model_rx'], model['model_rz']
         self.test_step_lens = self._get_step_len(x_test)
         x_fx, x_fz, x_rx, x_rz, x_anthro = x_test['force_x'], x_test['force_z'], x_test['r_x'], x_test['r_z'], x_test[
@@ -442,28 +395,21 @@ class TianFramework(BaseFramework):
             test_ds = TensorDataset(x_fx, x_fz, x_rx, x_rz, x_anthro, torch.from_numpy(self.test_step_lens))
             test_dl = DataLoader(test_ds, batch_size=20)
             y_pred_list, y_pred_list_pre = [], []
-            # y_fx_pre, y_fz_pre, y_rx_pre, y_rz_pre = [], [], [], []
             y_fx, y_fz, y_rx, y_rz = [], [], [], []
-            for i_batch, (xb_0, xb_1, xb_2, xb_3, xb_4, lens) in enumerate(test_dl):
-                y_pred_list.append(nn_model(xb_0, xb_1, xb_2, xb_3, xb_4, lens).detach().cpu())
-                y_pred_list_pre.append(four_source_model_pre(xb_0, xb_1, xb_2, xb_3, xb_4, lens).detach().cpu())
-                # y_fx_pre.append(model_fx_pre(xb_0, lens).detach().cpu())
-                # y_fz_pre.append(model_fz_pre(xb_1, lens).detach().cpu())
-                # y_rx_pre.append(model_rx_pre(xb_2, lens).detach().cpu())
-                # y_rz_pre.append(model_rz_pre(xb_3, lens).detach().cpu())
-                y_fx.append(model_fx(xb_0, lens).detach().cpu())
-                y_fz.append(model_fz(xb_1, lens).detach().cpu())
-                y_rx.append(model_rx(xb_2, lens).detach().cpu())
-                y_rz.append(model_rz(xb_3, lens).detach().cpu())
+            for i_batch, (xb_fx, xb_fz, xb_rx, xb_rz, xb_anthro, lens) in enumerate(test_dl):
+                y_pred_list.append(nn_model(xb_fx, xb_fz, xb_rx, xb_rz, xb_anthro, lens).detach().cpu())
+                y_pred_list_pre.append(four_source_model_pre(xb_fx, xb_fz, xb_rx, xb_rz, xb_anthro, lens).detach().cpu())
+                y_fx.append(model_fx(xb_fx, lens).detach().cpu())
+                y_fz.append(model_fz(xb_fz, lens).detach().cpu())
+                y_rx.append(model_rx(xb_rx, lens).detach().cpu())
+                y_rz.append(model_rz(xb_rz, lens).detach().cpu())
             y_pred, y_pred_pre = torch.cat(y_pred_list), torch.cat(y_pred_list_pre)
-            # y_fx_pre, y_fz_pre, y_rx_pre, y_rz_pre = torch.cat(y_fx_pre), torch.cat(y_fz_pre), torch.cat(y_rx_pre), torch.cat(y_rz_pre)
             y_fx, y_fz, y_rx, y_rz = torch.cat(y_fx), torch.cat(y_fz), torch.cat(y_rx), torch.cat(y_rz)
         y_pred = y_pred.detach().cpu().numpy()
         return {'main_output': y_pred, 'main_output_pre': y_pred_pre,
                 'midout_force_x': y_fx, 'midout_force_z': y_fz, 'midout_r_x': y_rx, 'midout_r_z': y_rz}
 
-    def save_temp_result(self, test_sub_y, pred_sub_y, test_sub_weight, models, test_sub_name):
-        # save model
+    def save_model_and_results(self, test_sub_y, pred_sub_y, test_sub_weight, models, test_sub_name):
         save_path = os.path.join(self.result_dir, 'sub_models', test_sub_name)
         os.mkdir(save_path)
         for model_name, model in models.items():
@@ -517,89 +463,67 @@ def run(x_fields, y_fields, main_output_fields, result_dir):
     evaluate_fields = {'main_output': main_output_fields}
     model_builder = TianFramework(data_path, x_fields, y_fields, weights, evaluate_fields,
                                   lambda: MinMaxScaler(feature_range=(-3, 3)), result_dir=result_dir)
-                              # lambda: StandardScaler())
     subjects = model_builder.get_all_subjects()
     # model_builder.preprocess_train_evaluation(subjects[:13], subjects[13:], subjects[13:])
     model_builder.cross_validation(subjects)
     plt.show()
 
 
-def run_kam(input_imu, input_vid, result_dir):
-    x_fields = {'force_x': [], 'force_z': [], 'r_x': [], 'r_z': []}
-
+def combine_imu_vid_fields(x_fields, input_imu, input_vid):
     if len(input_imu.items()) > 0:
         x_fields = {k: x_fields[k] + input_imu[k] for k in list(x_fields.keys())}
     if len(input_vid.items()) > 0:
         x_fields = {k: x_fields[k] + input_vid[k] for k in list(x_fields.keys())}
     x_fields['anthro'] = STATIC_DATA
+    return x_fields
 
-    main_output_fields = ['EXT_KM_Y']  # EXT_KM_Y RIGHT_KNEE_ADDUCTION_MOMENT
+
+def run_kam(input_imu, input_vid, result_dir):
+    x_fields = {'force_x': [], 'force_z': [], 'r_x': [], 'r_z': []}
+    x_fields = combine_imu_vid_fields(x_fields, input_imu, input_vid)
     y_fields = {
-        'main_output': main_output_fields,
+        'main_output': ['EXT_KM_Y'],
         'midout_force_x': ['plate_2_force_x'],
         'midout_force_z': ['plate_2_force_z'],
-        'midout_r_x': ['LEVER_ARM_X'],
-        'midout_r_z': ['LEVER_ARM_Z'],
+        'midout_r_x': ['r_x'],
+        'midout_r_z': ['r_z'],
         'auxiliary_info': [SUBJECT_ID, TRIAL_ID, FORCE_PHASE]
     }
-    run(x_fields, y_fields, main_output_fields, result_dir)
+    run(x_fields, y_fields, ['EXT_KM_Y'], result_dir)
 
 
 def run_kfm(input_imu, input_vid, result_dir):
-    """ z -> y, x -> z"""
     x_fields = {'force_y': [], 'force_z': [], 'r_y': [], 'r_z': []}
-    if len(input_imu.items()) > 0:
-        x_fields = {k: x_fields[k] + input_imu[k] for k in list(x_fields.keys())}
-    if len(input_vid.items()) > 0:
-        x_fields = {k: x_fields[k] + input_vid[k] for k in list(x_fields.keys())}
-    x_fields['anthro'] = STATIC_DATA
-
-    main_output_fields = ['EXT_KM_X']
+    x_fields = combine_imu_vid_fields(x_fields, input_imu, input_vid)
     y_fields = {
-        'main_output': main_output_fields,
+        'main_output': ['EXT_KM_X'],
         'midout_force_y': ['plate_2_force_y'],
         'midout_force_z': ['plate_2_force_z'],
-        'midout_r_y': ['LEVER_ARM_Y'],
-        'midout_r_z': ['LEVER_ARM_Z'],
+        'midout_r_y': ['r_y'],
+        'midout_r_z': ['r_z'],
         'auxiliary_info': [SUBJECT_ID, TRIAL_ID, FORCE_PHASE]
     }
-
+    """ KFM can share the same modeling code by switching the axes: z -> y, x -> z"""
     x_fields_renamed = {'force_x': x_fields['force_z'], 'force_z': x_fields['force_y'],
                         'r_x': x_fields['r_z'], 'r_z': x_fields['r_y'], 'anthro': STATIC_DATA}
     y_fields_renamed = {'midout_force_x': y_fields['midout_force_z'], 'midout_force_z': y_fields['midout_force_y'],
                         'midout_r_x': y_fields['midout_r_z'], 'midout_r_z': y_fields['midout_r_y'],
                         'main_output': y_fields['main_output'], 'auxiliary_info': y_fields['auxiliary_info']}
-    run(x_fields_renamed, y_fields_renamed, main_output_fields, result_dir)
+    run(x_fields_renamed, y_fields_renamed, ['EXT_KM_X'], result_dir)
 
 
 if __name__ == "__main__":
     data_path = DATA_PATH + '/40samples+stance.h5'
-    ACC_ML = ["AccelX_" + sensor for sensor in SENSOR_LIST]
-    ACC_AP = ["AccelZ_" + sensor for sensor in SENSOR_LIST]
-    ACC_VERTICAL = ["AccelY_" + sensor for sensor in SENSOR_LIST]
     VID_180_FIELDS = [loc + axis + '_180' for loc in ["LShoulder", "RShoulder", "RKnee", "LKnee", "RAnkle", "LAnkle"]
                       for axis in ['_x', '_y']]
     VID_90_FIELDS = [loc + axis + '_90' for loc in ["LShoulder", "RShoulder", "RKnee", "LKnee", "RAnkle", "LAnkle"] for axis in ['_x', '_y']]
     R_FOOT_SHANK_GYR = ["Gyro" + axis + sensor for sensor in ['R_SHANK', 'R_FOOT'] for axis in ['X_', 'Y_', 'Z_']]
 
-    ACC_ML_3 = ["AccelX_" + sensor for sensor in ['L_FOOT', 'R_FOOT', 'WAIST']]
-    ACC_AP_3 = ["AccelZ_" + sensor for sensor in ['L_FOOT', 'R_FOOT', 'WAIST']]
-    ACC_VERTICAL_3 = ["AccelY_" + sensor for sensor in ['L_FOOT', 'R_FOOT', 'WAIST']]
-    R_FOOT_GYR = ["Gyro" + axis + 'R_FOOT' for axis in ['X_', 'Y_', 'Z_']]
-
     ACC_GYR_ALL = [field + '_' + sensor for sensor in SENSOR_LIST for field in IMU_FIELDS[:6]]
     ACC_GYR_3 = [field + '_' + sensor for sensor in ['L_FOOT', 'R_FOOT', 'WAIST'] for field in IMU_FIELDS[:6]]
     ACC_GYR_1 = [field + '_' + sensor for sensor in ['WAIST'] for field in IMU_FIELDS[:6]]
-    SEGMENT_WEIGHTS = [segment + '_WEIGHT' for segment in SENSOR_LIST]
-    ACC_GYR_WEIGHTS_ALL = ACC_GYR_ALL + SEGMENT_WEIGHTS
-    ACC_ALL_GYR_LEG = ACC_ML + ACC_AP + ACC_VERTICAL + R_FOOT_SHANK_GYR
-    VID_ALL = VID_90_FIELDS + VID_180_FIELDS + ['RLEVER_ARM_Y_90']
 
-    input_imu_8_selected = {'force_x': ACC_ML, 'force_y': ACC_AP, 'force_z': ACC_VERTICAL, 'r_x': R_FOOT_SHANK_GYR, 'r_y': R_FOOT_SHANK_GYR, 'r_z': R_FOOT_SHANK_GYR}
-    input_imu_3_selected = {'force_x': ACC_ML_3, 'force_y': ACC_AP_3, 'force_z': ACC_VERTICAL_3, 'r_x': R_FOOT_GYR, 'r_y': R_FOOT_GYR, 'r_z': R_FOOT_GYR}
-    input_imu_1_selected = {'force_x': ACC_GYR_1, 'force_y': ACC_GYR_1, 'force_z': ACC_GYR_1, 'r_x': ACC_GYR_1, 'r_y': ACC_GYR_1, 'r_z': ACC_GYR_1}
     input_vid_2 = {'force_x': VID_180_FIELDS, 'force_y': VID_90_FIELDS, 'force_z': VID_180_FIELDS, 'r_x': VID_180_FIELDS, 'r_y': VID_90_FIELDS, 'r_z': ['RKnee_y_90']}
-
     input_imu_8_all = {'force_x': ACC_GYR_ALL, 'force_y': ACC_GYR_ALL, 'force_z': ACC_GYR_ALL, 'r_x': ACC_GYR_ALL, 'r_y': ACC_GYR_ALL, 'r_z': R_FOOT_SHANK_GYR}
     input_imu_3_all = {'force_x': ACC_GYR_3, 'force_y': ACC_GYR_3, 'force_z': ACC_GYR_3, 'r_x': ACC_GYR_3, 'r_y': ACC_GYR_3, 'r_z': R_FOOT_SHANK_GYR}
     input_imu_1_all = {'force_x': ACC_GYR_1, 'force_y': ACC_GYR_1, 'force_z': ACC_GYR_1, 'r_x': ACC_GYR_1, 'r_y': ACC_GYR_1, 'r_z': ACC_GYR_1}
