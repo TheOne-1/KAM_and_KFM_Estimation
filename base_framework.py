@@ -35,9 +35,8 @@ class BaseFramework:
             self._evaluate_fields = y_fields
         else:
             self._evaluate_fields = evaluate_fields
-        os.makedirs(self.result_dir)
-        os.mkdir(os.path.join(self.result_dir, 'sub_figs'))
-        os.mkdir(os.path.join(self.result_dir, 'sub_models'))
+        os.makedirs(os.path.join(self.result_dir, 'sub_figs'), exist_ok=True)
+        os.makedirs(os.path.join(self.result_dir, 'sub_models'), exist_ok=True)
         add_file_handler(logging, os.path.join(self.result_dir, 'training_log'))
         logging.info("Current commit is {}".format(execute_cmd("git rev-parse HEAD")))
         logging.info("Load data from h5 file {}".format(data_path))
@@ -161,7 +160,7 @@ class BaseFramework:
     @staticmethod
     def normalize_data(data, scalars, method, scalar_mode='by_each_column'):
         assert (scalar_mode in ['by_each_column', 'by_all_columns'])
-        scaled_date = {}
+        scaled_data = {}
         for input_name, input_data in data.items():
             input_data = input_data.copy()
             original_shape = input_data.shape
@@ -171,8 +170,8 @@ class BaseFramework:
             input_data = getattr(scalars[input_name], method)(input_data)
             input_data = input_data.reshape(original_shape)
             input_data[np.isnan(input_data)] = 0.
-            scaled_date[input_name] = input_data
-        return scaled_date
+            scaled_data[input_name] = input_data
+        return scaled_data
 
     def preprocess_train_data(self, x, y, weight):
         x = self.normalize_data(x, self._data_scalar, 'fit_transform')

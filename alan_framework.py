@@ -13,7 +13,7 @@ import time
 import json
 import h5py
 from const import IMU_FIELDS, SENSOR_LIST, DATA_PATH, VIDEO_LIST, SUBJECT_WEIGHT, FORCE_PHASE, RKNEE_MARKER_FIELDS, \
-    FORCE_DATA_FIELDS, STATIC_DATA, SEGMENT_MASS_PERCENT, SUBJECT_ID, TRIAL_ID
+    FORCE_DATA_FIELDS, STATIC_DATA, SEGMENT_MASS_PERCENT, SUBJECT_ID, TRIAL_ID, LEVER_ARM_FIELDS
 from torch.nn.utils.rnn import pack_padded_sequence, pad_packed_sequence
 from sklearn.preprocessing import MinMaxScaler, StandardScaler
 from types import SimpleNamespace
@@ -91,7 +91,7 @@ class TianFramework(BaseFramework):
         BaseFramework.__init__(self, *args, **kwargs)
         self.train_step_lens, self.validation_step_lens, self.test_step_lens = [None] * 3
         self.vid_static_cali()
-        self.get_relative_vid_vector()
+        self.make_vid_vector_relative_to_midhip()
         self.get_body_weighted_imu()
         self.add_additional_columns()
 
@@ -103,7 +103,7 @@ class TianFramework(BaseFramework):
             sub_data[:, :, vid_y_90_col_loc] = sub_data[:, :, vid_y_90_col_loc] - r_ankle_z
             self._data_all_sub[sub_name] = sub_data
 
-    def get_relative_vid_vector(self):
+    def make_vid_vector_relative_to_midhip(self):
         midhip_col_loc = [self._data_fields.index('MidHip' + axis + angle) for axis in ['_x', '_y'] for angle in ['_90', '_180']]
         key_points_to_process = ["LShoulder", "RShoulder", "RKnee", "LKnee", "RAnkle", "LAnkle"]
         for sub_name, sub_data in self._data_all_sub.items():
@@ -121,29 +121,33 @@ class TianFramework(BaseFramework):
             force_data = sub_data[:, :, force_col_loc].copy()
             knee_vector = force_data[:, :, 9:12] - (marker_data[:, :, :3] + marker_data[:, :, 3:6]) / 2
             self._data_all_sub[sub_name] = np.concatenate([sub_data, knee_vector], axis=2)
-        self._data_fields.extend(['KNEE_X', 'KNEE_Y', 'KNEE_Z'])
+        self._data_fields.extend(LEVER_ARM_FIELDS)
 
     def get_body_weighted_imu(self):
         weight_col_loc = self._data_fields.index(SUBJECT_WEIGHT)
         for sub_name, sub_data in self._data_all_sub.items():
             sub_weight = sub_data[0, 0, weight_col_loc]
-            imu_lfoot_col_loc = [self._data_fields.index(field + '_L_FOOT') for field in IMU_FIELDS[:6]]
-            imu_lshank_col_loc = [self._data_fields.index(field + '_L_SHANK') for field in IMU_FIELDS[:6]]
-            imu_lthigh_col_loc = [self._data_fields.index(field + '_L_THIGH') for field in IMU_FIELDS[:6]]
-            imu_rfoot_col_loc = [self._data_fields.index(field + '_R_FOOT') for field in IMU_FIELDS[:6]]
-            imu_rshank_col_loc = [self._data_fields.index(field + '_R_SHANK') for field in IMU_FIELDS[:6]]
-            imu_rthigh_col_loc = [self._data_fields.index(field + '_R_THIGH') for field in IMU_FIELDS[:6]]
-            imu_pelvis_col_loc = [self._data_fields.index(field + '_WAIST') for field in IMU_FIELDS[:6]]
-            imu_trunk_col_loc = [self._data_fields.index(field + '_CHEST') for field in IMU_FIELDS[:6]]
+            for segment in SENSOR_LIST:
+                segment_imu_col_loc = [self._data_fields.index(field + '_' + segment) for field in IMU_FIELDS[:6]]
+                sub_data[:, :, segment_imu_col_loc[:3]] =\
+                    sub_data[:, :, segment_imu_col_loc[:3]] * sub_weight * SEGMENT_MASS_PERCENT[segment] / 100
 
-            sub_data[:, :, imu_lfoot_col_loc[:3]] = sub_data[:, :, imu_lfoot_col_loc[:3]] * sub_weight * SEGMENT_MASS_PERCENT['L_FOOT'] / 100
-            sub_data[:, :, imu_lshank_col_loc[:3]] = sub_data[:, :, imu_lshank_col_loc[:3]] * sub_weight * SEGMENT_MASS_PERCENT['L_SHANK'] / 100
-            sub_data[:, :, imu_lthigh_col_loc[:3]] = sub_data[:, :, imu_lthigh_col_loc[:3]] * sub_weight * SEGMENT_MASS_PERCENT['L_THIGH'] / 100
-            sub_data[:, :, imu_rfoot_col_loc[:3]] = sub_data[:, :, imu_rfoot_col_loc[:3]] * sub_weight * SEGMENT_MASS_PERCENT['R_FOOT'] / 100
-            sub_data[:, :, imu_rshank_col_loc[:3]] = sub_data[:, :, imu_rshank_col_loc[:3]] * sub_weight * SEGMENT_MASS_PERCENT['R_SHANK'] / 100
-            sub_data[:, :, imu_rthigh_col_loc[:3]] = sub_data[:, :, imu_rthigh_col_loc[:3]] * sub_weight * SEGMENT_MASS_PERCENT['R_THIGH'] / 100
-            sub_data[:, :, imu_pelvis_col_loc[:3]] = sub_data[:, :, imu_pelvis_col_loc[:3]] * sub_weight * SEGMENT_MASS_PERCENT['WAIST'] / 100
-            sub_data[:, :, imu_trunk_col_loc[:3]] = sub_data[:, :, imu_trunk_col_loc[:3]] * sub_weight * SEGMENT_MASS_PERCENT['CHEST'] / 100
+            # imu_lfoot_col_loc = [self._data_fields.index(field + '_L_FOOT') for field in IMU_FIELDS[:6]]
+            # imu_lshank_col_loc = [self._data_fields.index(field + '_L_SHANK') for field in IMU_FIELDS[:6]]
+            # imu_lthigh_col_loc = [self._data_fields.index(field + '_L_THIGH') for field in IMU_FIELDS[:6]]
+            # imu_rfoot_col_loc = [self._data_fields.index(field + '_R_FOOT') for field in IMU_FIELDS[:6]]
+            # imu_rshank_col_loc = [self._data_fields.index(field + '_R_SHANK') for field in IMU_FIELDS[:6]]
+            # imu_rthigh_col_loc = [self._data_fields.index(field + '_R_THIGH') for field in IMU_FIELDS[:6]]
+            # imu_pelvis_col_loc = [self._data_fields.index(field + '_WAIST') for field in IMU_FIELDS[:6]]
+            # imu_trunk_col_loc = [self._data_fields.index(field + '_CHEST') for field in IMU_FIELDS[:6]]
+            # sub_data[:, :, imu_lfoot_col_loc[:3]] = sub_data[:, :, imu_lfoot_col_loc[:3]] * sub_weight * SEGMENT_MASS_PERCENT['L_FOOT'] / 100
+            # sub_data[:, :, imu_lshank_col_loc[:3]] = sub_data[:, :, imu_lshank_col_loc[:3]] * sub_weight * SEGMENT_MASS_PERCENT['L_SHANK'] / 100
+            # sub_data[:, :, imu_lthigh_col_loc[:3]] = sub_data[:, :, imu_lthigh_col_loc[:3]] * sub_weight * SEGMENT_MASS_PERCENT['L_THIGH'] / 100
+            # sub_data[:, :, imu_rfoot_col_loc[:3]] = sub_data[:, :, imu_rfoot_col_loc[:3]] * sub_weight * SEGMENT_MASS_PERCENT['R_FOOT'] / 100
+            # sub_data[:, :, imu_rshank_col_loc[:3]] = sub_data[:, :, imu_rshank_col_loc[:3]] * sub_weight * SEGMENT_MASS_PERCENT['R_SHANK'] / 100
+            # sub_data[:, :, imu_rthigh_col_loc[:3]] = sub_data[:, :, imu_rthigh_col_loc[:3]] * sub_weight * SEGMENT_MASS_PERCENT['R_THIGH'] / 100
+            # sub_data[:, :, imu_pelvis_col_loc[:3]] = sub_data[:, :, imu_pelvis_col_loc[:3]] * sub_weight * SEGMENT_MASS_PERCENT['WAIST'] / 100
+            # sub_data[:, :, imu_trunk_col_loc[:3]] = sub_data[:, :, imu_trunk_col_loc[:3]] * sub_weight * SEGMENT_MASS_PERCENT['CHEST'] / 100
             self._data_all_sub[sub_name] = sub_data
 
     def preprocess_train_data(self, x, y, weight):
@@ -157,7 +161,6 @@ class TianFramework(BaseFramework):
                 if len(loc) > 0:
                     x[k][:, :, loc] = self.normalize_array_separately(
                         x[k][:, :, loc], k+loc_name, 'fit_transform', scalar_mode=mode)
-
         y['midout_force_x'], y['midout_force_z'] = -y['midout_force_x'], -y['midout_force_z']
         y['midout_r_x'], y['midout_r_z'] = y['midout_r_x'] / 1000, y['midout_r_z'] / 1000
         y_need_norm = {k: y[k] for k in set(list(y.keys())) - set(['main_output', 'auxiliary_info'])}
@@ -193,50 +196,54 @@ class TianFramework(BaseFramework):
         return scaled_data
 
     def train_model(self, x_train, y_train, x_validation=None, y_validation=None, validation_weight=None):
-        sub_model_base_param = {'epoch': 5, 'batch_size': 20, 'lr': 3e-3, 'weight_decay': 3e-4, 'use_ratio': 100}
+        sub_model_hyper_param = {'epoch': 5, 'batch_size': 20, 'lr': 3e-3, 'weight_decay': 3e-4, 'use_ratio': 100}
         self.train_step_lens, self.validation_step_lens = self._get_step_len(x_train), self._get_step_len(x_validation)
 
-        x_train_rx, x_validation_rx = x_train['r_x'], x_validation['r_x']
-        y_train_rx, y_validation_rx = y_train['midout_r_x'], y_validation['midout_r_x']
-        model_rx = TianRNN(x_train_rx.shape[2], y_train_rx.shape[2], 0).cuda()
-        params = {**sub_model_base_param, **{'target_name': 'midout_r_x', 'fields': ['KNEE_X']}}
-        self.build_sub_model(model_rx, x_train_rx, y_train_rx, x_validation_rx, y_validation_rx, validation_weight, params)
+        sub_models = []
+        for i_target, target, field in zip([0, 1, 2, 3], ['force_x', 'force_z', 'r_x', 'r_z'],
+                                           ['plate_2_force_x', 'plate_2_force_z', 'LEVER_ARM_X', 'LEVER_ARM_Z']):
+            x_train_sub, x_validation_sub = x_train[target], x_validation[target]
+            y_train_sub, y_validation_sub = y_train['midout_'+target], y_validation['midout_'+target]
+            model_sub = TianRNN(x_train_sub.shape[2], y_train_sub.shape[2], i_target).cuda()
+            params = {**sub_model_hyper_param, **{'target_name': 'midout_'+target, 'fields': [field]}}
+            self.build_sub_model(model_sub, x_train_sub, y_train_sub, x_validation_sub, y_validation_sub, validation_weight, params)
+            sub_models.append(model_sub)
 
-        x_train_rz, x_validation_rz = x_train['r_z'], x_validation['r_z']
-        y_train_rz, y_validation_rz = y_train['midout_r_z'], y_validation['midout_r_z']
-        model_rz = TianRNN(x_train_rz.shape[2], y_train_rz.shape[2], 1).cuda()
-        params = {**sub_model_base_param, **{'target_name': 'midout_r_z', 'fields': ['KNEE_Z']}}
-        self.build_sub_model(model_rz, x_train_rz, y_train_rz, x_validation_rz, y_validation_rz, validation_weight, params)
+        # x_train_rx, x_validation_rx = x_train['r_x'], x_validation['r_x']
+        # y_train_rx, y_validation_rx = y_train['midout_r_x'], y_validation['midout_r_x']
+        # model_rx = TianRNN(x_train_rx.shape[2], y_train_rx.shape[2], 0).cuda()
+        # params = {**sub_model_hyper_param, **{'target_name': 'midout_r_x', 'fields': ['LEVER_ARM_X']}}
+        # self.build_sub_model(model_rx, x_train_rx, y_train_rx, x_validation_rx, y_validation_rx, validation_weight, params)
+        #
+        # x_train_rz, x_validation_rz = x_train['r_z'], x_validation['r_z']
+        # y_train_rz, y_validation_rz = y_train['midout_r_z'], y_validation['midout_r_z']
+        # model_rz = TianRNN(x_train_rz.shape[2], y_train_rz.shape[2], 1).cuda()
+        # params = {**sub_model_hyper_param, **{'target_name': 'midout_r_z', 'fields': ['LEVER_ARM_Z']}}
+        # self.build_sub_model(model_rz, x_train_rz, y_train_rz, x_validation_rz, y_validation_rz, validation_weight, params)
+        #
+        # x_train_fz, x_validation_fz = x_train['force_z'], x_validation['force_z']
+        # y_train_fz, y_validation_fz = y_train['midout_force_z'], y_validation['midout_force_z']
+        # model_fz = TianRNN(x_train_fz.shape[2], y_train_fz.shape[2], 2).cuda()
+        # params = {**sub_model_hyper_param, **{'target_name': 'midout_force_z', 'fields': ['plate_2_force_z']}}
+        # self.build_sub_model(model_fz, x_train_fz, y_train_fz, x_validation_fz, y_validation_fz, validation_weight, params)
+        #
+        # x_train_fx, x_validation_fx = x_train['force_x'], x_validation['force_x']
+        # y_train_fx, y_validation_fx = y_train['midout_force_x'], y_validation['midout_force_x']
+        # model_fx = TianRNN(x_train_fx.shape[2], y_train_fx.shape[2], 3).cuda()
+        # params = {**sub_model_hyper_param, **{'target_name': 'midout_force_x', 'fields': ['plate_2_force_x']}}
+        # self.build_sub_model(model_fx, x_train_fx, y_train_fx, x_validation_fx, y_validation_fx, validation_weight, params)
 
-        x_train_fz, x_validation_fz = x_train['force_z'], x_validation['force_z']
-        y_train_fz, y_validation_fz = y_train['midout_force_z'], y_validation['midout_force_z']
-        model_fz = TianRNN(x_train_fz.shape[2], y_train_fz.shape[2], 2).cuda()
-        params = {**sub_model_base_param, **{'target_name': 'midout_force_z', 'fields': ['plate_2_force_z']}}
-        self.build_sub_model(model_fz, x_train_fz, y_train_fz, x_validation_fz, y_validation_fz, validation_weight, params)
-
-        x_train_fx, x_validation_fx = x_train['force_x'], x_validation['force_x']
-        y_train_fx, y_validation_fx = y_train['midout_force_x'], y_validation['midout_force_x']
-        model_fx = TianRNN(x_train_fx.shape[2], y_train_fx.shape[2], 3).cuda()
-        params = {**sub_model_base_param, **{'target_name': 'midout_force_x', 'fields': ['plate_2_force_x']}}
-        self.build_sub_model(model_fx, x_train_fx, y_train_fx, x_validation_fx, y_validation_fx, validation_weight, params)
-
+        model_fx, model_fz, model_rx, model_rz = sub_models
         four_source_model = FourSourceModel(model_fx, model_fz, model_rx, model_rz, self._data_scalar)
         four_source_model_pre = copy.deepcopy(four_source_model).cuda()
-        model_fx_pre = copy.deepcopy(model_fx).cuda()
-        model_fz_pre = copy.deepcopy(model_fz).cuda()
-        model_rx_pre = copy.deepcopy(model_rx).cuda()
-        model_rz_pre = copy.deepcopy(model_rz).cuda()
 
-        params = {**sub_model_base_param, **{'target_name': 'main_output', 'fields': ['EXT_KM_Y']}}
-        # self.build_main_model(four_source_model, x_train, y_train, x_validation, y_validation, validation_weight, params)
+        params = {**sub_model_hyper_param, **{'target_name': 'main_output', 'fields': ['EXT_KM_Y']}}
         params['lr'] = params['lr'] * 0.1
         params['batch_size'] = params['batch_size'] * 10
-        self.build_main_model(four_source_model, x_train, y_train, x_validation, y_validation, validation_weight,
-                              params)
-        res_models = {'four_source_model': four_source_model, 'four_source_model_pre': four_source_model_pre, 'model_rx_pre': model_rx_pre,
-                      'model_rz_pre': model_rz_pre, 'model_fx_pre': model_fx_pre, 'model_fz_pre': model_fz_pre,
-                      'model_rx': model_rx, 'model_rz': model_rz, 'model_fx': model_fx, 'model_fz': model_fz}
-        return res_models
+        self.build_main_model(four_source_model, x_train, y_train, x_validation, y_validation, validation_weight, params)
+        built_models = {'four_source_model': four_source_model, 'four_source_model_pre': four_source_model_pre,
+                        'model_rx': model_rx, 'model_rz': model_rz, 'model_fx': model_fx, 'model_fz': model_fz}
+        return built_models
 
     def build_main_model(self, model, x_train, y_train, x_validation, y_validation, validation_weight, params):
         def prepare_main_model_data(x_train, y_train, train_step_lens, x_validation, y_validation, validation_step_lens,
@@ -423,7 +430,7 @@ class TianFramework(BaseFramework):
 
     def predict(self, model, x_test):
         nn_model, four_source_model_pre = model['four_source_model'], model['four_source_model_pre']
-        model_fx_pre, model_fz_pre, model_rx_pre, model_rz_pre = model['model_fx_pre'], model['model_fz_pre'], model['model_rx_pre'], model['model_rz_pre']
+        # model_fx_pre, model_fz_pre, model_rx_pre, model_rz_pre = model['model_fx_pre'], model['model_fz_pre'], model['model_rx_pre'], model['model_rz_pre']
         model_fx, model_fz, model_rx, model_rz = model['model_fx'], model['model_fz'], model['model_rx'], model['model_rz']
         self.test_step_lens = self._get_step_len(x_test)
         x_fx, x_fz, x_rx, x_rz, x_anthro = x_test['force_x'], x_test['force_z'], x_test['r_x'], x_test['r_z'], x_test[
@@ -435,26 +442,25 @@ class TianFramework(BaseFramework):
             test_ds = TensorDataset(x_fx, x_fz, x_rx, x_rz, x_anthro, torch.from_numpy(self.test_step_lens))
             test_dl = DataLoader(test_ds, batch_size=20)
             y_pred_list, y_pred_list_pre = [], []
-            y_fx_pre, y_fz_pre, y_rx_pre, y_rz_pre = [], [], [], []
+            # y_fx_pre, y_fz_pre, y_rx_pre, y_rz_pre = [], [], [], []
             y_fx, y_fz, y_rx, y_rz = [], [], [], []
             for i_batch, (xb_0, xb_1, xb_2, xb_3, xb_4, lens) in enumerate(test_dl):
                 y_pred_list.append(nn_model(xb_0, xb_1, xb_2, xb_3, xb_4, lens).detach().cpu())
                 y_pred_list_pre.append(four_source_model_pre(xb_0, xb_1, xb_2, xb_3, xb_4, lens).detach().cpu())
-                y_fx_pre.append(model_fx_pre(xb_0, lens).detach().cpu())
-                y_fz_pre.append(model_fz_pre(xb_1, lens).detach().cpu())
-                y_rx_pre.append(model_rx_pre(xb_2, lens).detach().cpu())
-                y_rz_pre.append(model_rz_pre(xb_3, lens).detach().cpu())
+                # y_fx_pre.append(model_fx_pre(xb_0, lens).detach().cpu())
+                # y_fz_pre.append(model_fz_pre(xb_1, lens).detach().cpu())
+                # y_rx_pre.append(model_rx_pre(xb_2, lens).detach().cpu())
+                # y_rz_pre.append(model_rz_pre(xb_3, lens).detach().cpu())
                 y_fx.append(model_fx(xb_0, lens).detach().cpu())
                 y_fz.append(model_fz(xb_1, lens).detach().cpu())
                 y_rx.append(model_rx(xb_2, lens).detach().cpu())
                 y_rz.append(model_rz(xb_3, lens).detach().cpu())
             y_pred, y_pred_pre = torch.cat(y_pred_list), torch.cat(y_pred_list_pre)
-            y_fx_pre, y_fz_pre, y_rx_pre, y_rz_pre = torch.cat(y_fx_pre), torch.cat(y_fz_pre), torch.cat(y_rx_pre), torch.cat(y_rz_pre)
+            # y_fx_pre, y_fz_pre, y_rx_pre, y_rz_pre = torch.cat(y_fx_pre), torch.cat(y_fz_pre), torch.cat(y_rx_pre), torch.cat(y_rz_pre)
             y_fx, y_fz, y_rx, y_rz = torch.cat(y_fx), torch.cat(y_fz), torch.cat(y_rx), torch.cat(y_rz)
         y_pred = y_pred.detach().cpu().numpy()
         return {'main_output': y_pred, 'main_output_pre': y_pred_pre,
-                'midout_force_x': y_fx, 'midout_force_z': y_fz, 'midout_r_x': y_rx, 'midout_r_z': y_rz,
-                'midout_force_x_pre': y_fx_pre, 'midout_force_z_pre': y_fz_pre, 'midout_r_x_pre': y_rx_pre, 'midout_r_z_pre': y_rz_pre}
+                'midout_force_x': y_fx, 'midout_force_z': y_fz, 'midout_r_x': y_rx, 'midout_r_z': y_rz}
 
     def save_temp_result(self, test_sub_y, pred_sub_y, test_sub_weight, models, test_sub_name):
         # save model
@@ -532,8 +538,8 @@ def run_kam(input_imu, input_vid, result_dir):
         'main_output': main_output_fields,
         'midout_force_x': ['plate_2_force_x'],
         'midout_force_z': ['plate_2_force_z'],
-        'midout_r_x': ['KNEE_X'],
-        'midout_r_z': ['KNEE_Z'],
+        'midout_r_x': ['LEVER_ARM_X'],
+        'midout_r_z': ['LEVER_ARM_Z'],
         'auxiliary_info': [SUBJECT_ID, TRIAL_ID, FORCE_PHASE]
     }
     run(x_fields, y_fields, main_output_fields, result_dir)
@@ -553,8 +559,8 @@ def run_kfm(input_imu, input_vid, result_dir):
         'main_output': main_output_fields,
         'midout_force_y': ['plate_2_force_y'],
         'midout_force_z': ['plate_2_force_z'],
-        'midout_r_y': ['KNEE_Y'],
-        'midout_r_z': ['KNEE_Z'],
+        'midout_r_y': ['LEVER_ARM_Y'],
+        'midout_r_z': ['LEVER_ARM_Z'],
         'auxiliary_info': [SUBJECT_ID, TRIAL_ID, FORCE_PHASE]
     }
 
@@ -587,7 +593,7 @@ if __name__ == "__main__":
     SEGMENT_WEIGHTS = [segment + '_WEIGHT' for segment in SENSOR_LIST]
     ACC_GYR_WEIGHTS_ALL = ACC_GYR_ALL + SEGMENT_WEIGHTS
     ACC_ALL_GYR_LEG = ACC_ML + ACC_AP + ACC_VERTICAL + R_FOOT_SHANK_GYR
-    VID_ALL = VID_90_FIELDS + VID_180_FIELDS + ['RKnee_y_90']
+    VID_ALL = VID_90_FIELDS + VID_180_FIELDS + ['RLEVER_ARM_Y_90']
 
     input_imu_8_selected = {'force_x': ACC_ML, 'force_y': ACC_AP, 'force_z': ACC_VERTICAL, 'r_x': R_FOOT_SHANK_GYR, 'r_y': R_FOOT_SHANK_GYR, 'r_z': R_FOOT_SHANK_GYR}
     input_imu_3_selected = {'force_x': ACC_ML_3, 'force_y': ACC_AP_3, 'force_z': ACC_VERTICAL_3, 'r_x': R_FOOT_GYR, 'r_y': R_FOOT_GYR, 'r_z': R_FOOT_GYR}
@@ -599,7 +605,7 @@ if __name__ == "__main__":
     input_imu_1_all = {'force_x': ACC_GYR_1, 'force_y': ACC_GYR_1, 'force_z': ACC_GYR_1, 'r_x': ACC_GYR_1, 'r_y': ACC_GYR_1, 'r_z': ACC_GYR_1}
 
     """ Use all the IMU channels """
-    result_date = '0131_all_feature'
+    result_date = '0302_test'
     run_kam(input_imu=input_imu_8_all, input_vid={}, result_dir=result_date + 'KAM/8IMU')
     run_kam(input_imu=input_imu_3_all, input_vid={}, result_dir=result_date + 'KAM/3IMU')
     run_kam(input_imu=input_imu_1_all, input_vid={}, result_dir=result_date + 'KAM/1IMU')
