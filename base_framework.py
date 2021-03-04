@@ -12,8 +12,7 @@ from sklearn.utils import shuffle
 from sklearn.metrics import r2_score, mean_squared_error as mse
 from scipy.stats import pearsonr
 import scipy.interpolate as interpo
-
-from const import DATA_PATH
+from const import DATA_PATH, TRIALS
 
 
 def execute_cmd(cmd):
@@ -21,7 +20,8 @@ def execute_cmd(cmd):
 
 
 class BaseFramework:
-    def __init__(self, data_path, x_fields, y_fields, weights=None, evaluate_fields=None, base_scalar=MinMaxScaler, result_dir=None):
+    def __init__(self, data_path, x_fields, y_fields, specify_trials=None, weights=None, evaluate_fields=None,
+                 base_scalar=MinMaxScaler, result_dir=None):
         """
         x_fileds: a dict contains input names and input fields
         y_fileds: a dict contains output names and output fields
@@ -49,6 +49,12 @@ class BaseFramework:
         with h5py.File(data_path, 'r') as hf:
             self._data_all_sub = {subject: subject_data[:] for subject, subject_data in hf.items()}
             self._data_fields = json.loads(hf.attrs['columns'])
+            if specify_trials:
+                trial_id_col_loc = self._data_fields.index('trial_id')
+                specify_trial_ids = [TRIALS.index(specify_trial) for specify_trial in specify_trials]
+                for subject, subject_data in self._data_all_sub.items():
+                    self._data_all_sub[subject] = np.concatenate(
+                        [subject_data[subject_data[:, 0, trial_id_col_loc] == specific_id, :, :] for specific_id in specify_trial_ids], axis=0)
 
     def get_all_subjects(self):
         return list(self._data_all_sub.keys())
@@ -89,7 +95,6 @@ class BaseFramework:
                 rmse = np.round(np.mean(np.concatenate([res['rmse'] for res in field_results])), 3)
                 mae = np.round(np.mean(np.concatenate([res['mae'] for res in field_results])), 3)
                 r_rmse = np.round(np.mean(np.concatenate([res['r_rmse'] for res in field_results])), 3)
-                # sr_rmse = np.round(np.mean(np.concatenate([res['sr_rmse'] for res in field_results])), 3)
                 cor_value = np.round(np.mean(np.concatenate([res['cor_value'] for res in field_results])), 3)
                 mean_results += [{'output': output_name, 'field': field, 'r2': r2, 'rmse': rmse, 'mae': mae,
                                   'r_rmse': r_rmse, 'cor_value': cor_value}]
@@ -224,7 +229,7 @@ class BaseFramework:
                 r2[i] = r2_score(arr_true_i, arr_pred_i)
                 rmse[i] = np.sqrt(mse(arr_true_i, arr_pred_i))
                 mae[i] = np.mean(abs((arr_true_i - arr_pred_i)))
-                r_rmse[i] = rmse[i] / (arr_true_i.max() - arr_true_i.min())
+                r_rmse[i] = rmse[i] / (arr_true.max() - arr_true.min())
                 cor_value[i] = pearsonr(arr_true_i, arr_pred_i)[0]
 
             locs = np.where(w.ravel())[0]
@@ -285,7 +290,6 @@ class BaseFramework:
         plt.tight_layout()
         plt.savefig(os.path.join(self.result_dir, 'sub_figs', title))
         plt.close()
-        # plt.show(block=False)
 
     @staticmethod
     def print_table(results):

@@ -12,6 +12,7 @@ SUBJECTS = ['s002_wangdianxin', 's004_ouyangjue', 's005_tangansheng', 's006_xuse
             's015_weihuan', 's017_tantian', 's018_wangmian', 's019_chenhongyuan', 's020_houjikang'
             # , 's003_linyuan', 's001_tantian', 's016_houjikang'
             ]
+# HYPER_PARAM_SUBJECT = ['s003_linyuan']
 STEP_TYPES = STANCE, STANCE_SWING = range(2)
 STEP_TYPE = STANCE
 SEGMENT_DEFINITIONS = {
@@ -57,12 +58,16 @@ FORCE_DATA_FIELDS = ['plate_' + num + '_' + data_type + '_' + axis for num in ['
 
 STATIC_DATA = SUBJECT_WEIGHT, SUBJECT_HEIGHT = ['body weight', 'body height']
 
-PHASE_LIST = [EVENT_COLUMN, KAM_PHASE, FORCE_PHASE, STEP_PHASE, SUBJECT_ID, TRIAL_ID] = ['Event', 'kam_phase', 'force_phase', 'step_phase', 'subject_id', 'trial_id']
+PHASE_LIST = [EVENT_COLUMN, KAM_PHASE, FORCE_PHASE, STEP_PHASE, SUBJECT_ID, TRIAL_ID] = [
+    'Event', 'kam_phase', 'force_phase', 'step_phase', 'subject_id', 'trial_id']
 # all the fields of combined data
 CONTINUOUS_FIELDS = TARGETS_LIST + EXT_KNEE_MOMENT + IMU_DATA_FIELDS + VIDEO_DATA_FIELDS + FORCE_DATA_FIELDS +\
                     JOINT_LIST + SEGMENT_DATA_FIELDS
 DISCRETE_FIELDS = STATIC_DATA + PHASE_LIST
 ALL_FIELDS = DISCRETE_FIELDS + CONTINUOUS_FIELDS
+
+RKNEE_MARKER_FIELDS = [marker + axis for marker in ['RFME', 'RFLE'] for axis in ['_X', '_Y', '_Z']]
+LEVER_ARM_FIELDS = ['r_x', 'r_y', 'r_z']
 
 FONT_SIZE_LARGE = 24
 FONT_SIZE = 20
@@ -75,6 +80,3 @@ LINE_WIDTH = 2
 LINE_WIDTH_THICK = 3
 
 SENSOR_COMBINATION = ['8IMU_2camera', '8IMU', '3IMU_2camera', '3IMU', '1IMU_2camera', '1IMU', '2camera']
-
-RKNEE_MARKER_FIELDS = [marker + axis for marker in ['RFME', 'RFLE'] for axis in ['_X', '_Y', '_Z']]
-LEVER_ARM_FIELDS = ['r_x', 'r_y', 'r_z']
