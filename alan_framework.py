@@ -18,19 +18,21 @@ from sklearn.preprocessing import MinMaxScaler, StandardScaler
 from types import SimpleNamespace
 import pandas as pd
 from hyperopt import fmin, tpe, hp, Trials as HP_Trials, space_eval
+import warnings
 
 
 class TianRNN(nn.Module):
-    def __init__(self, x_dim, y_dim, seed=0, nlayer=2):
+    def __init__(self, x_dim, y_dim, input_fields, seed=0, nlayer=2):
         super(TianRNN, self).__init__()
         torch.manual_seed(seed)
-        self.rnn_layer = nn.LSTM(x_dim, 10, nlayer, batch_first=True, bidirectional=True)
+        self.rnn_layer = nn.LSTM(x_dim, globals()['lstm_unit'], nlayer, batch_first=True, bidirectional=True)
         self.y_dim = y_dim
-        self.r2d = nn.Linear(2 * 10, 10, bias=False)
-        self.d2o = nn.Linear(10, y_dim, bias=False)
-        # self.r2d = nn.Linear(2 * globals()['lstm_unit'], globals()['fcnn_unit'], bias=False)
-        # self.d2o = nn.Linear(globals()['fcnn_unit'], y_dim, bias=False)
+        # self.r2d = nn.Linear(2 * 10, 10, bias=False)
+        # self.d2o = nn.Linear(10, y_dim, bias=False)
+        self.r2d = nn.Linear(2 * globals()['lstm_unit'], globals()['fcnn_unit'], bias=False)
+        self.d2o = nn.Linear(globals()['fcnn_unit'], y_dim, bias=False)
         self.relu = nn.ReLU()
+        self.input_fields = input_fields
         for layer in [self.r2d, self.d2o]:
             nn.init.xavier_normal_(layer.weight)
         for name, param in self.rnn_layer.named_parameters():
@@ -90,6 +92,9 @@ class FourSourceModel(nn.Module):
 class TianFramework(BaseFramework):
     def __init__(self,  *args, **kwargs):
         BaseFramework.__init__(self, *args, **kwargs)
+        best_param = {param: globals()[param] for param in ['epoch_1', 'lr_1', 'batch_size_1', 'weight_decay_1',
+                                                            'lstm_unit', 'fcnn_unit'] if param in globals()}
+        logging.info("Best hyper parameters: " + str(best_param))
         self.train_step_lens, self.validation_step_lens, self.test_step_lens = [None] * 3
         self.vid_static_cali()
         self.make_vid_vector_relative_to_midhip()
@@ -140,7 +145,7 @@ class TianFramework(BaseFramework):
         for k in set(list(x.keys())) - set(['anthro']):
             acc_loc = [self._x_fields[k].index(field) for field in self._x_fields[k] if 'Acc' in field]
             other_loc = [self._x_fields[k].index(field) for field in self._x_fields[k] if 'Acc' not in field]
-            self._x_fields_loc_and_mode[k] = ([acc_loc, other_loc], ['acc', 'other'], ['by_all_columns', 'by_each_column'])
+            self._x_fields_loc_and_mode[k] = ([acc_loc, other_loc], ['_acc', '_other'], ['by_all_columns', 'by_each_column'])
             for loc, loc_name, mode in zip(*self._x_fields_loc_and_mode[k]):
                 if len(loc) > 0:
                     x[k][:, :, loc] = self.normalize_array_separately(
@@ -166,8 +171,7 @@ class TianFramework(BaseFramework):
 
     def normalize_array_separately(self, data, name, method, scalar_mode='by_each_column'):
         if method == 'fit_transform':
-            # self._data_scalar[name] = MinMaxScaler(feature_range=(-3, 3))
-            self._data_scalar[name] = StandardScaler()
+            self._data_scalar[name] = MinMaxScaler(feature_range=(-3, 3))
         assert (scalar_mode in ['by_each_column', 'by_all_columns'])
         input_data = data.copy()
         original_shape = input_data.shape
@@ -180,8 +184,8 @@ class TianFramework(BaseFramework):
         return scaled_data
 
     def train_model(self, x_train, y_train, x_validation=None, y_validation=None, validation_weight=None):
-        sub_model_hyper_param = {'epoch': globals()['epoch_1'], 'batch_size': globals()['batch_size_1'],
-                                 'lr': globals()['lr_1'], 'weight_decay': 0, 'use_ratio': 100}
+        sub_model_hyper_param = {'epoch': 5, 'batch_size': 20,
+                                 'lr': 3e-3, 'weight_decay': 3e-4, 'use_ratio': 100}
         self.train_step_lens, self.validation_step_lens = self._get_step_len(x_train), self._get_step_len(x_validation)
 
         sub_models = []
@@ -189,7 +193,7 @@ class TianFramework(BaseFramework):
                                            ['plate_2_force_x', 'plate_2_force_z', 'r_x', 'r_z']):
             x_train_sub, x_validation_sub = x_train[target], x_validation[target]
             y_train_sub, y_validation_sub = y_train['midout_'+target], y_validation['midout_'+target]
-            model_sub = TianRNN(x_train_sub.shape[2], y_train_sub.shape[2], i_target).cuda()
+            model_sub = TianRNN(x_train_sub.shape[2], y_train_sub.shape[2], self._x_fields[target], i_target).cuda()
             params = {**sub_model_hyper_param, **{'target_name': 'midout_'+target, 'fields': [field]}}
             self.build_sub_model(model_sub, x_train_sub, y_train_sub, x_validation_sub, y_validation_sub, validation_weight, params)
             sub_models.append(model_sub)
@@ -198,8 +202,8 @@ class TianFramework(BaseFramework):
         four_source_model = FourSourceModel(model_fx, model_fz, model_rx, model_rz, self._data_scalar)
         four_source_model_pre = copy.deepcopy(four_source_model).cuda()
 
-        main_model_hyper_param = {'epoch': globals()['epoch_2'], 'batch_size': globals()['batch_size_2'],
-                                  'lr': globals()['lr_2'], 'weight_decay': 0,
+        main_model_hyper_param = {'epoch': 5, 'batch_size': sub_model_hyper_param['batch_size']*10,
+                                  'lr': sub_model_hyper_param['lr']/10, 'weight_decay': 3e-4,
                                   'use_ratio': sub_model_hyper_param['use_ratio']}
         main_model_hyper_param.update({'target_name': 'main_output', 'fields': ['EXT_KM_Y']})
         self.build_main_model(four_source_model, x_train, y_train, x_validation, y_validation, validation_weight, main_model_hyper_param)
@@ -417,7 +421,10 @@ class TianFramework(BaseFramework):
         save_path = os.path.join(self.result_dir, 'sub_models', test_sub_name)
         os.makedirs(save_path, exist_ok=True)
         for model_name, model in models.items():
-            torch.save(model.state_dict(), os.path.join(save_path, model_name + '.pth'))
+
+            # update scalars
+
+            torch.save(model, os.path.join(save_path, model_name + '.pth'))
 
         results, columns = [], []
         for category, fields in self._y_fields.items():
@@ -499,22 +506,19 @@ def run(x_fields, y_fields, main_output_fields, result_dir):
     hyper_model = TianFramework(data_path, x_fields, y_fields, TRIALS[0:1], weights, evaluate_fields,
                                 lambda: MinMaxScaler(feature_range=(-3, 3)), result_dir='hyper_results')
     space = {
-        'epoch_1': hp.choice('epoch_1', range(1, 10)),
-        'lr_1': hp.loguniform('lr_1', np.log(10 ** -5), np.log(10 ** -2)),
-        'batch_size_1': hp.choice('batch_size_1', range(10, 200, 10)),
-        'epoch_2': hp.choice('epoch_2', range(1, 10)),
-        'lr_2': hp.loguniform('lr_2', np.log(10 ** -5), np.log(10 ** -2)),
-        'batch_size_2': hp.choice('batch_size_2', range(10, 200, 10)),
-        # 'weight_decay_1': hp.loguniform('weight_decay_1', np.log(10**-4), np.log(10**-2)),
-        # 'lstm_unit': hp.choice('lstm_unit', range(3, 20, 2)),
-        # 'fcnn_unit': hp.choice('fcnn_unit', range(3, 20, 2)),
-             }
+        # 'epoch_1': hp.choice('epoch_1', range(1, 10)),
+        # 'lr_1': hp.loguniform('lr_1', np.log(10 ** -5), np.log(10 ** -2)),
+        # 'batch_size_1': hp.choice('batch_size_1', range(10, 40, 5)),
+        # 'weight_decay_1': hp.loguniform('weight_decay_1', np.log(10**-5), np.log(10**-3)),
+        'lstm_unit': hp.choice('lstm_unit', range(5, 50, 5)),
+        'fcnn_unit': hp.choice('fcnn_unit', range(5, 50, 5)),
+    }
     trials = HP_Trials()
+    warnings.filterwarnings("ignore", message="An input array is constant; the correlation coefficent is not defined.")
     best_param = fmin(objective_for_hyper_search, space, algo=tpe.suggest, max_evals=100, trials=trials,
-                      return_argmin=False)
+                      return_argmin=False, rstate=np.random.RandomState(seed=0))
     show_hyper(trials, result_dir)
     logging.disabled = False
-    logging.info("Best hyper parameters: " + str(best_param))
     globals().update(best_param)
 
     model_builder = TianFramework(data_path, x_fields, y_fields, TRIALS[1:], weights, evaluate_fields,
@@ -522,7 +526,6 @@ def run(x_fields, y_fields, main_output_fields, result_dir):
     subjects = model_builder.get_all_subjects()
     # model_builder.preprocess_train_evaluation(subjects[:13], subjects[13:], subjects[13:])
     model_builder.cross_validation(subjects)
-    plt.show()
 
 
 def combine_imu_vid_fields(x_fields, input_imu, input_vid):
@@ -585,21 +588,21 @@ if __name__ == "__main__":
     input_imu_1_all = {'force_x': ACC_GYR_1, 'force_y': ACC_GYR_1, 'force_z': ACC_GYR_1, 'r_x': ACC_GYR_1, 'r_y': ACC_GYR_1, 'r_z': ACC_GYR_1}
 
     """ Use all the IMU channels """
-    result_date = '0302_test_'
+    result_date = '0301_test_'
     run_kam(input_imu=input_imu_8_all, input_vid=input_vid_2, result_dir=result_date + 'KAM/8IMU_2camera')
-    run_kam(input_imu=input_imu_3_all, input_vid=input_vid_2, result_dir=result_date + 'KAM/8IMU_2camera')
-    run_kam(input_imu=input_imu_1_all, input_vid=input_vid_2, result_dir=result_date + 'KAM/8IMU_2camera')
-    run_kam(input_imu={}, input_vid=input_vid_2, result_dir=result_date + 'KAM/2camera')
-    run_kam(input_imu=input_imu_8_all, input_vid={}, result_dir=result_date + 'KAM/8IMU')
-    run_kam(input_imu=input_imu_3_all, input_vid={}, result_dir=result_date + 'KAM/3IMU')
-    run_kam(input_imu=input_imu_1_all, input_vid={}, result_dir=result_date + 'KAM/1IMU')
-
-    run_kfm(input_imu=input_imu_8_all, input_vid=input_vid_2, result_dir=result_date + 'KFM/8IMU_2camera')
-    run_kfm(input_imu=input_imu_3_all, input_vid=input_vid_2, result_dir=result_date + 'KFM/3IMU_2camera')
-    run_kfm(input_imu=input_imu_1_all, input_vid=input_vid_2, result_dir=result_date + 'KFM/1IMU_2camera')
-    run_kfm(input_imu={}, input_vid=input_vid_2, result_dir=result_date + 'KFM/2camera')
-    run_kfm(input_imu=input_imu_8_all, input_vid={}, result_dir=result_date + 'KFM/8IMU')
-    run_kfm(input_imu=input_imu_3_all, input_vid={}, result_dir=result_date + 'KFM/3IMU')
+    run_kam(input_imu=input_imu_3_all, input_vid=input_vid_2, result_dir=result_date + 'KAM/3IMU_2camera')
+    # run_kam(input_imu=input_imu_1_all, input_vid=input_vid_2, result_dir=result_date + 'KAM/1IMU_2camera')
+    # run_kam(input_imu={}, input_vid=input_vid_2, result_dir=result_date + 'KAM/2camera')
+    # run_kam(input_imu=input_imu_8_all, input_vid={}, result_dir=result_date + 'KAM/8IMU')
+    # run_kam(input_imu=input_imu_3_all, input_vid={}, result_dir=result_date + 'KAM/3IMU')
+    # run_kam(input_imu=input_imu_1_all, input_vid={}, result_dir=result_date + 'KAM/1IMU')
+    #
+    # run_kfm(input_imu=input_imu_8_all, input_vid=input_vid_2, result_dir=result_date + 'KFM/8IMU_2camera')
+    # run_kfm(input_imu=input_imu_3_all, input_vid=input_vid_2, result_dir=result_date + 'KFM/3IMU_2camera')
+    # run_kfm(input_imu=input_imu_1_all, input_vid=input_vid_2, result_dir=result_date + 'KFM/1IMU_2camera')
+    # run_kfm(input_imu={}, input_vid=input_vid_2, result_dir=result_date + 'KFM/2camera')
+    # run_kfm(input_imu=input_imu_8_all, input_vid={}, result_dir=result_date + 'KFM/8IMU')
+    # run_kfm(input_imu=input_imu_3_all, input_vid={}, result_dir=result_date + 'KFM/3IMU')
     run_kfm(input_imu=input_imu_1_all, input_vid={}, result_dir=result_date + 'KFM/1IMU')
 
 
