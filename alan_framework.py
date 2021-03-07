@@ -106,7 +106,7 @@ class TianFramework(BaseFramework):
         for sub_name, sub_data in self._data_all_sub.items():
             static_side_df = pd.read_csv(DATA_PATH + '/' + sub_name + '/combined/static_side.csv', index_col=0)
             r_ankle_z = np.mean(static_side_df['RAnkle_y_90'])
-            sub_data[:, :, vid_y_90_col_loc] = sub_data[:, :, vid_y_90_col_loc] - r_ankle_z
+            sub_data[:, :, vid_y_90_col_loc] = sub_data[:, :, vid_y_90_col_loc] - r_ankle_z + 1500
             self._data_all_sub[sub_name] = sub_data
 
     def make_vid_vector_relative_to_midhip(self):
@@ -184,8 +184,8 @@ class TianFramework(BaseFramework):
         return scaled_data
 
     def train_model(self, x_train, y_train, x_validation=None, y_validation=None, validation_weight=None):
-        sub_model_hyper_param = {'epoch': 5, 'batch_size': 20,
-                                 'lr': 3e-3, 'weight_decay': 3e-4, 'use_ratio': 100}
+        sub_model_hyper_param = {'epoch': globals()['epoch_1'], 'batch_size': globals()['batch_size_1'],
+                                 'lr': globals()['lr_1'], 'weight_decay': 0, 'use_ratio': 100}
         self.train_step_lens, self.validation_step_lens = self._get_step_len(x_train), self._get_step_len(x_validation)
 
         sub_models = []
@@ -202,8 +202,8 @@ class TianFramework(BaseFramework):
         four_source_model = FourSourceModel(model_fx, model_fz, model_rx, model_rz, self._data_scalar)
         four_source_model_pre = copy.deepcopy(four_source_model).cuda()
 
-        main_model_hyper_param = {'epoch': 5, 'batch_size': sub_model_hyper_param['batch_size']*10,
-                                  'lr': sub_model_hyper_param['lr']/10, 'weight_decay': 3e-4,
+        main_model_hyper_param = {'epoch': globals()['epoch_1'], 'batch_size': globals()['batch_size_1']*10,
+                                  'lr': globals()['lr_1']/10, 'weight_decay': 0,
                                   'use_ratio': sub_model_hyper_param['use_ratio']}
         main_model_hyper_param.update({'target_name': 'main_output', 'fields': ['EXT_KM_Y']})
         self.build_main_model(four_source_model, x_train, y_train, x_validation, y_validation, validation_weight, main_model_hyper_param)
@@ -421,10 +421,7 @@ class TianFramework(BaseFramework):
         save_path = os.path.join(self.result_dir, 'sub_models', test_sub_name)
         os.makedirs(save_path, exist_ok=True)
         for model_name, model in models.items():
-
-            # update scalars
-
-            torch.save(model, os.path.join(save_path, model_name + '.pth'))
+            torch.save(model.cpu(), os.path.join(save_path, model_name + '.pth'))
 
         results, columns = [], []
         for category, fields in self._y_fields.items():
@@ -506,9 +503,9 @@ def run(x_fields, y_fields, main_output_fields, result_dir):
     hyper_model = TianFramework(data_path, x_fields, y_fields, TRIALS[0:1], weights, evaluate_fields,
                                 lambda: MinMaxScaler(feature_range=(-3, 3)), result_dir='hyper_results')
     space = {
-        # 'epoch_1': hp.choice('epoch_1', range(1, 10)),
-        # 'lr_1': hp.loguniform('lr_1', np.log(10 ** -5), np.log(10 ** -2)),
-        # 'batch_size_1': hp.choice('batch_size_1', range(10, 40, 5)),
+        'epoch_1': hp.choice('epoch_1', range(4, 12, 2)),
+        'lr_1': hp.loguniform('lr_1', np.log(10 ** -4), np.log(10 ** -2)),
+        'batch_size_1': hp.choice('batch_size_1', range(20, 40, 10)),
         # 'weight_decay_1': hp.loguniform('weight_decay_1', np.log(10**-5), np.log(10**-3)),
         'lstm_unit': hp.choice('lstm_unit', range(5, 50, 5)),
         'fcnn_unit': hp.choice('fcnn_unit', range(5, 50, 5)),
