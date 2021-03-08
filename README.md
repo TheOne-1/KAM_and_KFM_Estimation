@@ -90,8 +90,9 @@ Two IMU-based models (e.g. [IMU_based_KAM.pth](./trained_models_and_example_data
 two camera-based models (e.g. [camera_based_KAM.pth](./trained_models_and_example_data/camera_based_KAM.pth)), and
 two IMU & camera fusion model (e.g. [fusion_KAM.pth](./trained_models_and_example_data/fusion_KAM.pth)).
 
-### Running the code
-
+### Running example code
+An implementation ([a_load_model_and_predict.py](a_load_model_and_predict.py)) is provided
+as an example of using the trained model.
 
 ## References
 [1] Z. Cao, G. Hidalgo Martinez, T. Simon, S. Wei, and Y. A. Sheikh,“Openpose: Realtime multi-person 2d pose estimation

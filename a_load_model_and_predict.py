@@ -20,17 +20,16 @@ SEGMENT_MASS_PERCENT = {'L_FOOT': 1.37, 'R_FOOT': 1.37, 'R_SHANK': 4.33, 'R_THIG
                         'WAIST': 11.17, 'CHEST': 15.96, 'L_SHANK': 4.33, 'L_THIGH': 14.16}
 
 
-# load data
+# step 0: load data and model
 with h5py.File('trained_models_and_example_data/example_data.h5', 'r') as hf:
     data_all_sub = {subject: subject_data[:] for subject, subject_data in hf.items()}
     data_fields = json.loads(hf.attrs['columns'])
 
-# load model
 model_path = './trained_models_and_example_data/fusion_KAM.pth'
 model = torch.load(model_path)
 
 
-# prepare subject 01's data as input
+# step 1: prepare subject 01's data as input
 def make_vid_vector_relative_to_midhip():
     midhip_col_loc = [data_fields.index('MidHip' + axis + angle) for axis in ['_x', '_y'] for angle in ['_90', '_180']]
     key_points_to_process = ["LShoulder", "RShoulder", "RKnee", "LKnee", "RAnkle", "LAnkle"]
@@ -89,13 +88,17 @@ for submodel, component in zip([model.model_fx, model.model_fz, model.model_rx, 
     submodel_input = subject_data[:, :, [data_fields.index(field) for field in input_fields]]
     model_inputs[component] = torch.from_numpy(submodel_input)
 
-# predict KAM of subject 01
+# step 2: predict KAM of subject 01
 # model = model.cpu()         # !!!
 predicted = model(model_inputs['force_x'], model_inputs['force_z'], model_inputs['r_x'], model_inputs['r_z'],
                   model_inputs['anthro'], model_inputs['step_length']).detach().numpy()
 
-# plot estimation and true values
+# step 3: plot estimation and true values
 plt.figure()
-plt.plot(predicted.ravel())
-plt.plot(subject_data[:, :, data_fields.index('EXT_KM_Y')].ravel())
+plt.plot(subject_data[:, :, data_fields.index('EXT_KM_Y')].ravel(), label='True Value')
+plt.plot(predicted.ravel(), label='Predicted Value')
+plt.legend()
+ax = plt.gca()
+ax.set_xlabel('Time Step')
+ax.set_ylabel('Moment (BW X BH)')
 plt.show()

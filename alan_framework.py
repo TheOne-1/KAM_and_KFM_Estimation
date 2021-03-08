@@ -421,7 +421,8 @@ class TianFramework(BaseFramework):
         save_path = os.path.join(self.result_dir, 'sub_models', test_sub_name)
         os.makedirs(save_path, exist_ok=True)
         for model_name, model in models.items():
-            torch.save(model.cpu(), os.path.join(save_path, model_name + '.pth'))
+            copied_model = copy.deepcopy(model)
+            torch.save(copied_model.cpu(), os.path.join(save_path, model_name + '.pth'))
 
         results, columns = [], []
         for category, fields in self._y_fields.items():
@@ -503,9 +504,9 @@ def run(x_fields, y_fields, main_output_fields, result_dir):
     hyper_model = TianFramework(data_path, x_fields, y_fields, TRIALS[0:1], weights, evaluate_fields,
                                 lambda: MinMaxScaler(feature_range=(-3, 3)), result_dir='hyper_results')
     space = {
-        'epoch_1': hp.choice('epoch_1', range(4, 12, 2)),
+        'epoch_1': hp.choice('epoch_1', range(4, 11, 2)),
         'lr_1': hp.loguniform('lr_1', np.log(10 ** -4), np.log(10 ** -2)),
-        'batch_size_1': hp.choice('batch_size_1', range(20, 40, 10)),
+        'batch_size_1': hp.choice('batch_size_1', range(20, 41, 10)),
         # 'weight_decay_1': hp.loguniform('weight_decay_1', np.log(10**-5), np.log(10**-3)),
         'lstm_unit': hp.choice('lstm_unit', range(5, 50, 5)),
         'fcnn_unit': hp.choice('fcnn_unit', range(5, 50, 5)),
@@ -585,21 +586,21 @@ if __name__ == "__main__":
     input_imu_1_all = {'force_x': ACC_GYR_1, 'force_y': ACC_GYR_1, 'force_z': ACC_GYR_1, 'r_x': ACC_GYR_1, 'r_y': ACC_GYR_1, 'r_z': ACC_GYR_1}
 
     """ Use all the IMU channels """
-    result_date = '0301_test_'
+    result_date = '0307'
     run_kam(input_imu=input_imu_8_all, input_vid=input_vid_2, result_dir=result_date + 'KAM/8IMU_2camera')
+    run_kam(input_imu=input_imu_8_all, input_vid={}, result_dir=result_date + 'KAM/8IMU')
+    run_kam(input_imu={}, input_vid=input_vid_2, result_dir=result_date + 'KAM/2camera')
     run_kam(input_imu=input_imu_3_all, input_vid=input_vid_2, result_dir=result_date + 'KAM/3IMU_2camera')
-    # run_kam(input_imu=input_imu_1_all, input_vid=input_vid_2, result_dir=result_date + 'KAM/1IMU_2camera')
-    # run_kam(input_imu={}, input_vid=input_vid_2, result_dir=result_date + 'KAM/2camera')
-    # run_kam(input_imu=input_imu_8_all, input_vid={}, result_dir=result_date + 'KAM/8IMU')
-    # run_kam(input_imu=input_imu_3_all, input_vid={}, result_dir=result_date + 'KAM/3IMU')
-    # run_kam(input_imu=input_imu_1_all, input_vid={}, result_dir=result_date + 'KAM/1IMU')
-    #
-    # run_kfm(input_imu=input_imu_8_all, input_vid=input_vid_2, result_dir=result_date + 'KFM/8IMU_2camera')
-    # run_kfm(input_imu=input_imu_3_all, input_vid=input_vid_2, result_dir=result_date + 'KFM/3IMU_2camera')
-    # run_kfm(input_imu=input_imu_1_all, input_vid=input_vid_2, result_dir=result_date + 'KFM/1IMU_2camera')
-    # run_kfm(input_imu={}, input_vid=input_vid_2, result_dir=result_date + 'KFM/2camera')
-    # run_kfm(input_imu=input_imu_8_all, input_vid={}, result_dir=result_date + 'KFM/8IMU')
-    # run_kfm(input_imu=input_imu_3_all, input_vid={}, result_dir=result_date + 'KFM/3IMU')
+    run_kam(input_imu=input_imu_1_all, input_vid=input_vid_2, result_dir=result_date + 'KAM/1IMU_2camera')
+    run_kam(input_imu=input_imu_3_all, input_vid={}, result_dir=result_date + 'KAM/3IMU')
+    run_kam(input_imu=input_imu_1_all, input_vid={}, result_dir=result_date + 'KAM/1IMU')
+
+    run_kfm(input_imu=input_imu_8_all, input_vid=input_vid_2, result_dir=result_date + 'KFM/8IMU_2camera')
+    run_kfm(input_imu=input_imu_8_all, input_vid={}, result_dir=result_date + 'KFM/8IMU')
+    run_kfm(input_imu={}, input_vid=input_vid_2, result_dir=result_date + 'KFM/2camera')
+    run_kfm(input_imu=input_imu_3_all, input_vid=input_vid_2, result_dir=result_date + 'KFM/3IMU_2camera')
+    run_kfm(input_imu=input_imu_1_all, input_vid=input_vid_2, result_dir=result_date + 'KFM/1IMU_2camera')
+    run_kfm(input_imu=input_imu_3_all, input_vid={}, result_dir=result_date + 'KFM/3IMU')
     run_kfm(input_imu=input_imu_1_all, input_vid={}, result_dir=result_date + 'KFM/1IMU')
 
 
