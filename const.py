@@ -80,6 +80,7 @@ LINE_WIDTH = 2
 LINE_WIDTH_THICK = 3
 
 SENSOR_COMBINATION = ['8IMU_2camera', '8IMU', '3IMU_2camera', '3IMU', '1IMU_2camera', '1IMU', '2camera']
+SENSOR_COMBINATION_SORTED = ['8IMU_2camera', '3IMU_2camera', '8IMU', '1IMU_2camera', '3IMU', '2camera', '1IMU']
 
 EXAMPLE_DATA_FIELDS = [
     'body weight', 'body height', 'force_phase',

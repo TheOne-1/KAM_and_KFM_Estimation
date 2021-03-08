@@ -1,5 +1,5 @@
 from figures.PaperFigures import format_axis
-from const import LINE_WIDTH, FONT_DICT, FONT_SIZE, FONT_DICT_LARGE, SENSOR_COMBINATION
+from const import LINE_WIDTH, FONT_DICT, FONT_SIZE, FONT_DICT_LARGE, SENSOR_COMBINATION_SORTED
 import matplotlib.lines as lines
 import matplotlib.pyplot as plt
 from matplotlib import rc
@@ -10,13 +10,11 @@ import prettytable as pt
 import numpy as np
 
 
-SENSOR_COMBINATION_SORTED = ['8IMU_2camera', '3IMU_2camera', '8IMU', '1IMU_2camera', '3IMU', '2camera', '1IMU']
 
-
-def format_errorbar_cap(caplines):
+def format_errorbar_cap(caplines, size=15):
     for i_cap in range(1):
         caplines[i_cap].set_marker('_')
-        caplines[i_cap].set_markersize(15)
+        caplines[i_cap].set_markersize(size)
         caplines[i_cap].set_markeredgewidth(LINE_WIDTH)
 
 
@@ -79,6 +77,37 @@ def draw_f6_kam_and_kfm(mean_, std_, sigifi_sign_fun):
     #            ['KAM estimation', 'KFM estimation'],
     #            handlelength=3, bbox_to_anchor=(0.3, 0.95), ncol=1, fontsize=FONT_SIZE,
     #            frameon=False, labelspacing=0.2)
+    l2 = lines.Line2D([0.54, 0.54], [0.01, 0.96], linestyle='--', transform=fig.transFigure, color='gray')
+    fig.lines.extend([l2])
+
+
+def draw_f6_for_ISB(mean_, std_, sigifi_sign_fun):
+    def format_ticks():
+        ax = plt.gca()
+        ax.set_ylabel('Relative Root Mean Square Error (\%)', fontdict=FONT_DICT_LARGE, labelpad=4)
+        ax.set_xlabel('\ \ \ KAM Estimation \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ KFM Estimation', fontdict=FONT_DICT_LARGE, linespacing=0.95, labelpad=12)
+        ax.set_ylim(0, 12)
+        ax.set_yticks(range(0, 13, 2))
+        ax.set_yticklabels(range(0, 13, 2), fontdict=FONT_DICT_LARGE)
+        ax.set_xlim(-1, 12)
+        ax.set_xticks([0, 2, 4, 7, 9, 11])
+        ax.set_xticklabels(['IMU \&\n Camera', 'IMU \n Alone', 'Camera \n Alone', 'IMU \&\n Camera', 'IMU \n Alone', 'Camera \n Alone'], fontdict=FONT_DICT_LARGE, linespacing=0.95)
+
+    rc('text', usetex=True)
+    fig = plt.figure(figsize=(11, 6.2))
+    format_axis()
+    format_ticks()
+    bar_locs = [0, 2, 4, 7, 9, 11]
+    sigifi_sign_fun(mean_, std_, bar_locs)
+    bar_ = []
+    for i_condition in range(6):
+        bar_.append(plt.bar(bar_locs[i_condition], mean_[i_condition],
+                               color=[0.8, 0.3, 0.3], width=1))
+    ebar, caplines, barlinecols = plt.errorbar(bar_locs, mean_, std_,
+                                               capsize=0, ecolor='black', fmt='none', lolims=True,
+                                               elinewidth=LINE_WIDTH)
+    format_errorbar_cap(caplines)
+    plt.tight_layout(rect=[0., -0.02, 1, 1.04], w_pad=2, h_pad=3)
     l2 = lines.Line2D([0.54, 0.54], [0.01, 0.96], linestyle='--', transform=fig.transFigure, color='gray')
     fig.lines.extend([l2])
 
@@ -157,7 +186,8 @@ if __name__ == "__main__":
             sem_compare_8.append(combo_result.sem())
 
     """ A KAM & KFM joint figure """
-    # print_mean_rrmse(mean_compare_8)
+    print_mean_rrmse(mean_compare_8)
+    draw_f6_for_ISB(mean_compare_8, sem_compare_8, sigifi_sign_8)
     # draw_f6_kam_and_kfm(mean_compare_8, sem_compare_8, sigifi_sign_8)
-    # save_fig('f6')
+    save_fig('f6')
     plt.show()
