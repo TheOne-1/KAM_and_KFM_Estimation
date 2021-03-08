@@ -10,7 +10,6 @@ import prettytable as pt
 import numpy as np
 
 
-
 def format_errorbar_cap(caplines, size=15):
     for i_cap in range(1):
         caplines[i_cap].set_marker('_')
@@ -133,24 +132,26 @@ def sigifi_sign_8(mean_, std_, bar_locs):
     plt.text(bar_locs[3]*0.55 + bar_locs[5]*0.45, 11.7, '*', color='black', size=40)
 
 
-def print_paired_t_test(combo_results):
+def print_anova_with_lsd(combo_results, combo_names=SENSOR_COMBINATION_SORTED):
+    """ Equals to doing paired t-tests. """
     tb = pt.PrettyTable()
-    tb.field_names = SENSOR_COMBINATION_SORTED
-    for i_combo, combo_a in enumerate(SENSOR_COMBINATION_SORTED):
+    tb.field_names = combo_names
+    for i_combo, combo_a in enumerate(combo_names):
         p_val_row = []
-        for j_combo, combo_b in enumerate(SENSOR_COMBINATION_SORTED):
-            p_val = round(ttest_rel(combo_results[i_combo], combo_results[j_combo]).pvalue, 2)
-            if np.isnan(p_val):
+        for j_combo, combo_b in enumerate(combo_names):
+            if i_combo == j_combo:
                 p_val = 1
+            else:
+                p_val = round(ttest_rel(combo_results[i_combo], combo_results[j_combo]).pvalue, 3)
             p_val_row.append(p_val)
         tb.add_row(p_val_row)
-    tb.add_column('', SENSOR_COMBINATION_SORTED, align="l")
+    tb.add_column('', combo_names, align="l")
     print(tb)
 
 
-def print_pairwise_tukeyhsd(combo_results):
+def print_pairwise_tukeyhsd(combo_results, combo_names):
     endog = np.array(combo_results)
-    groups = [name for name in SENSOR_COMBINATION_SORTED for i in range(len(combo_results[0]))]
+    groups = [name for name in combo_names for i in range(len(combo_results[0]))]
     results = pairwise_tukeyhsd(endog.ravel(), groups)
     print(results)
 
@@ -165,29 +166,27 @@ def save_fig(name):
 
 
 if __name__ == "__main__":
+    test_name = '0307'
     target_matric = 'rRMSE_'
-    mean_compare_8, sem_compare_8, mean_compare_3, sem_compare_3 = [], [], [], []
+    mean_compare_, sem_compare_ = [], []
+    combo_results_all = {}
     for i_moment, moment in enumerate(['KAM', 'KFM']):
-        test_df = pd.read_csv('results/0131_all_feature_' + moment + '/estimation_result_individual.csv')        # 0127_all_feature_ 0127_selected_feature_
+        test_df = pd.read_csv('results/' + test_name + moment + '/estimation_result_individual.csv')
         test_df = test_df[test_df['trial'] == 'all']
 
-        """ Figure showing results of 8, 3, and 1 IMU for discussion """
-        combo_results = []
-        for sensor_combo in SENSOR_COMBINATION_SORTED:
-            combo_result = test_df[target_matric + sensor_combo]
-            combo_results.append(combo_result)
-        print('\nP values for {} estimation'.format(moment))
-        print_paired_t_test(combo_results)
-        draw_f6_various_imus([result.mean() for result in combo_results], [result.sem() for result in combo_results], moment)
-
+        combo_result_each_moment = []
         for sensor_combo in ['8IMU_2camera', '8IMU', '2camera']:
             combo_result = test_df[target_matric + sensor_combo]
-            mean_compare_8.append(combo_result.mean())
-            sem_compare_8.append(combo_result.sem())
+            mean_compare_.append(combo_result.mean())
+            sem_compare_.append(combo_result.sem())
+            combo_result_each_moment.append(combo_result)
+            combo_results_all[moment + '_' + sensor_combo] = combo_result
+        print_anova_with_lsd(combo_result_each_moment, ['8IMU_2camera', '8IMU', '2camera'])
 
     """ A KAM & KFM joint figure """
-    print_mean_rrmse(mean_compare_8)
-    draw_f6_for_ISB(mean_compare_8, sem_compare_8, sigifi_sign_8)
-    # draw_f6_kam_and_kfm(mean_compare_8, sem_compare_8, sigifi_sign_8)
+    pd.DataFrame(combo_results_all).to_csv('results/' + test_name + '_anova.csv', index=False)
+    print_mean_rrmse(mean_compare_)
+    # draw_f6_for_ISB(mean_compare_8, sem_compare_8, sigifi_sign_8)
+    draw_f6_kam_and_kfm(mean_compare_, sem_compare_, sigifi_sign_8)
     save_fig('f6')
     plt.show()

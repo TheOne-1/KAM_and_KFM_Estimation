@@ -54,7 +54,7 @@ if __name__ == "__main__":
     combo_results = []
     for i_moment, moment in enumerate(['KAM', 'KFM']):
         test_df = pd.read_csv(
-            'results/0131_all_feature_' + moment + '/estimation_result_individual.csv')
+            'results/0307' + moment + '/estimation_result_individual.csv')
         test_df = test_df[test_df['trial'] == 'all']
 
         """ Figure showing results of 8, 3, and 1 IMU for discussion """
