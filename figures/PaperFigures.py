@@ -51,20 +51,6 @@ def get_data(file_path, specific_trial=None, subjects=SUBJECTS):
     return _data_all, _data_fields
 
 
-def get_fpa(_data, _data_fields):
-    def get_FPA_all():
-        toe_col_loc = _data_fields.index('FM2_x')
-        toe = _data[:, 0, toe_col_loc:toe_col_loc+3]
-        x=1
-    get_FPA_all()
-        # forward_vector = toe - heel
-        # if side == 'l':
-        #     FPAs = - 180 / np.pi * np.arctan2(forward_vector[:, 0], forward_vector[:, 1])
-        # else:
-        #     FPAs = 180 / np.pi * np.arctan2(forward_vector[:, 0], forward_vector[:, 1])
-        # return FPAs
-
-
 def get_score(arr_true, arr_pred, w):
     assert(len(arr_true.shape) == 1 and arr_true.shape == arr_pred.shape == w.shape)
     locs = np.where(w.ravel())[0]

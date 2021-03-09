@@ -1,11 +1,9 @@
-import os
+""" Some subjects might be interested in their KAM values compared with the group average """
 import h5py
 import json
 from figures.PaperFigures import get_mean_std, format_axis
-from const import SUBJECTS
 import numpy as np
 from const import LINE_WIDTH, FONT_DICT, FONT_SIZE, FONT_DICT, FONT_SIZE, FONT_DICT_LARGE
-from const import LINE_WIDTH_THICK, FONT_SIZE_LARGE, FORCE_PHASE
 import matplotlib.gridspec as gridspec
 import matplotlib.pyplot as plt
 from matplotlib import rc
@@ -16,10 +14,10 @@ def draw_f3(mean_std_kam, mean_std_kfm):
         arr_true_mean, arr_true_std, arr_pred_mean, arr_pred_std = mean_std['true_mean'], mean_std['true_std'], \
                                                                    mean_std['pred_mean'], mean_std['pred_std']
         axis_x = range(arr_true_mean.shape[0])
-        ax.plot(axis_x, arr_true_mean, color='green', label='Laboratory Force Plate \& Optical Motion Capture', linewidth=LINE_WIDTH*2)
+        ax.plot(axis_x, arr_true_mean, color='green', label='Average', linewidth=LINE_WIDTH*2)
         ax.fill_between(axis_x, arr_true_mean - arr_true_std, arr_true_mean + arr_true_std,
                         facecolor='green', alpha=0.4)
-        ax.plot(axis_x, arr_pred_mean, '--', color='peru', label='Portable IMU \& Smartphone Camera', linewidth=LINE_WIDTH*2)
+        ax.plot(axis_x, arr_pred_mean, '--', color='peru', label='Yours', linewidth=LINE_WIDTH*2)
         ax.fill_between(axis_x, arr_pred_mean - arr_pred_std, arr_pred_mean + arr_pred_std,
                         facecolor='peru', alpha=0.4)
         ax.tick_params(labelsize=FONT_DICT['fontsize'])
@@ -53,21 +51,28 @@ def draw_f3(mean_std_kam, mean_std_kfm):
     draw_subplot(fig.add_subplot(gs[1, 1]), mean_std_kfm)
     subplot_2_style()
     plt.tight_layout(rect=[0., 0., 1, 1], w_pad=3)
-    plt.legend(handlelength=2.6, bbox_to_anchor=(0., 1.27), ncol=1, fontsize=FONT_SIZE,
+    plt.legend(handlelength=2.6, ncol=2, fontsize=FONT_SIZE,
                frameon=False)
-    plt.savefig('exports/f3.png')
 
 
 if __name__ == "__main__":
+    target_subject = 's019_chenhongyuan'
     with h5py.File('results/0307KAM/8IMU_2camera/results.h5', 'r') as hf:
         kam_data_all_sub = {subject: subject_data[:] for subject, subject_data in hf.items()}
+        kam_data_target_sub = {target_subject: kam_data_all_sub[target_subject]}
         kam_data_fields = json.loads(hf.attrs['columns'])
     with h5py.File('results/0307KFM/8IMU_2camera/results.h5', 'r') as hf:
         kfm_data_all_sub = {subject: subject_data[:] for subject, subject_data in hf.items()}
+        kfm_data_target_sub = {target_subject: kfm_data_all_sub[target_subject]}
         kfm_data_fields = json.loads(hf.attrs['columns'])
 
-    kam_mean_std = get_mean_std(np.concatenate(list(kam_data_all_sub.values()), axis=0), kam_data_fields, 'main_output')
-    kfm_mean_std = get_mean_std(np.concatenate(list(kfm_data_all_sub.values()), axis=0), kfm_data_fields, 'main_output')
-    kfm_mean_std['true_mean'], kfm_mean_std['pred_mean'] = -kfm_mean_std['true_mean'], -kfm_mean_std['pred_mean']
-    draw_f3(kam_mean_std, kfm_mean_std)
+    kam_all_mean_std = get_mean_std(np.concatenate(list(kam_data_all_sub.values()), axis=0), kam_data_fields, 'main_output')
+    kfm_all_mean_std = get_mean_std(np.concatenate(list(kfm_data_all_sub.values()), axis=0), kfm_data_fields, 'main_output')
+    kfm_all_mean_std['true_mean'], kfm_all_mean_std['pred_mean'] = -kfm_all_mean_std['true_mean'], -kfm_all_mean_std['pred_mean']
+
+    kam_one_mean_std = get_mean_std(np.concatenate(list(kam_data_target_sub.values()), axis=0), kam_data_fields, 'main_output')
+    kfm_one_mean_std = get_mean_std(np.concatenate(list(kfm_data_target_sub.values()), axis=0), kfm_data_fields, 'main_output')
+    kfm_one_mean_std['true_mean'], kfm_one_mean_std['pred_mean'] = -kfm_one_mean_std['true_mean'], -kfm_one_mean_std['pred_mean']
+    draw_f3({'true_mean': kam_all_mean_std['true_mean'], 'true_std': kam_all_mean_std['true_std'], 'pred_mean': kam_one_mean_std['true_mean'], 'pred_std': kam_one_mean_std['true_std']},
+            {'true_mean': kfm_all_mean_std['true_mean'], 'true_std': kfm_all_mean_std['true_std'], 'pred_mean': kfm_one_mean_std['true_mean'], 'pred_std': kfm_one_mean_std['true_std']})
     plt.show()
