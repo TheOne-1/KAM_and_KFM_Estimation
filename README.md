@@ -22,7 +22,7 @@ and back of the subject (180 degree from walking direction) (see the figure belo
 The distance from treadmill center to each camera was 3m 
 and the height from treadmill plane to each camera was 1.2m.
 
-![img.png](figures/readme_fig/camera_loc.png xxx)
+![img.png](figures/readme_fig/camera_loc.png)
 
 #### IMU
 Eight SageMotion IMUs (SageMotion, Kalispell, MT, USA) were placed on each subject.
@@ -51,9 +51,9 @@ and x-axis being perpendicular to the y and z axes following the right-hand rule
 32 reflective markers were placed on each subject and collected by an optical motion capture system
 (Vicon, Oxford Metrics Group, Oxford, UK). Markers' corresponding body landmarks are visualized in the following figures.
 
-![img.png](figures/readme_fig/markers_anterior_view.png xxx)
+![img.png](figures/readme_fig/markers_anterior_view.png)
 
-![img.png](figures/readme_fig/markers_posterior_view.png xxx)
+![img.png](figures/readme_fig/markers_posterior_view.png)
 
 ## Data Format 
 Each subject's data should be stored as a 3 dimensional matrix.

@@ -31,34 +31,11 @@ with h5py.File(os.environ.get('KAM_DATA_PATH') + '/40samples+stance.h5', 'r') as
 
 
 """Create model file"""
-test_name = '0301_test_'
-subject_folder = 's002_wangdianxin'
-for moment in ['KAM', 'KAM']:
-    # for model, model_name in zip(['8IMU_2camera', '8IMU', '2camera'], ['fusion', 'IMU_based', 'camera_based']):
-    for model, model_name in zip(['8IMU_2camera'], ['fusion']):
+test_name = '0307'
+subject_folder = 's020_houjikang'
+for moment in ['KAM', 'KFM']:
+    for model, model_name in zip(['8IMU_2camera', '8IMU', '2camera'], ['fusion', 'IMU_based', 'camera_based']):
         model_path_src = os.path.join(DATA_PATH, 'training_results', test_name+moment, model, 'sub_models',
                                       subject_folder, 'four_source_model.pth')
         model_path_dest = './trained_models_and_example_data/' + model_name + '_' + moment + '.pth'
         shutil.copyfile(model_path_src, model_path_dest)
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
