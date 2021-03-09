@@ -1,3 +1,4 @@
+""" This file is used to train models and validate their performances """
 import copy
 import os
 import random
@@ -17,7 +18,7 @@ from torch.nn.utils.rnn import pack_padded_sequence, pad_packed_sequence
 from sklearn.preprocessing import MinMaxScaler, StandardScaler
 from types import SimpleNamespace
 import pandas as pd
-from hyperopt import fmin, tpe, hp, Trials as HP_Trials, space_eval
+from hyperopt import fmin, tpe, hp, Trials as HP_Trials
 import warnings
 
 
@@ -89,7 +90,7 @@ class FourSourceModel(nn.Module):
         return data
 
 
-class TianFramework(BaseFramework):
+class AlanFramework(BaseFramework):
     def __init__(self,  *args, **kwargs):
         BaseFramework.__init__(self, *args, **kwargs)
         best_param = {param: globals()[param] for param in ['epoch_1', 'lr_1', 'batch_size_1', 'weight_decay_1',
@@ -477,6 +478,7 @@ def objective_for_hyper_search(args):
     return rmse_all / len(hyper_search_results)
 
 
+# for debug use
 def show_hyper(trials, result_dir):
     save_path = os.path.join(DATA_PATH, 'training_results', result_dir, 'hyper_figure/')
     os.makedirs(save_path, exist_ok=True)
@@ -501,7 +503,7 @@ def run(x_fields, y_fields, main_output_fields, result_dir):
     logging.info('Search best hyper parameters, and then update them globally')
     logging.disabled = True
     global hyper_model
-    hyper_model = TianFramework(data_path, x_fields, y_fields, TRIALS[0:1], weights, evaluate_fields,
+    hyper_model = AlanFramework(data_path, x_fields, y_fields, TRIALS[0:1], weights, evaluate_fields,
                                 lambda: MinMaxScaler(feature_range=(-3, 3)), result_dir='hyper_results')
     space = {
         'epoch_1': hp.choice('epoch_1', range(4, 11, 2)),
@@ -519,11 +521,12 @@ def run(x_fields, y_fields, main_output_fields, result_dir):
     logging.disabled = False
     globals().update(best_param)
 
-    model_builder = TianFramework(data_path, x_fields, y_fields, TRIALS[1:], weights, evaluate_fields,
+    model_builder = AlanFramework(data_path, x_fields, y_fields, TRIALS[1:], weights, evaluate_fields,
                                   lambda: MinMaxScaler(feature_range=(-3, 3)), result_dir=result_dir)
     subjects = model_builder.get_all_subjects()
     # model_builder.preprocess_train_evaluation(subjects[:13], subjects[13:], subjects[13:])
     model_builder.cross_validation(subjects)
+    plt.close('all')
 
 
 def combine_imu_vid_fields(x_fields, input_imu, input_vid):

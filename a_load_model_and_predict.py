@@ -61,7 +61,7 @@ if __name__ == "__main__":
     # Three models are available: fusion, IMU_based, and camera_based
     model_name = 'IMU_based'
     # Two target moments: KAM or KFM
-    target_moment = 'KFM'
+    target_moment = 'KAM'
 
     assert model_name in ['fusion', 'IMU_based', 'camera_based'], 'Incorrect model name.'
     assert target_moment in ['KAM', 'KFM'], 'Incorrect target moment name.'
