@@ -1,5 +1,6 @@
 import h5py
 from alan_framework import FourSourceModel, TianRNN
+import copy
 import torch
 import json
 import matplotlib.pyplot as plt
@@ -29,7 +30,6 @@ def make_joints_relative_to_midhip():
         for key_point in key_points_to_process:
             key_point_col_loc = [data_fields.index(key_point + axis + angle) for axis in ['_x', '_y'] for angle in ['_90', '_180']]
             sub_data[:, :, key_point_col_loc] = sub_data[:, :, key_point_col_loc] - midhip_90_and_180_data
-            print(key_point_col_loc)
         data_all_sub[sub_name] = sub_data
 
 
@@ -61,7 +61,7 @@ if __name__ == "__main__":
     # Three models are available: fusion, IMU_based, and camera_based
     model_name = 'IMU_based'
     # Two target moments: KAM or KFM
-    target_moment = 'KAM'
+    target_moment = 'KFM'
 
     assert model_name in ['fusion', 'IMU_based', 'camera_based'], 'Incorrect model name.'
     assert target_moment in ['KAM', 'KFM'], 'Incorrect target moment name.'
@@ -77,38 +77,44 @@ if __name__ == "__main__":
     """ step 1: prepare subject 01's data as input """
     make_joints_relative_to_midhip()
     get_body_weighted_imu()
-    subject_data = data_all_sub['subject_01']
+
+    # subject_01 or subject_02 are available;
+    # subject_01's data was involved in model training, while subject_02's data was not
+    subject_data = data_all_sub['subject_02']
     model_inputs = {}
     model_inputs['anthro'] = torch.from_numpy(subject_data[:, :, [data_fields.index('body weight'),
                                                                   data_fields.index('body height')]])
     model_inputs['step_length'] = torch.from_numpy(np.sum(~(subject_data[:, :, 0] == 0.), axis=1))
 
-    # # switch axis when estimating KFM         # !!!
-    # if target_moment == 'KFM':
-
     for submodel, component in zip([model.model_fx, model.model_fz, model.model_rx, model.model_rz],
                                    ['force_x', 'force_z', 'r_x', 'r_z']):
-        input_fields = submodel.input_fields
+        input_fields_ = submodel.input_fields
+        data_to_process = copy.deepcopy(subject_data)
 
-        other_feature_loc = [data_fields.index(field) for field in input_fields if 'Acc' not in field]
-        print([data_fields.index(field) for field in input_fields if '0' in field])
-        subject_data[:, :, other_feature_loc] = normalize_array_separately(
-            subject_data[:, :, other_feature_loc], model.scalars[component + '_other'], 'transform', scalar_mode='by_each_column')
+        other_feature_loc = [data_fields.index(field) for field in input_fields_ if 'Acc' not in field]
+        data_to_process[:, :, other_feature_loc] = normalize_array_separately(
+            data_to_process[:, :, other_feature_loc], model.scalars[component + '_other'], 'transform', scalar_mode='by_each_column')
 
-        weighted_acc_loc = [data_fields.index(field) for field in input_fields if 'Acc' in field]
+        weighted_acc_loc = [data_fields.index(field) for field in input_fields_ if 'Acc' in field]
         if len(weighted_acc_loc) > 0:
-            subject_data[:, :, weighted_acc_loc] = normalize_array_separately(
-                subject_data[:, :, weighted_acc_loc], model.scalars[component + '_acc'], 'transform', scalar_mode='by_all_columns')
-        submodel_input = subject_data[:, :, [data_fields.index(field) for field in input_fields]]
+            data_to_process[:, :, weighted_acc_loc] = normalize_array_separately(
+                data_to_process[:, :, weighted_acc_loc], model.scalars[component + '_acc'], 'transform', scalar_mode='by_all_columns')
+        submodel_input = data_to_process[:, :, [data_fields.index(field) for field in input_fields_]]
         model_inputs[component] = torch.from_numpy(submodel_input)
 
-    """ step 2: predict KAM of subject 01 """
+    """ step 2: predict moment of subject 01 """
     predicted = model(model_inputs['force_x'], model_inputs['force_z'], model_inputs['r_x'], model_inputs['r_z'],
                       model_inputs['anthro'], model_inputs['step_length']).detach().numpy()
+    if target_moment == 'KFM':
+        predicted = - predicted
 
     """ step 3: plot estimation and true values """
+    if target_moment == 'KAM':
+        ground_truth_moment = subject_data[:, :, data_fields.index('EXT_KM_Y')]
+    else:
+        ground_truth_moment = -subject_data[:, :, data_fields.index('EXT_KM_X')]
     plt.figure()
-    plt.plot(subject_data[:, :, data_fields.index('EXT_KM_Y')].ravel(), label='True Value')
+    plt.plot(ground_truth_moment.ravel(), label='True Value')
     plt.plot(predicted.ravel(), label='Predicted Value')
     plt.legend()
     ax = plt.gca()

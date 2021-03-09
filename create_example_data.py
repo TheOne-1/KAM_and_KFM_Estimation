@@ -2,7 +2,6 @@ import h5py
 import os
 import json
 from const import SUBJECTS, DATA_PATH, EXAMPLE_DATA_FIELDS, VIDEO_LIST
-import torch
 import shutil
 import pandas as pd
 import numpy as np
@@ -25,8 +24,8 @@ with h5py.File(os.environ.get('KAM_DATA_PATH') + '/40samples+stance.h5', 'r') as
     example_col_loc = [data_fields.index(column) for column in EXAMPLE_DATA_FIELDS]
     vid_static_cali()
     with h5py.File(export_path, 'w') as hf:
-        hf.create_dataset('subject_01', data=data_all_sub[SUBJECTS[5]][200:210, :, example_col_loc], dtype='float32')
-        hf.create_dataset('subject_02', data=data_all_sub[SUBJECTS[6]][200:210, :, example_col_loc], dtype='float32')
+        hf.create_dataset('subject_01', data=data_all_sub[SUBJECTS[5]][:10, :, example_col_loc], dtype='float32')
+        hf.create_dataset('subject_02', data=data_all_sub[SUBJECTS[-1]][:10, :, example_col_loc], dtype='float32')
         hf.attrs['columns'] = json.dumps(EXAMPLE_DATA_FIELDS)
 
 
