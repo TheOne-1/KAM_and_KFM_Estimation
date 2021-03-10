@@ -1,6 +1,7 @@
 config.py
 runs/
 figures/results/
+figures/exports/
 .idea/
 *.csv
 
@@ -133,3 +134,4 @@ dmypy.json
 
 # Pyre type checker
 .pyre/
+create_example_data.py

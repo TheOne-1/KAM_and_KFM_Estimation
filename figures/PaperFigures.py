@@ -2,7 +2,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 from const import LINE_WIDTH
 from const import LINE_WIDTH_THICK, FONT_SIZE_LARGE, FORCE_PHASE, SUBJECTS
-from base_kam_model import BaseModel
+from base_framework import BaseFramework
 import h5py
 import json
 from sklearn.metrics import mean_squared_error as mse
@@ -33,8 +33,8 @@ def get_mean_std(data_array, data_fields, col_name):
     true_index, pred_index = data_fields.index('true_' + col_name), data_fields.index('pred_' + col_name)
     weight_index = data_fields.index(FORCE_PHASE)
 
-    true_stance, _ = BaseModel.keep_stance_then_resample(data_array[:, :, true_index:true_index+1], data_array[:, :, weight_index:weight_index+1], 101)
-    pred_stance, _ = BaseModel.keep_stance_then_resample(data_array[:, :, pred_index:pred_index+1], data_array[:, :, weight_index:weight_index+1], 101)
+    true_stance, _ = BaseFramework.keep_stance_then_resample(data_array[:, :, true_index:true_index + 1], data_array[:, :, weight_index:weight_index + 1], 101)
+    pred_stance, _ = BaseFramework.keep_stance_then_resample(data_array[:, :, pred_index:pred_index + 1], data_array[:, :, weight_index:weight_index + 1], 101)
     true_mean, true_std = true_stance[:, :, 0].mean(axis=0), true_stance[:, :, 0].std(axis=0)
     pred_mean, pred_std = pred_stance[:, :, 0].mean(axis=0), pred_stance[:, :, 0].std(axis=0)
     return {'true_mean': true_mean, 'true_std': true_std, 'pred_mean': pred_mean, 'pred_std': pred_std}
@@ -49,20 +49,6 @@ def get_data(file_path, specific_trial=None, subjects=SUBJECTS):
         trial_id_col_loc = _data_fields.index('trial_id')
         _data_all = [data[data[:, 0, trial_id_col_loc] == specific_trial, :, :] for data in _data_all.values()]
     return _data_all, _data_fields
-
-
-def get_fpa(_data, _data_fields):
-    def get_FPA_all():
-        toe_col_loc = _data_fields.index('FM2_x')
-        toe = _data[:, 0, toe_col_loc:toe_col_loc+3]
-        x=1
-    get_FPA_all()
-        # forward_vector = toe - heel
-        # if side == 'l':
-        #     FPAs = - 180 / np.pi * np.arctan2(forward_vector[:, 0], forward_vector[:, 1])
-        # else:
-        #     FPAs = 180 / np.pi * np.arctan2(forward_vector[:, 0], forward_vector[:, 1])
-        # return FPAs
 
 
 def get_score(arr_true, arr_pred, w):

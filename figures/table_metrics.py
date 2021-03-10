@@ -1,11 +1,9 @@
 import os
 import h5py
 import json
-import csv
 import pandas as pd
 import numpy as np
 from const import TRIALS, SUBJECTS, SENSOR_COMBINATION
-import matplotlib.pyplot as plt
 from figures.PaperFigures import get_score
 
 
@@ -33,6 +31,7 @@ def get_all_results(test_folder_dir, test_condition):
     # all_data = all_data[(all_data.T != 0.).any()]
     all_results = []
     for trial_index, trial_name in enumerate(TRIALS):
+        if trial_index == 0: continue
         for subject_index, subject_name in enumerate(SUBJECTS):
             trial_loc = (all_data['trial_id'] == trial_index) & (all_data['subject_id'] == subject_index)
             true_value = all_data['true_main_output'][trial_loc]
@@ -53,7 +52,7 @@ def get_all_results(test_folder_dir, test_condition):
 
 
 if __name__ == '__main__':
-    result_date = 'results/0131_all_feature_'       # all_feature_
+    result_date = 'results/0307'       # all_feature_
     for target in ['KAM', 'KFM']:
         combo_result = [get_all_results(result_date + target, sensor) for sensor in SENSOR_COMBINATION]
 

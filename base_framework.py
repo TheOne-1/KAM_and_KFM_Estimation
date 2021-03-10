@@ -7,21 +7,21 @@ import prettytable as pt
 import matplotlib.pyplot as plt
 from typing import List
 from customized_logger import logger as logging, add_file_handler
-from sklearn.preprocessing import MinMaxScaler  # , StandardScaler
+from sklearn.preprocessing import MinMaxScaler
 from sklearn.utils import shuffle
 from sklearn.metrics import r2_score, mean_squared_error as mse
 from scipy.stats import pearsonr
 import scipy.interpolate as interpo
-
-from const import DATA_PATH
+from const import DATA_PATH, TRIALS
 
 
 def execute_cmd(cmd):
     return os.popen(cmd).read()
 
 
-class BaseModel:
-    def __init__(self, data_path, x_fields, y_fields, weights=None, evaluate_fields=None, base_scalar=MinMaxScaler, result_dir=None):
+class BaseFramework:
+    def __init__(self, data_path, x_fields, y_fields, specify_trials=None, weights=None, evaluate_fields=None,
+                 base_scalar=MinMaxScaler, result_dir=None):
         """
         x_fileds: a dict contains input names and input fields
         y_fileds: a dict contains output names and output fields
@@ -35,9 +35,8 @@ class BaseModel:
             self._evaluate_fields = y_fields
         else:
             self._evaluate_fields = evaluate_fields
-        os.makedirs(self.result_dir)
-        os.mkdir(os.path.join(self.result_dir, 'sub_figs'))
-        os.mkdir(os.path.join(self.result_dir, 'sub_models'))
+        os.makedirs(os.path.join(self.result_dir, 'sub_figs'), exist_ok=True)
+        os.makedirs(os.path.join(self.result_dir, 'sub_models'), exist_ok=True)
         add_file_handler(logging, os.path.join(self.result_dir, 'training_log'))
         logging.info("Current commit is {}".format(execute_cmd("git rev-parse HEAD")))
         logging.info("Load data from h5 file {}".format(data_path))
@@ -50,6 +49,12 @@ class BaseModel:
         with h5py.File(data_path, 'r') as hf:
             self._data_all_sub = {subject: subject_data[:] for subject, subject_data in hf.items()}
             self._data_fields = json.loads(hf.attrs['columns'])
+            if specify_trials:
+                trial_id_col_loc = self._data_fields.index('trial_id')
+                specify_trial_ids = [TRIALS.index(specify_trial) for specify_trial in specify_trials]
+                for subject, subject_data in self._data_all_sub.items():
+                    self._data_all_sub[subject] = np.concatenate(
+                        [subject_data[subject_data[:, 0, trial_id_col_loc] == specific_id, :, :] for specific_id in specify_trial_ids], axis=0)
 
     def get_all_subjects(self):
         return list(self._data_all_sub.keys())
@@ -90,10 +95,9 @@ class BaseModel:
                 rmse = np.round(np.mean(np.concatenate([res['rmse'] for res in field_results])), 3)
                 mae = np.round(np.mean(np.concatenate([res['mae'] for res in field_results])), 3)
                 r_rmse = np.round(np.mean(np.concatenate([res['r_rmse'] for res in field_results])), 3)
-                sr_rmse = np.round(np.mean(np.concatenate([res['sr_rmse'] for res in field_results])), 3)
                 cor_value = np.round(np.mean(np.concatenate([res['cor_value'] for res in field_results])), 3)
                 mean_results += [{'output': output_name, 'field': field, 'r2': r2, 'rmse': rmse, 'mae': mae,
-                                  'r_rmse': r_rmse, 'sr_rmse': sr_rmse, 'cor_value': cor_value}]
+                                  'r_rmse': r_rmse, 'cor_value': cor_value}]
         self.print_table(mean_results)
         return mean_results
 
@@ -139,13 +143,13 @@ class BaseModel:
             all_scores = self.get_all_scores(test_sub_y, pred_sub_y, self._evaluate_fields, test_sub_weight)
             all_scores = [{'subject': test_sub_name, **scores} for scores in all_scores]
             self.customized_analysis(test_sub_y, pred_sub_y, all_scores)
-            self.save_temp_result(test_sub_y, pred_sub_y, test_sub_weight, model, test_sub_name)
+            self.save_model_and_results(test_sub_y, pred_sub_y, test_sub_weight, model, test_sub_name)
             test_results += all_scores
         self.print_table(test_results)
         return test_results
 
     @staticmethod
-    def save_temp_result(test_sub_y, pred_sub_y, test_sub_weight, model, test_sub_name):
+    def save_model_and_results(test_sub_y, pred_sub_y, test_sub_weight, model, test_sub_name):
         pass
 
     def customized_analysis(self, sub_y_true, sub_y_pred, all_scores):
@@ -161,7 +165,7 @@ class BaseModel:
     @staticmethod
     def normalize_data(data, scalars, method, scalar_mode='by_each_column'):
         assert (scalar_mode in ['by_each_column', 'by_all_columns'])
-        scaled_date = {}
+        scaled_data = {}
         for input_name, input_data in data.items():
             input_data = input_data.copy()
             original_shape = input_data.shape
@@ -171,8 +175,8 @@ class BaseModel:
             input_data = getattr(scalars[input_name], method)(input_data)
             input_data = input_data.reshape(original_shape)
             input_data[np.isnan(input_data)] = 0.
-            scaled_date[input_name] = input_data
-        return scaled_date
+            scaled_data[input_name] = input_data
+        return scaled_data
 
     def preprocess_train_data(self, x, y, weight):
         x = self.normalize_data(x, self._data_scalar, 'fit_transform')
@@ -192,7 +196,7 @@ class BaseModel:
         for i_output in range(y.shape[2]):
             for j_row in range(y.shape[0]):
                 data_array = y[j_row, weight[j_row, :, i_output] == 1, i_output]
-                y_resampled[j_row, :, i_output] = BaseModel.resample_one_array(data_array, resampled_len)
+                y_resampled[j_row, :, i_output] = BaseFramework.resample_one_array(data_array, resampled_len)
         return y_resampled, np.full(y_resampled.shape, 1)
 
     @staticmethod
@@ -217,7 +221,7 @@ class BaseModel:
     @staticmethod
     def get_all_scores(y_true, y_pred, y_fields, weights=None):
         def get_column_score(arr_true, arr_pred, w):
-            r2, rmse, mae, r_rmse, sr_rmse, cor_value = [np.zeros(arr_true.shape[0]) for _ in range(6)]
+            r2, rmse, mae, r_rmse, cor_value = [np.zeros(arr_true.shape[0]) for _ in range(5)]
             for i in range(arr_true.shape[0]):
                 arr_true_i = arr_true[i, w[i, :]]
                 arr_pred_i = arr_pred[i, w[i, :]]
@@ -225,15 +229,13 @@ class BaseModel:
                 r2[i] = r2_score(arr_true_i, arr_pred_i)
                 rmse[i] = np.sqrt(mse(arr_true_i, arr_pred_i))
                 mae[i] = np.mean(abs((arr_true_i - arr_pred_i)))
-                r_rmse[i] = rmse[i] / (arr_true_i.max() - arr_true_i.min())
-                sr_rmse[i] = rmse[i] / (0.5*(arr_true_i.max() - arr_true_i.min() + arr_pred_i.max() - arr_pred_i.min()))
+                r_rmse[i] = rmse[i] / (arr_true.max() - arr_true.min())
                 cor_value[i] = pearsonr(arr_true_i, arr_pred_i)[0]
 
             locs = np.where(w.ravel())[0]
             r2_all = r2_score(arr_true.ravel()[locs], arr_pred.ravel()[locs])
             r2_all = np.full(r2.shape, r2_all)
-            return {'r2': r2, 'r2_all': r2_all, 'rmse': rmse, 'mae': mae, 'r_rmse': r_rmse, 'sr_rmse': sr_rmse,
-                    'cor_value': cor_value}
+            return {'r2': r2, 'r2_all': r2_all, 'rmse': rmse, 'mae': mae, 'r_rmse': r_rmse, 'cor_value': cor_value}
 
         scores = []
         weights = {} if weights is None else weights
@@ -288,7 +290,6 @@ class BaseModel:
         plt.tight_layout()
         plt.savefig(os.path.join(self.result_dir, 'sub_figs', title))
         plt.close()
-        # plt.show(block=False)
 
     @staticmethod
     def print_table(results):

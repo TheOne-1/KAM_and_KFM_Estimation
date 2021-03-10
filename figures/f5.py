@@ -1,7 +1,5 @@
-from PaperFigures import format_axis
-from const import SUBJECTS
+from figures.PaperFigures import format_axis
 import numpy as np
-import matplotlib.patches as patches
 from const import LINE_WIDTH, FONT_DICT, FONT_SIZE, FONT_DICT_LARGE, FONT_SIZE
 import matplotlib.lines as lines
 import matplotlib.pyplot as plt
