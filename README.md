@@ -10,7 +10,7 @@ An [example implementation](#running-example-code) is provided.
 ## Environment
 
 ### Software
-Python 3.8; Pytorch 1.7.0; Cuda 11.0; Cudnn 8.0.4;
+Python 3.8; Pytorch 1.7.0; Cuda 11.0; Cudnn 8.0.4; matplotlib 3.3.2; numpy 1.19.4; h5py 3.0.0
 
 Versions different from ours may still work.
 
@@ -31,11 +31,14 @@ y-axis points upwards,
 and x-axis being perpendicular to the y and z axes following the right-hand rule.
 
 IMU anatomical locations: 
-trunk – mid-point between sternum jugular notch and sternum xiphisternal joint,
-pelvis – mid-point between left and right anterior superior iliac spine,
-both thighs – mid-point between anterior superior iliac spine and femur medial epicondyle,
-both shanks – mid-point between femur medial epicondyle and tibia apex of medial malleolus,
-and both feet – second metatarsal.
+
+Segement name | Anatomical definition
+:---: | ---
+trunk | mid-point between sternum jugular notch and sternum xiphisternal joint
+pelvis | mid-point between left and right anterior superior iliac spine
+both thighs | mid-point between anterior superior iliac spine and femur medial epicondyle
+both shanks | mid-point between femur medial epicondyle and tibia apex of medial malleolus
+both feet | second metatarsal
 
 #### Instrumented treadmill (for validation only)
 Ground reaction force (GRF) and center of pressure (CoP) were collected with an instrumented treadmill 
@@ -68,24 +71,41 @@ containing 10 walking step of 2 subjects.
 ### Data fields
 #### Basic information
 
-_force_phase_: ground-truth stance phase;
-_body weight_: weight of the subject, being constant for the whole step;
-_body height_: height of the subject, being constant for the whole step;
+Field name | Explanation
+:---: | ---
+_force_phase_ | ground-truth stance phase
+_body weight_ | weight of the subject, being constant for the whole step
+_body height_ | height of the subject, being constant for the whole step
 
 #### External knee moments
 The external moments of the right knee were computed using cross product function [1]
 
-_EXT_KM_X_: external knee moment in sagittal plane, also known as knee flexion moment;
-_EXT_KM_Y_: external knee moment in frontal plane, also known as knee adduction moment;
-_EXT_KM_Z_: external knee moment in transverse plane;
+Field name | Explanation
+:---: | ---
+_EXT_KM_X_ | external knee moment in sagittal plane, also known as knee flexion moment
+_EXT_KM_Y_ | external knee moment in frontal plane, also known as knee adduction moment
+_EXT_KM_Z_ | external knee moment in transverse plane
 
 #### IMU data
 IMU fields are named in the form of "Measurement(Axis)_Segment".
-Measurements are _Accel_: acceleration;
-_Gyro_: gyroscope; _Mag_: magnetometer; _Quat_: quaternion.
-Segments are _L_FOOT_: left foot; _R_FOOT_: right foot; _R_SHANK_: right shank;
-_R_THIGH_: right thigh; _WAIST_: pelvis; _CHEST_: upper trunk;
-_L_SHANK_: left shank; _L_THIGH_: left thigh
+
+Measurement name | Explanation
+:---: | ---
+_Accel_ | acceleration
+_Gyro_ | gyroscope
+_Mag_ | magnetometer
+_Quat_ | quaternion
+
+Segments name | Explanation
+:---: | ---
+_L_FOOT_ | left foot
+_R_FOOT_ | right foot
+_R_SHANK_ | right shank
+_R_THIGH_ | right thigh
+_WAIST_ | pelvis
+_CHEST_ | upper trunk
+_L_SHANK_ | left shank
+_L_THIGH_ | left thigh
 
 #### Joints detected from camera data
 Videos recorded by two smartphone cameras were processed by
