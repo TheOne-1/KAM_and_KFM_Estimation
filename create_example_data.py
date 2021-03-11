@@ -20,13 +20,24 @@ def vid_static_cali():
 with h5py.File(os.environ.get('KAM_DATA_PATH') + '/40samples+stance.h5', 'r') as hf:
     data_all_sub = {subject: subject_data[:] for subject, subject_data in hf.items()}
     data_fields = json.loads(hf.attrs['columns'])
-    export_path = 'trained_models_and_example_data/example_data.h5'
     example_col_loc = [data_fields.index(column) for column in EXAMPLE_DATA_FIELDS]
     vid_static_cali()
+    # example data file for github
+    export_path = 'trained_models_and_example_data/example_data.h5'
     with h5py.File(export_path, 'w') as hf:
         hf.create_dataset('subject_01', data=data_all_sub[SUBJECTS[5]][:10, :, example_col_loc], dtype='float32')
         hf.create_dataset('subject_02', data=data_all_sub[SUBJECTS[-1]][:10, :, example_col_loc], dtype='float32')
         hf.attrs['columns'] = json.dumps(EXAMPLE_DATA_FIELDS)
+    # all subject data file for cooperation
+    export_path = os.environ.get('KAM_DATA_PATH') + '/all_17_subjects.h5'
+    with h5py.File(export_path, 'w') as hf:
+        for i_sub in range(len(SUBJECTS)):
+            if i_sub < 10:
+                sub_num_str = 'subject_0' + str(i_sub+1)
+            else:
+                sub_num_str = 'subject_' + str(i_sub+1)
+            hf.create_dataset(sub_num_str, data=data_all_sub[SUBJECTS[i_sub]][:, :, example_col_loc], dtype='float32')
+            hf.attrs['columns'] = json.dumps(EXAMPLE_DATA_FIELDS)
 
 
 """Create model file"""
