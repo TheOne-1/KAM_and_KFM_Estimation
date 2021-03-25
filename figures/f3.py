@@ -5,7 +5,7 @@ from figures.PaperFigures import get_mean_std, format_axis
 from const import SUBJECTS
 import numpy as np
 from const import LINE_WIDTH, FONT_DICT, FONT_SIZE, FONT_DICT, FONT_SIZE, FONT_DICT_LARGE
-from const import LINE_WIDTH_THICK, FONT_SIZE_LARGE, FORCE_PHASE
+from figures.f6 import save_fig
 import matplotlib.gridspec as gridspec
 import matplotlib.pyplot as plt
 from matplotlib import rc
@@ -25,13 +25,13 @@ def draw_f3(mean_std_kam, mean_std_kfm):
         ax.tick_params(labelsize=FONT_DICT['fontsize'])
         ax.set_xticks(range(0, 101, 25))
         ax.set_xticklabels(range(0, 101, 25), fontdict=FONT_DICT)
-        ax.set_xlabel('Stance Phase (\%)', fontdict=FONT_DICT)
+        ax.set_xlabel('Stance Phase (%)', fontdict=FONT_DICT)
         ax.set_xlim(0, 100)
         format_axis()
 
     def subplot_1_style():
         ax = plt.gca()
-        ax.set_ylabel('Knee Adduction Moment (BW X BH)', fontdict=FONT_DICT)
+        ax.set_ylabel('Knee Adduction Moment (BW $\cdot$ BH)', fontdict=FONT_DICT)
         ax.set_ylim(-0.21, 0.41)
         ticks = [-0.2, -0.1, 0., 0.1, 0.2, 0.3, 0.4]
         ax.set_yticks(ticks)
@@ -39,23 +39,23 @@ def draw_f3(mean_std_kam, mean_std_kfm):
 
     def subplot_2_style():
         ax = plt.gca()
-        ax.set_ylabel('Knee Flexion Moment (BW X BH)', fontdict=FONT_DICT)
+        ax.set_ylabel('Knee Flexion Moment (BW $\cdot$ BH)', fontdict=FONT_DICT)
         ax.set_ylim(-0.22, 0.82)
         ticks = [-0.2, 0., 0.2, 0.4, 0.6, 0.8]
         ax.set_yticks(ticks)
         ax.set_yticklabels(ticks, fontdict=FONT_DICT)
 
-    rc('text', usetex=True)
+    rc('font', family='Arial')
     fig = plt.figure(figsize=(14, 6))
     gs = gridspec.GridSpec(nrows=2, ncols=2, height_ratios=[1, 6])        # , width_ratios=[8, 1, 8]
     draw_subplot(fig.add_subplot(gs[1, 0]), mean_std_kam)
     subplot_1_style()
     draw_subplot(fig.add_subplot(gs[1, 1]), mean_std_kfm)
     subplot_2_style()
-    plt.tight_layout(rect=[0., 0., 1, 1], w_pad=3)
+    plt.tight_layout(rect=[0., -0.01, 1, 1.04], w_pad=3)
     plt.legend(handlelength=2.6, bbox_to_anchor=(0., 1.27), ncol=1, fontsize=FONT_SIZE,
                frameon=False)
-    plt.savefig('exports/f3.png')
+    save_fig('f3')
 
 
 if __name__ == "__main__":

@@ -53,6 +53,12 @@ def get_data(file_path, specific_trial=None, subjects=SUBJECTS):
 
 def get_score(arr_true, arr_pred, w):
     assert(len(arr_true.shape) == 1 and arr_true.shape == arr_pred.shape == w.shape)
+    # rrmse_list = []
+    # for i in range(arr_true.index[0], arr_true.index[-1], 152):
+    #     true_slice, pred_slice, w_slice = arr_true.loc[i:i+152], arr_pred.loc[i:i+152], w.loc[i:i+152]
+    #     locs = np.where(w_slice.ravel())[0]
+    #     true_slice, pred_slice = true_slice.ravel()[locs], pred_slice.ravel()[locs]
+    #     rrmse_list.append(np.sqrt(mse(true_slice, pred_slice)) / (0.5 * (true_slice.max() - true_slice.min() + pred_slice.max() - pred_slice.min())) * 100)
     locs = np.where(w.ravel())[0]
     arr_true, arr_pred = arr_true.ravel()[locs], arr_pred.ravel()[locs]
     mae = np.mean(np.abs(arr_true - arr_pred)) / 9.81 * 1000
