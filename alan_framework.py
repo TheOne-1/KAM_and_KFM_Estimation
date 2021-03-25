@@ -28,8 +28,6 @@ class TianRNN(nn.Module):
         torch.manual_seed(seed)
         self.rnn_layer = nn.LSTM(x_dim, globals()['lstm_unit'], nlayer, batch_first=True, bidirectional=True)
         self.y_dim = y_dim
-        # self.r2d = nn.Linear(2 * 10, 10, bias=False)
-        # self.d2o = nn.Linear(10, y_dim, bias=False)
         self.r2d = nn.Linear(2 * globals()['lstm_unit'], globals()['fcnn_unit'], bias=False)
         self.d2o = nn.Linear(globals()['fcnn_unit'], y_dim, bias=False)
         self.relu = nn.ReLU()
@@ -93,9 +91,6 @@ class FourSourceModel(nn.Module):
 class AlanFramework(BaseFramework):
     def __init__(self,  *args, **kwargs):
         BaseFramework.__init__(self, *args, **kwargs)
-        best_param = {param: globals()[param] for param in ['epoch_1', 'lr_1', 'batch_size_1', 'weight_decay_1',
-                                                            'lstm_unit', 'fcnn_unit'] if param in globals()}
-        logging.info("Best hyper parameters: " + str(best_param))
         self.train_step_lens, self.validation_step_lens, self.test_step_lens = [None] * 3
         self.vid_static_cali()
         self.make_vid_vector_relative_to_midhip()
@@ -186,7 +181,7 @@ class AlanFramework(BaseFramework):
 
     def train_model(self, x_train, y_train, x_validation=None, y_validation=None, validation_weight=None):
         sub_model_hyper_param = {'epoch': globals()['epoch_1'], 'batch_size': globals()['batch_size_1'],
-                                 'lr': globals()['lr_1'], 'weight_decay': 0, 'use_ratio': 100}
+                                 'lr': globals()['lr_1'], 'weight_decay': 0, 'use_ratio': 100}      # !!!
         self.train_step_lens, self.validation_step_lens = self._get_step_len(x_train), self._get_step_len(x_validation)
 
         sub_models = []
@@ -465,20 +460,31 @@ class AlanFramework(BaseFramework):
             title = "{}, {}, {}, r_rmse".format(subject, output, field, 'r_rmse')
             self.representative_profile_curves(arr1, arr2, title, r_rmse)
 
+    def hyperparam_tuning(self, hyper_train_sub_ids, hyper_vali_sub_ids):
+        logging.info('Searching best hyper parameters, subjects for validation: {}'.format(hyper_vali_sub_ids))
+        logging.disabled = True
+        global hyper_train_fun, hyper_vali_fun, hyper_train_ids, hyper_vali_ids
+        hyper_train_fun, hyper_vali_fun = self.preprocess_and_train, self.model_evaluation
+        hyper_train_ids, hyper_vali_ids = hyper_train_sub_ids, hyper_vali_sub_ids
+        space = {
+            'epoch_1': hp.choice('epoch_1', range(4, 11, 2)),
+            'lr_1': hp.loguniform('lr_1', np.log(10 ** -4), np.log(10 ** -2)),
+            'batch_size_1': hp.choice('batch_size_1', range(20, 41, 10)),
+            'lstm_unit': hp.choice('lstm_unit', range(5, 50, 5)),
+            'fcnn_unit': hp.choice('fcnn_unit', range(5, 50, 5)),
+        }
+        trials = HP_Trials()
+        warnings.filterwarnings("ignore", message="An input array is constant; the correlation coefficent is not defined.")
+        best_param = fmin(objective_for_hyper_search, space, algo=tpe.suggest, max_evals=10, trials=trials,      # !!!
+                          return_argmin=False, rstate=np.random.RandomState(seed=0))
+        show_hyper(trials, self.result_dir)
+        logging.disabled = False
+        globals().update(best_param)
+        best_param = {param: globals()[param] for param in ['epoch_1', 'lr_1', 'batch_size_1', 'weight_decay_1',
+                                                            'lstm_unit', 'fcnn_unit'] if param in globals()}
+        logging.info("Best hyper parameters: " + str(best_param))
 
-def objective_for_hyper_search(args):
-    print("Current: " + str(args))
-    globals().update(args)
-    hyper_subjects = hyper_model.get_all_subjects()
-    trained_model = hyper_model.preprocess_and_train(hyper_subjects[:14], hyper_subjects[14:])
-    hyper_search_results = hyper_model.model_evaluation(trained_model, hyper_subjects[14:])
-    rmse_all = 0
-    for element in hyper_search_results:
-        rmse_all += element['rmse'].mean()
-    return rmse_all / len(hyper_search_results)
 
-
-# for debug use
 def show_hyper(trials, result_dir):
     save_path = os.path.join(DATA_PATH, 'training_results', result_dir, 'hyper_figure/')
     os.makedirs(save_path, exist_ok=True)
@@ -495,37 +501,27 @@ def show_hyper(trials, result_dir):
         plt.savefig(save_path+param_name+'.png')
 
 
+def objective_for_hyper_search(args):
+    print("Current: " + str(args))
+    globals().update(args)
+    trained_model = hyper_train_fun(hyper_train_ids, hyper_vali_ids)
+    hyper_search_results = hyper_vali_fun(trained_model, hyper_vali_ids, save_results=False)
+    rmse_all = 0
+    for element in hyper_search_results:
+        rmse_all += element['rmse'].mean()
+    return rmse_all / len(hyper_search_results)
+
+
 def run(x_fields, y_fields, main_output_fields, result_dir):
     weights = {key: [FORCE_PHASE] * len(y_fields[key]) for key in y_fields.keys()}
     weights.update({key: [FORCE_PHASE] * len(x_fields[key]) for key in x_fields.keys()})
     evaluate_fields = {'main_output': main_output_fields}
 
-    logging.info('Search best hyper parameters, and then update them globally')
-    logging.disabled = True
-    global hyper_model
-    hyper_model = AlanFramework(data_path, x_fields, y_fields, TRIALS[0:1], weights, evaluate_fields,
-                                lambda: MinMaxScaler(feature_range=(-3, 3)), result_dir='hyper_results')
-    space = {
-        'epoch_1': hp.choice('epoch_1', range(4, 11, 2)),
-        'lr_1': hp.loguniform('lr_1', np.log(10 ** -4), np.log(10 ** -2)),
-        'batch_size_1': hp.choice('batch_size_1', range(20, 41, 10)),
-        # 'weight_decay_1': hp.loguniform('weight_decay_1', np.log(10**-5), np.log(10**-3)),
-        'lstm_unit': hp.choice('lstm_unit', range(5, 50, 5)),
-        'fcnn_unit': hp.choice('fcnn_unit', range(5, 50, 5)),
-    }
-    trials = HP_Trials()
-    warnings.filterwarnings("ignore", message="An input array is constant; the correlation coefficent is not defined.")
-    best_param = fmin(objective_for_hyper_search, space, algo=tpe.suggest, max_evals=100, trials=trials,
-                      return_argmin=False, rstate=np.random.RandomState(seed=0))
-    show_hyper(trials, result_dir)
-    logging.disabled = False
-    globals().update(best_param)
-
-    model_builder = AlanFramework(data_path, x_fields, y_fields, TRIALS[1:], weights, evaluate_fields,
+    model_builder = AlanFramework(data_path, x_fields, y_fields, TRIALS[:], weights, evaluate_fields,
                                   lambda: MinMaxScaler(feature_range=(-3, 3)), result_dir=result_dir)
     subjects = model_builder.get_all_subjects()
     # model_builder.preprocess_train_evaluation(subjects[:13], subjects[13:], subjects[13:])
-    model_builder.cross_validation(subjects)
+    model_builder.cross_validation(subjects, 3)
     plt.close('all')
 
 
@@ -591,19 +587,19 @@ if __name__ == "__main__":
     """ Use all the IMU channels """
     result_date = '0306test'
     run_kam(input_imu=input_imu_8_all, input_vid=input_vid_2, result_dir=result_date + 'KAM/8IMU_2camera')
-    run_kam(input_imu=input_imu_8_all, input_vid={}, result_dir=result_date + 'KAM/8IMU')
-    run_kam(input_imu={}, input_vid=input_vid_2, result_dir=result_date + 'KAM/2camera')
-    run_kam(input_imu=input_imu_3_all, input_vid=input_vid_2, result_dir=result_date + 'KAM/3IMU_2camera')
-    run_kam(input_imu=input_imu_1_all, input_vid=input_vid_2, result_dir=result_date + 'KAM/1IMU_2camera')
-    run_kam(input_imu=input_imu_3_all, input_vid={}, result_dir=result_date + 'KAM/3IMU')
-    run_kam(input_imu=input_imu_1_all, input_vid={}, result_dir=result_date + 'KAM/1IMU')
+    # run_kam(input_imu=input_imu_8_all, input_vid={}, result_dir=result_date + 'KAM/8IMU')
+    # run_kam(input_imu={}, input_vid=input_vid_2, result_dir=result_date + 'KAM/2camera')
+    # run_kam(input_imu=input_imu_3_all, input_vid=input_vid_2, result_dir=result_date + 'KAM/3IMU_2camera')
+    # run_kam(input_imu=input_imu_1_all, input_vid=input_vid_2, result_dir=result_date + 'KAM/1IMU_2camera')
+    # run_kam(input_imu=input_imu_3_all, input_vid={}, result_dir=result_date + 'KAM/3IMU')
+    # run_kam(input_imu=input_imu_1_all, input_vid={}, result_dir=result_date + 'KAM/1IMU')
 
     run_kfm(input_imu=input_imu_8_all, input_vid=input_vid_2, result_dir=result_date + 'KFM/8IMU_2camera')
-    run_kfm(input_imu=input_imu_8_all, input_vid={}, result_dir=result_date + 'KFM/8IMU')
-    run_kfm(input_imu={}, input_vid=input_vid_2, result_dir=result_date + 'KFM/2camera')
-    run_kfm(input_imu=input_imu_3_all, input_vid=input_vid_2, result_dir=result_date + 'KFM/3IMU_2camera')
-    run_kfm(input_imu=input_imu_1_all, input_vid=input_vid_2, result_dir=result_date + 'KFM/1IMU_2camera')
-    run_kfm(input_imu=input_imu_3_all, input_vid={}, result_dir=result_date + 'KFM/3IMU')
-    run_kfm(input_imu=input_imu_1_all, input_vid={}, result_dir=result_date + 'KFM/1IMU')
+    # run_kfm(input_imu=input_imu_8_all, input_vid={}, result_dir=result_date + 'KFM/8IMU')
+    # run_kfm(input_imu={}, input_vid=input_vid_2, result_dir=result_date + 'KFM/2camera')
+    # run_kfm(input_imu=input_imu_3_all, input_vid=input_vid_2, result_dir=result_date + 'KFM/3IMU_2camera')
+    # run_kfm(input_imu=input_imu_1_all, input_vid=input_vid_2, result_dir=result_date + 'KFM/1IMU_2camera')
+    # run_kfm(input_imu=input_imu_3_all, input_vid={}, result_dir=result_date + 'KFM/3IMU')
+    # run_kfm(input_imu=input_imu_1_all, input_vid={}, result_dir=result_date + 'KFM/1IMU')
 
 
