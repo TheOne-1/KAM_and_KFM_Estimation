@@ -181,7 +181,7 @@ class AlanFramework(BaseFramework):
 
     def train_model(self, x_train, y_train, x_validation=None, y_validation=None, validation_weight=None):
         sub_model_hyper_param = {'epoch': globals()['epoch_1'], 'batch_size': globals()['batch_size_1'],
-                                 'lr': globals()['lr_1'], 'weight_decay': 0, 'use_ratio': 100}      # !!!
+                                 'lr': globals()['lr_1'], 'weight_decay': 0, 'use_ratio': 1}      # !!!
         self.train_step_lens, self.validation_step_lens = self._get_step_len(x_train), self._get_step_len(x_validation)
 
         sub_models = []
@@ -467,22 +467,37 @@ class AlanFramework(BaseFramework):
         hyper_train_fun, hyper_vali_fun = self.preprocess_and_train, self.model_evaluation
         hyper_train_ids, hyper_vali_ids = hyper_train_sub_ids, hyper_vali_sub_ids
         space = {
-            'epoch_1': hp.choice('epoch_1', range(4, 11, 2)),
-            'lr_1': hp.loguniform('lr_1', np.log(10 ** -4), np.log(10 ** -2)),
-            'batch_size_1': hp.choice('batch_size_1', range(20, 41, 10)),
-            'lstm_unit': hp.choice('lstm_unit', range(5, 50, 5)),
-            'fcnn_unit': hp.choice('fcnn_unit', range(5, 50, 5)),
+            'epoch_1': hp.quniform('epoch_1', 4, 10, 2),
+            'lr_1': hp.uniform('lr_1', 10 ** -3, 10 ** -2),
+            'batch_size_1': hp.quniform('batch_size_1', 10, 40, 10),
+            'lstm_unit': hp.qnormal('lstm_unit', 40, 10, 1),
+            'fcnn_unit': hp.qnormal('fcnn_unit', 40, 10, 1),
         }
         trials = HP_Trials()
         warnings.filterwarnings("ignore", message="An input array is constant; the correlation coefficent is not defined.")
         best_param = fmin(objective_for_hyper_search, space, algo=tpe.suggest, max_evals=10, trials=trials,      # !!!
-                          return_argmin=False, rstate=np.random.RandomState(seed=0))
+                          return_argmin=False, rstate=np.random.RandomState(seed=5))
+        best_param = int_params(best_param)
         show_hyper(trials, self.result_dir)
+
+        # if self._y_fields['main_output'] == ['EXT_KM_X']:
+        #     best_param = {'epoch_1': 10, 'lr_1': 0.002786152260835523, 'batch_size_1': 20, 'lstm_unit': 40, 'fcnn_unit': 40}
+        # else:
+        #     best_param = {'epoch_1': 8, 'lr_1': 0.0023519313172782395, 'batch_size_1': 40, 'lstm_unit': 20, 'fcnn_unit': 5}
+        # best_param = {'epoch_1': 10, 'lr_1': 0.002786152260835523, 'batch_size_1': 20, 'lstm_unit': 40, 'fcnn_unit': 40}
+
         logging.disabled = False
         globals().update(best_param)
         best_param = {param: globals()[param] for param in ['epoch_1', 'lr_1', 'batch_size_1', 'weight_decay_1',
                                                             'lstm_unit', 'fcnn_unit'] if param in globals()}
         logging.info("Best hyper parameters: " + str(best_param))
+
+
+def int_params(args):
+    for arg_name in ['batch_size_1', 'epoch_1', 'fcnn_unit', 'lstm_unit']:
+        if arg_name in args.keys():
+            args[arg_name] = int(args[arg_name])
+    return args
 
 
 def show_hyper(trials, result_dir):
@@ -502,13 +517,15 @@ def show_hyper(trials, result_dir):
 
 
 def objective_for_hyper_search(args):
-    print("Current: " + str(args))
+    args = int_params(args)
+    print("Current: " + str(args), end='')
     globals().update(args)
     trained_model = hyper_train_fun(hyper_train_ids, hyper_vali_ids)
     hyper_search_results = hyper_vali_fun(trained_model, hyper_vali_ids, save_results=False)
     rmse_all = 0
     for element in hyper_search_results:
         rmse_all += element['rmse'].mean()
+    print('RMSE = {}'.format(rmse_all / len(hyper_search_results)))
     return rmse_all / len(hyper_search_results)
 
 
@@ -585,21 +602,21 @@ if __name__ == "__main__":
     input_imu_1_all = {'force_x': ACC_GYR_1, 'force_y': ACC_GYR_1, 'force_z': ACC_GYR_1, 'r_x': ACC_GYR_1, 'r_y': ACC_GYR_1, 'r_z': ACC_GYR_1}
 
     """ Use all the IMU channels """
-    result_date = '0306test'
+    result_date = '0326'
     run_kam(input_imu=input_imu_8_all, input_vid=input_vid_2, result_dir=result_date + 'KAM/8IMU_2camera')
-    # run_kam(input_imu=input_imu_8_all, input_vid={}, result_dir=result_date + 'KAM/8IMU')
-    # run_kam(input_imu={}, input_vid=input_vid_2, result_dir=result_date + 'KAM/2camera')
-    # run_kam(input_imu=input_imu_3_all, input_vid=input_vid_2, result_dir=result_date + 'KAM/3IMU_2camera')
-    # run_kam(input_imu=input_imu_1_all, input_vid=input_vid_2, result_dir=result_date + 'KAM/1IMU_2camera')
-    # run_kam(input_imu=input_imu_3_all, input_vid={}, result_dir=result_date + 'KAM/3IMU')
-    # run_kam(input_imu=input_imu_1_all, input_vid={}, result_dir=result_date + 'KAM/1IMU')
+    run_kam(input_imu=input_imu_8_all, input_vid={}, result_dir=result_date + 'KAM/8IMU')
+    run_kam(input_imu={}, input_vid=input_vid_2, result_dir=result_date + 'KAM/2camera')
+    run_kam(input_imu=input_imu_3_all, input_vid=input_vid_2, result_dir=result_date + 'KAM/3IMU_2camera')
+    run_kam(input_imu=input_imu_1_all, input_vid=input_vid_2, result_dir=result_date + 'KAM/1IMU_2camera')
+    run_kam(input_imu=input_imu_3_all, input_vid={}, result_dir=result_date + 'KAM/3IMU')
+    run_kam(input_imu=input_imu_1_all, input_vid={}, result_dir=result_date + 'KAM/1IMU')
 
     run_kfm(input_imu=input_imu_8_all, input_vid=input_vid_2, result_dir=result_date + 'KFM/8IMU_2camera')
-    # run_kfm(input_imu=input_imu_8_all, input_vid={}, result_dir=result_date + 'KFM/8IMU')
-    # run_kfm(input_imu={}, input_vid=input_vid_2, result_dir=result_date + 'KFM/2camera')
-    # run_kfm(input_imu=input_imu_3_all, input_vid=input_vid_2, result_dir=result_date + 'KFM/3IMU_2camera')
-    # run_kfm(input_imu=input_imu_1_all, input_vid=input_vid_2, result_dir=result_date + 'KFM/1IMU_2camera')
-    # run_kfm(input_imu=input_imu_3_all, input_vid={}, result_dir=result_date + 'KFM/3IMU')
-    # run_kfm(input_imu=input_imu_1_all, input_vid={}, result_dir=result_date + 'KFM/1IMU')
+    run_kfm(input_imu=input_imu_8_all, input_vid={}, result_dir=result_date + 'KFM/8IMU')
+    run_kfm(input_imu={}, input_vid=input_vid_2, result_dir=result_date + 'KFM/2camera')
+    run_kfm(input_imu=input_imu_3_all, input_vid=input_vid_2, result_dir=result_date + 'KFM/3IMU_2camera')
+    run_kfm(input_imu=input_imu_1_all, input_vid=input_vid_2, result_dir=result_date + 'KFM/1IMU_2camera')
+    run_kfm(input_imu=input_imu_3_all, input_vid={}, result_dir=result_date + 'KFM/3IMU')
+    run_kfm(input_imu=input_imu_1_all, input_vid={}, result_dir=result_date + 'KFM/1IMU')
 
 

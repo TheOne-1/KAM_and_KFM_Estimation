@@ -80,9 +80,10 @@ class BaseFramework:
     def cross_validation(self, sub_ids: List[str], test_set_sub_num=1):
         sub_ids = shuffle(sub_ids, random_state=0)
         logging.info('Cross validation with subject ids: {}'.format(sub_ids))
-        folder_num = int(np.ceil(len(sub_ids) / test_set_sub_num))  # the number of cross validation times
+        folder_num = int(np.floor(len(sub_ids) / test_set_sub_num))  # the number of cross validation times
         results = []
         for i_folder in range(folder_num):
+            logging.info('Current folder: {}'.format(i_folder))
             if i_folder < folder_num - 1:
                 test_sub_ids = sub_ids[test_set_sub_num * i_folder:test_set_sub_num * (i_folder + 1)]
             else:
