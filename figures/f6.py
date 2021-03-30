@@ -49,17 +49,17 @@ def draw_f6_kam_and_kfm(mean_, std_, sigifi_sign_fun):
     def format_ticks():
         ax = plt.gca()
         ax.set_ylabel('Relative Root Mean Square Error (%)', fontdict=FONT_DICT_LARGE)
-        ax.set_xlabel('KAM Estimation                             KFM Estimation', fontdict=FONT_DICT_LARGE, labelpad=13)
+        ax.set_xlabel('KAM Estimation                         KFM Estimation', fontdict=FONT_DICT_LARGE, labelpad=13)
         ax.set_ylim(0, 12)
-        ax.set_yticks(range(0, 13, 4))
-        ax.set_yticklabels(range(0, 13, 4), fontdict=FONT_DICT_LARGE)
+        ax.set_yticks(range(0, 13, 3))
+        ax.set_yticklabels(range(0, 13, 3), fontdict=FONT_DICT_LARGE)
         ax.set_xlim(-1, 11.5)
         ax.set_xticks([0, 2, 4, 6.5, 8.5, 10.5])
-        ax.set_xticklabels(['IMUs &\n Cameras', 'IMUs \n Alone', 'Cameras \n Alone', 'IMUs &\n Cameras',
-                            'IMUs \n Alone', 'Cameras \n Alone'], fontdict=FONT_DICT_LARGE, linespacing=0.95)
+        ax.set_xticklabels(['IMUs &\nCameras', 'IMUs\nAlone', 'Cameras\nAlone', 'IMUs &\nCameras',
+                            'IMUs \nAlone', 'Cameras\nAlone'], fontdict=FONT_DICT_LARGE, linespacing=0.95)
 
     rc('font', family='Arial')
-    fig = plt.figure(figsize=(11, 7))
+    fig = plt.figure(figsize=(10, 7))
     format_axis()
     format_ticks()
     bar_locs = [0, 2, 4, 6.5, 8.5, 10.5]
@@ -94,7 +94,7 @@ def draw_f6_for_ISB(mean_, std_, sigifi_sign_fun):
         ax.set_xticklabels(['IMU &\n Camera', 'IMU \n Alone', 'Camera \n Alone', 'IMU &\n Camera', 'IMU \n Alone', 'Camera \n Alone'], fontdict=FONT_DICT_LARGE, linespacing=0.95)
 
     rc('text', usetex=True)
-    fig = plt.figure(figsize=(10, 6.6))
+    fig = plt.figure(figsize=(9, 6.1))
     format_axis()
     format_ticks()
     bar_locs = [0, 2, 4, 7, 9, 11]
@@ -114,22 +114,22 @@ def draw_f6_for_ISB(mean_, std_, sigifi_sign_fun):
 
 def sigifi_sign_8(mean_, std_, bar_locs):
     x_offset = 0.3
-    lo = 0.1        # line offset
     # star_offset =
-    for i in [0, 3]:
+    for i, lo in zip([0, 3], [(0.1, 0., 0.), (0.1, 0.1, 0.1)]):
         y_top = max([a + b for a, b in zip(mean_[i:i+3], std_[i:i+3])])
         top_line_y0, top_line_y1 = y_top + 0.8, y_top + 2
-        diff_line_0x = [bar_locs[i]+lo, bar_locs[i]+lo, bar_locs[i+1]-lo, bar_locs[i+1]-lo]
+        diff_line_0x = [bar_locs[i]+lo[0], bar_locs[i]+lo[0], bar_locs[i+1]-lo[1], bar_locs[i+1]-lo[1]]
         diff_line_0y = [mean_[i] + std_[i] + x_offset, top_line_y0, top_line_y0, mean_[i+1] + std_[i+1] + x_offset]
         plt.plot(diff_line_0x, diff_line_0y, 'black', linewidth=LINE_WIDTH)
         plt.text(bar_locs[i]*0.58 + bar_locs[i+1]*0.42, top_line_y0-0.35, '*', color='black', size=50)
 
-        diff_line_0x = [bar_locs[i+1]+lo, bar_locs[i+1]+lo, bar_locs[i+2]-lo, bar_locs[i+2]-lo]
-        diff_line_0y = [mean_[i+1] + std_[i+1] + x_offset, top_line_y0, top_line_y0, mean_[i+2] + std_[i+2] + x_offset]
-        plt.plot(diff_line_0x, diff_line_0y, 'black', linewidth=LINE_WIDTH)
-        plt.text(bar_locs[i+1]*0.58 + bar_locs[i+2]*0.42, top_line_y0-0.35, '*', color='black', size=50)
+        if i == 3:
+            diff_line_0x = [bar_locs[i+1]+lo[1], bar_locs[i+1]+lo[1], bar_locs[i+2]-lo[2], bar_locs[i+2]-lo[2]]
+            diff_line_0y = [mean_[i+1] + std_[i+1] + x_offset, top_line_y0, top_line_y0, mean_[i+2] + std_[i+2] + x_offset]
+            plt.plot(diff_line_0x, diff_line_0y, 'black', linewidth=LINE_WIDTH)
+            plt.text(bar_locs[i+1]*0.58 + bar_locs[i+2]*0.42, top_line_y0-0.35, '*', color='black', size=50)
 
-        diff_line_1x = [bar_locs[i]-lo, bar_locs[i]-lo, bar_locs[i+2]+lo, bar_locs[i+2]+lo]
+        diff_line_1x = [bar_locs[i]-lo[0], bar_locs[i]-lo[0], bar_locs[i+2]+lo[2], bar_locs[i+2]+lo[2]]
         diff_line_1y = [mean_[i] + std_[i] + x_offset, top_line_y1, top_line_y1, mean_[i+2] + std_[i+2] + x_offset]
         plt.plot(diff_line_1x, diff_line_1y, 'black', linewidth=LINE_WIDTH)
         plt.text(bar_locs[i]*0.54 + bar_locs[i+2]*0.46, top_line_y1-0.35, '*', color='black', size=50)
@@ -169,7 +169,7 @@ def save_fig(name, dpi=300):
 
 
 if __name__ == "__main__":
-    test_name = '0307'
+    test_name = '0326'
     target_matric = 'rRMSE_'
     mean_compare_, sem_compare_ = [], []
     combo_results_all = {}
@@ -191,5 +191,5 @@ if __name__ == "__main__":
     print_mean_rrmse(mean_compare_)
     # draw_f6_for_ISB(mean_compare_, sem_compare_, sigifi_sign_8)
     draw_f6_kam_and_kfm(mean_compare_, sem_compare_, sigifi_sign_8)
-    save_fig('f6', 600)
+    save_fig('f6')
     plt.show()

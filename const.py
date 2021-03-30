@@ -71,7 +71,7 @@ LEVER_ARM_FIELDS = ['r_x', 'r_y', 'r_z']
 
 FONT_SIZE_LARGE = 24
 FONT_SIZE = 20
-FONT_SIZE_SMALL = 16
+FONT_SIZE_SMALL = 18
 FONT_DICT = {'fontsize': FONT_SIZE, 'fontname': 'Arial'}
 FONT_DICT_LARGE = {'fontsize': FONT_SIZE_LARGE, 'fontname': 'Arial'}
 FONT_DICT_SMALL = {'fontsize': FONT_SIZE_SMALL, 'fontname': 'Arial'}

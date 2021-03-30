@@ -4,7 +4,7 @@ import json
 from figures.PaperFigures import get_mean_std, format_axis
 from const import SUBJECTS
 import numpy as np
-from const import LINE_WIDTH, FONT_DICT, FONT_SIZE, FONT_DICT, FONT_SIZE, FONT_DICT_LARGE
+from const import LINE_WIDTH, FONT_DICT_SMALL, FONT_SIZE, FONT_DICT, FONT_SIZE, FONT_DICT_LARGE
 from figures.f6 import save_fig
 import matplotlib.gridspec as gridspec
 import matplotlib.pyplot as plt
@@ -16,53 +16,53 @@ def draw_f3(mean_std_kam, mean_std_kfm):
         arr_true_mean, arr_true_std, arr_pred_mean, arr_pred_std = mean_std['true_mean'], mean_std['true_std'], \
                                                                    mean_std['pred_mean'], mean_std['pred_std']
         axis_x = range(arr_true_mean.shape[0])
-        ax.plot(axis_x, arr_true_mean, color='green', label='Laboratory Force Plate \& Optical Motion Capture', linewidth=LINE_WIDTH*2)
+        ax.plot(axis_x, arr_true_mean, color='green', label='Laboratory Force Plate & Optical Motion Capture', linewidth=LINE_WIDTH*2)
         ax.fill_between(axis_x, arr_true_mean - arr_true_std, arr_true_mean + arr_true_std,
                         facecolor='green', alpha=0.4)
-        ax.plot(axis_x, arr_pred_mean, '--', color='peru', label='Portable IMU \& Smartphone Camera', linewidth=LINE_WIDTH*2)
+        ax.plot(axis_x, arr_pred_mean, '--', color='peru', label='Portable IMU & Smartphone Camera', linewidth=LINE_WIDTH*2)
         ax.fill_between(axis_x, arr_pred_mean - arr_pred_std, arr_pred_mean + arr_pred_std,
                         facecolor='peru', alpha=0.4)
-        ax.tick_params(labelsize=FONT_DICT['fontsize'])
+        ax.tick_params(labelsize=FONT_DICT_SMALL['fontsize'])
         ax.set_xticks(range(0, 101, 25))
-        ax.set_xticklabels(range(0, 101, 25), fontdict=FONT_DICT)
-        ax.set_xlabel('Stance Phase (%)', fontdict=FONT_DICT)
+        ax.set_xticklabels(range(0, 101, 25), fontdict=FONT_DICT_SMALL)
+        ax.set_xlabel('Stance Phase (%)', fontdict=FONT_DICT_SMALL)
         ax.set_xlim(0, 100)
         format_axis()
 
     def subplot_1_style():
         ax = plt.gca()
-        ax.set_ylabel('Knee Adduction Moment (BW $\cdot$ BH)', fontdict=FONT_DICT)
-        ax.set_ylim(-0.21, 0.41)
-        ticks = [-0.2, -0.1, 0., 0.1, 0.2, 0.3, 0.4]
+        ax.set_ylabel('Knee Adduction Moment (BW $\cdot$ BH)', fontdict=FONT_DICT_SMALL)
+        ax.set_ylim(-0.2, 0.4)
+        ticks = [-0.2, 0., 0.2, 0.4]
         ax.set_yticks(ticks)
-        ax.set_yticklabels(ticks, fontdict=FONT_DICT)
+        ax.set_yticklabels(ticks, fontdict=FONT_DICT_SMALL)
 
     def subplot_2_style():
         ax = plt.gca()
-        ax.set_ylabel('Knee Flexion Moment (BW $\cdot$ BH)', fontdict=FONT_DICT)
-        ax.set_ylim(-0.22, 0.82)
-        ticks = [-0.2, 0., 0.2, 0.4, 0.6, 0.8]
+        ax.set_ylabel('Knee Flexion Moment (BW $\cdot$ BH)', fontdict=FONT_DICT_SMALL)
+        ax.set_ylim(-0.25, 0.75)
+        ticks = [-0.25, 0., 0.25, 0.5, 0.75]
         ax.set_yticks(ticks)
-        ax.set_yticklabels(ticks, fontdict=FONT_DICT)
+        ax.set_yticklabels(ticks, fontdict=FONT_DICT_SMALL)
 
     rc('font', family='Arial')
-    fig = plt.figure(figsize=(14, 6))
+    fig = plt.figure(figsize=(16, 5.4))
     gs = gridspec.GridSpec(nrows=2, ncols=2, height_ratios=[1, 6])        # , width_ratios=[8, 1, 8]
     draw_subplot(fig.add_subplot(gs[1, 0]), mean_std_kam)
     subplot_1_style()
     draw_subplot(fig.add_subplot(gs[1, 1]), mean_std_kfm)
     subplot_2_style()
-    plt.tight_layout(rect=[0., -0.01, 1, 1.04], w_pad=3)
-    plt.legend(handlelength=2.6, bbox_to_anchor=(0., 1.27), ncol=1, fontsize=FONT_SIZE,
+    plt.tight_layout(rect=[0., -0.02, 1., 1.11], w_pad=3)
+    plt.legend(handlelength=3, bbox_to_anchor=(-0.22, 1.22), ncol=1, fontsize=FONT_DICT_SMALL['fontsize'],
                frameon=False)
     save_fig('f3')
 
 
 if __name__ == "__main__":
-    with h5py.File('results/0307KAM/8IMU_2camera/results.h5', 'r') as hf:
+    with h5py.File('results/0326KAM/8IMU_2camera/results.h5', 'r') as hf:
         kam_data_all_sub = {subject: subject_data[:] for subject, subject_data in hf.items()}
         kam_data_fields = json.loads(hf.attrs['columns'])
-    with h5py.File('results/0307KFM/8IMU_2camera/results.h5', 'r') as hf:
+    with h5py.File('results/0326KFM/8IMU_2camera/results.h5', 'r') as hf:
         kfm_data_all_sub = {subject: subject_data[:] for subject, subject_data in hf.items()}
         kfm_data_fields = json.loads(hf.attrs['columns'])
 

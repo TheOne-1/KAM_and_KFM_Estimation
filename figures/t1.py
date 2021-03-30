@@ -6,7 +6,7 @@ from scipy.stats import ttest_1samp, ttest_rel
 
 
 if __name__ == '__main__':
-    result_date = 'results/0307'
+    result_date = 'results/0326'
     result_names = ['8IMU_2camera', '8IMU', '2camera']
     metric_incre = 'rRMSE_'
 
@@ -14,7 +14,7 @@ if __name__ == '__main__':
         result_df = pd.read_csv(result_date + target + '/estimation_result_individual.csv')
 
         """ print table """
-        for trial, trial_print in zip(['step_width', 'fpa', 'trunk_sway'], ['Step Width', 'FPA', 'Trunk Sway']):
+        for trial, trial_print in zip(['baseline', 'step_width', 'fpa', 'trunk_sway'], ['Baseline', 'Step Width', 'FPA', 'Trunk Sway']):
             trial_df = result_df[result_df['trial'] == trial][[metric_incre + result_name for result_name in result_names]]
             print('\t\t& {:12}'.format(trial_print), end='')
             imu_camera_result = trial_df[metric_incre + result_names[0]]
