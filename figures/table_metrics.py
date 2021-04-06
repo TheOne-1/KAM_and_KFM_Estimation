@@ -43,8 +43,8 @@ def get_all_results(test_folder_dir, test_condition):
     mean_std_RMSE = get_metric_mean_std_result(all_result_df, 'RMSE')
     mean_std_rRMSE = get_metric_mean_std_result(all_result_df, 'rRMSE')
     mean_std_r = get_metric_mean_std_result(all_result_df, 'r')
-    print("Overall RMSE (10^-3), rRMSE, and correlation coefficient were " +
-          "%.1f ± %.1f, " % mean_std_RMSE +
+    print("Overall RMSE (%BW), rRMSE, and correlation coefficient were " +
+          "%.2f ± %.2f, " % mean_std_RMSE +
           "%.1f ± %.1f, " % mean_std_rRMSE +
           "and %.2f ± %.2f" % mean_std_r +
           " for {} condition".format(test_condition))

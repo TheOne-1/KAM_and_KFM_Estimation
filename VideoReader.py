@@ -33,28 +33,15 @@ class VideoReader:
         self._vid_dir = vid_dir
         self._op_model_dir = op_model_dir
         self.show_op_result = show_op_result
+        # self.screen_shot_of_example_op_results(10000)
 
         self.key_points_df = self._get_key_points()
-
-        # compute and save the shank angular velocity
-        # orientations = self.get_segment_2d_orientation('l_shank', self.key_points_df, self._vid_fps, 10)
-        # angluar_vels = self.orientation_to_angluar_velocity_2d(orientations, self._vid_fps)
-        # self.key_points_df.insert(self.key_points_df.shape[1], 'l_shank_angular_vel', angluar_vels)
-        #
-        # orientations = self.get_segment_2d_orientation('r_shank', self.key_points_df, self._vid_fps, 10)
-        # angluar_vels = self.orientation_to_angluar_velocity_2d(orientations, self._vid_fps)
-        # self.key_points_df.insert(self.key_points_df.shape[1], 'r_shank_angular_vel', angluar_vels)
 
     def _get_key_points(self, start_frame=0, end_frame=None):
         cap = cv2.VideoCapture(self._vid_dir)
 
         self.frame_count = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
         self._vid_fps = cap.get(cv2.CAP_PROP_FPS)
-        # if self._vid_file['start'] is None:
-        #     start_frame = 0
-        # else:
-        #     start_frame = int(self._vid_file['start'] * self._vid_fps)
-        #
         if end_frame is None:
             end_frame = self.frame_count
 
@@ -93,7 +80,7 @@ class VideoReader:
             datum = op.Datum()
             datum.cvInputData = frame
 
-            opWrapper.emplaceAndPop(op.VectorDatum([datum]))
+            opWrapper.emplaceAndPop([datum])
             key_points[i_frame, :] = datum.poseKeypoints.ravel()
 
             if self.show_op_result:
@@ -105,6 +92,41 @@ class VideoReader:
         key_points_df = pd.DataFrame(key_points)
         key_points_df.columns = KEY_POINT_COLUMN_NAME
         return key_points_df
+
+    def screen_shot_of_example_op_results(self, i_frame):
+        """ Only to create some example figures """
+        cap = cv2.VideoCapture(self._vid_dir)
+        self.frame_count = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
+        self._vid_fps = cap.get(cv2.CAP_PROP_FPS)
+        if 0 > i_frame:
+            raise ValueError('Only positive i frame.')
+        elif i_frame >= self.frame_count:
+            raise ValueError('i frame larger than the video length.')
+        # Starting OpenPose
+        op_params = dict()
+        op_params['model_folder'] = self._op_model_dir
+        op_params["model_pose"] = "BODY_25"
+        op_params['number_people_max'] = 1
+        opWrapper = op.WrapperPython()
+        opWrapper.configure(op_params)
+        opWrapper.start()
+
+        # print the status
+        cap.set(cv2.CAP_PROP_POS_FRAMES, i_frame)
+        retrieve_flag, frame = cap.read()
+        # key points will be all zero if the frame is not retrieved.
+        frame = cv2.rotate(frame, cv2.ROTATE_90_CLOCKWISE)
+        datum = op.Datum()
+        datum.cvInputData = frame
+
+        opWrapper.emplaceAndPop([datum])
+        cv_output = datum.cvOutputData
+        cv2.imshow('No title', cv_output)
+        if '90' in self._vid_dir:
+            cv2.imwrite('figures/exports/example_op_90.jpg', cv_output)
+        else:
+            cv2.imwrite('figures/exports/example_op_180.jpg', cv_output)
+        cv2.destroyAllWindows()
 
     @staticmethod
     def get_segment_2d_orientation(segment, key_points_df, vid_fps, cut_off_fre=None):
@@ -163,14 +185,6 @@ class VideoReader:
 
         interpolated_key_point_df = pd.DataFrame(interpolated_key_points, columns=self.key_points_df.columns)
         interpolated_key_point_df.to_csv(output_dir, index=False)
-
-        # plt.figure()
-        # plt.plot(interpolated_key_point_df.iloc[:, -1])
-        # plt.plot(self.key_points_df.iloc[:, -1])
-        # plt.figure()
-        # plt.plot(interpolated_key_point_df.iloc[:, 63])
-        # plt.plot(self.key_points_df.iloc[:, 63])
-        # plt.show()
 
     @staticmethod
     def data_filt(data, cut_off_fre, sampling_fre, filter_order=4):

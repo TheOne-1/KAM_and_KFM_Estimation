@@ -46,16 +46,16 @@ def draw_f3(mean_std_kam, mean_std_kfm):
         ax.set_yticklabels(ticks, fontdict=FONT_DICT_SMALL)
 
     rc('font', family='Arial')
-    fig = plt.figure(figsize=(16, 5.4))
-    gs = gridspec.GridSpec(nrows=2, ncols=2, height_ratios=[1, 6])        # , width_ratios=[8, 1, 8]
+    fig = plt.figure(figsize=(9, 12))
+    gs = gridspec.GridSpec(nrows=3, ncols=1, height_ratios=[1, 10, 10])        # , width_ratios=[8, 1, 8]
     draw_subplot(fig.add_subplot(gs[1, 0]), mean_std_kam)
     subplot_1_style()
-    draw_subplot(fig.add_subplot(gs[1, 1]), mean_std_kfm)
+    draw_subplot(fig.add_subplot(gs[2, 0]), mean_std_kfm)
     subplot_2_style()
-    plt.tight_layout(rect=[0., -0.02, 1., 1.11], w_pad=3)
-    plt.legend(handlelength=3, bbox_to_anchor=(-0.22, 1.22), ncol=1, fontsize=FONT_DICT_SMALL['fontsize'],
+    plt.tight_layout(rect=[0., -0., 1., 1], w_pad=3)
+    plt.legend(handlelength=3, bbox_to_anchor=(0.8, 2.5), ncol=1, fontsize=FONT_DICT_SMALL['fontsize'],
                frameon=False)
-    save_fig('f3')
+    save_fig('c5_overall')
 
 
 if __name__ == "__main__":
