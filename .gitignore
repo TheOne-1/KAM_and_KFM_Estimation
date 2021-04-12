@@ -136,4 +136,4 @@ dmypy.json
 .pyre/
 
 create_example_data.py
-figures/*.py
+figures/f8_peaks.py

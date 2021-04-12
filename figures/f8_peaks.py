@@ -17,12 +17,12 @@ def draw_peak(true_peaks, pred_peaks):
         ax = plt.gca()
         ax.set_xlabel('KAM: OMC and Force Plates (%BW·BH)', fontdict=FONT_DICT_LARGE, labelpad=12)
         ax.set_ylabel('KAM: Proposed IMU-Camera Fusion Model (%BW·BH)', fontdict=FONT_DICT_LARGE)
-        ax.set_xlim(0, 0.6)
-        ax.set_ylim(0, 0.6)
-        ax.set_yticks(range(7))      # [0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6]
-        ax.set_yticklabels(range(7), fontdict=FONT_DICT_LARGE)
-        ax.set_xticks(range(7))      # ['0'] + ['{:3.1f}'.format(x) for x in np.arange(0.1, 0.61, 0.1)]
-        ax.set_xticklabels(range(7), fontdict=FONT_DICT_LARGE)
+        ax.set_xlim(0, 5.5)
+        ax.set_ylim(0, 5.5)
+        ax.set_yticks(range(6))      # [0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6]
+        ax.set_yticklabels(range(6), fontdict=FONT_DICT_LARGE)
+        ax.set_xticks(range(6))      # ['0'] + ['{:3.1f}'.format(x) for x in np.arange(0.1, 0.61, 0.1)]
+        ax.set_xticklabels(range(6), fontdict=FONT_DICT_LARGE)
 
     rc('font', family='Arial')
     fig = plt.figure(figsize=(9, 9))
@@ -38,10 +38,10 @@ def draw_peak(true_peaks, pred_peaks):
 
     # plt.text(0.34, 0.02, 'ρ = {:4.2f}\ny = {:4.2f}x + {:4.2f}'.format(
     #     correlation, coef[0], coef[1]), fontdict=FONT_DICT_LARGE)
-    plt.text(0.2, 5.5, 'ρ = {:4.2f}\nMAE = {:4.2f} (%BW·BH)'.format(correlation, mean_absolute_error), fontdict=FONT_DICT_LARGE)
+    plt.text(0.2, 5, 'ρ = {:4.2f}\nMAE = {:4.2f} (%BW·BH)'.format(correlation, mean_absolute_error), fontdict=FONT_DICT_LARGE)
     plt.tight_layout(rect=[0, 0, 1, 1])
 
-    save_fig('f8_peak_each_gait_cycle')
+    save_fig('c5_peak_of_gait_cycles')
 
 
 def get_step_len(data, feature_col_num=0):
