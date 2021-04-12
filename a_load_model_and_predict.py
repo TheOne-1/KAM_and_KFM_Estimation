@@ -19,6 +19,7 @@ R_FOOT_SHANK_GYR = ["Gyro" + axis + sensor for sensor in ['R_SHANK', 'R_FOOT'] f
 
 SEGMENT_MASS_PERCENT = {'L_FOOT': 1.37, 'R_FOOT': 1.37, 'R_SHANK': 4.33, 'R_THIGH': 14.16,
                         'WAIST': 11.17, 'CHEST': 15.96, 'L_SHANK': 4.33, 'L_THIGH': 14.16}
+GRAVITY = 9.81
 
 
 # define preprocess functions
@@ -58,12 +59,12 @@ def get_body_weighted_imu():
 
 if __name__ == "__main__":
     """ step 0: select model and load data """
-    # Three models are available: fusion, IMU_based, and camera_based
-    model_name = 'IMU_based'
+    # Five models are available: 8IMU_camera, 3IMU_camera, 8IMU, 3IMU, camera
+    model_name = '8IMU_camera'
     # Two target moments: KAM or KFM
-    target_moment = 'KFM'
+    target_moment = 'KAM'
 
-    assert model_name in ['fusion', 'IMU_based', 'camera_based'], 'Incorrect model name.'
+    assert model_name in ['8IMU_camera', '3IMU_camera', '8IMU', '3IMU', 'camera'], 'Incorrect model name.'
     assert target_moment in ['KAM', 'KFM'], 'Incorrect target moment name.'
 
     # one example data file is available
@@ -80,7 +81,7 @@ if __name__ == "__main__":
 
     # subject_01 or subject_02 are available;
     # subject_01's data was involved in model training, while subject_02's data was not
-    subject_data = data_all_sub['subject_02']
+    subject_data = data_all_sub['subject_01']
     model_inputs = {}
     model_inputs['anthro'] = torch.from_numpy(subject_data[:, :, [data_fields.index('body weight'),
                                                                   data_fields.index('body height')]])
@@ -113,6 +114,8 @@ if __name__ == "__main__":
         ground_truth_moment = subject_data[:, :, data_fields.index('EXT_KM_Y')]
     else:
         ground_truth_moment = -subject_data[:, :, data_fields.index('EXT_KM_X')]
+    # change unit of body weight from Kg to N
+    ground_truth_moment, predicted = GRAVITY * ground_truth_moment, GRAVITY * predicted
     plt.figure()
     plt.plot(ground_truth_moment.ravel(), label='True Value')
     plt.plot(predicted.ravel(), label='Predicted Value')

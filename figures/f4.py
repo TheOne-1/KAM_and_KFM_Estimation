@@ -7,12 +7,13 @@ from const import LINE_WIDTH_THICK, FONT_SIZE_LARGE, FORCE_PHASE, TRIALS, TRIALS
 import matplotlib.gridspec as gridspec
 import matplotlib.pyplot as plt
 from matplotlib import rc
+from figures.f6 import save_fig
 
 
 def init_figure():
     rc('text', usetex=True)
-    fig = plt.figure(figsize=(14, 7))
-    gs = gridspec.GridSpec(nrows=3, ncols=4, height_ratios=[1, 5, 5])  # , width_ratios=[8, 1, 8]
+    fig = plt.figure(figsize=(12, 6.5))
+    gs = gridspec.GridSpec(nrows=3, ncols=4, height_ratios=[1, 15, 15])  # , width_ratios=[8, 1, 8]
     return fig, gs
 
 
@@ -24,7 +25,7 @@ def draw_subplot(ax, trial_index, mean_std_IMU_OP):
     axis_x = range(arr_true_mean.shape[0])
     ax.plot(axis_x, arr_true_mean, color='green', label='Laboratory Force Plate \& Optical Motion Capture',
             linewidth=LINE_WIDTH * 1)
-    ax.plot(axis_x, arr_pred_mean_IMU_OP, color='peru', label='Portable IMU \& Smartphone Camera',
+    ax.plot(axis_x, arr_pred_mean_IMU_OP, '--', color='peru', label='Portable IMU \& Smartphone Camera',
             linewidth=LINE_WIDTH * 1)
     # ax.plot(axis_x, arr_pred_mean_IMU, '--', color='peru', label='Portable IMU', linewidth=LINE_WIDTH * 1)
     ax.tick_params(labelsize=FONT_DICT['fontsize'])
@@ -42,44 +43,40 @@ def draw_subplot(ax, trial_index, mean_std_IMU_OP):
 def kam_subplot_style(trial_index):
     ax = plt.gca()
     if trial_index == 0:
-        ax.set_ylabel('KAM (BW X BH)', fontdict=FONT_DICT)
-    ax.set_ylim(-0.21, 0.41)
-    ax.set_yticks([-0.2, -0.05, 0.1, 0.25, 0.4])
-    ax.set_yticklabels([-0.2, '', 0.1, '', 0.4], fontdict=FONT_DICT)
+        ax.set_ylabel('KAM (\%BW$\cdot$BH)', fontdict=FONT_DICT)
+    ax.set_ylim(-2.1, 4.1)
+    ax.set_yticks([-2, -0.5, 1, 2.5, 4])
+    ax.set_yticklabels([-2, '', 1, '', 4], fontdict=FONT_DICT)
 
 
 def kfm_subplot_style(trial_index):
     ax = plt.gca()
     if trial_index == 0:
-        ax.set_ylabel('KFM (BW X BH)', fontdict=FONT_DICT)
-    ax.set_ylim(-0.31, 0.91)
-    ax.set_yticks([-0.3, 0., 0.3, 0.6, 0.9])
-    ax.set_yticklabels([-0.3, '', 0.3, '', 0.9], fontdict=FONT_DICT)
+        ax.set_ylabel('KFM (\%BW$\cdot$BH)', fontdict=FONT_DICT)
+    ax.set_ylim(-3.1, 9.1)
+    ax.set_yticks([-3, 0., 3, 6, 9])
+    ax.set_yticklabels([-3, '', 3, '', 9], fontdict=FONT_DICT)
 
 
 def organize_fig():
     plt.tight_layout(rect=[0.01, 0.01, 0.99, 0.99], w_pad=2, h_pad=3)
     ax = plt.gca()
-    ax.add_patch(patches.Rectangle((-496, -0.6), 616, 1.8, fill=False, clip_on=False, ec='gray'))
-    ax.add_patch(patches.Rectangle((-496, 1.3), 616, 1.8, fill=False, clip_on=False, ec='gray'))
-    plt.legend(handlelength=3, bbox_to_anchor=(-1.5, 3.5), ncol=1, fontsize=FONT_SIZE,
+    ax.add_patch(patches.Rectangle((-485, -6), 605, 19, fill=False, clip_on=False, ec='gray'))
+    ax.add_patch(patches.Rectangle((-485, 14), 605, 19, fill=False, clip_on=False, ec='gray'))
+    plt.legend(handlelength=3, bbox_to_anchor=(-4.6, 2.9), ncol=1, fontsize=FONT_SIZE,
                frameon=False, labelspacing=0.2)
-
-
-def save_fig():
-    plt.savefig('exports/f4.png')
 
 
 if __name__ == "__main__":
     fig, gs = init_figure()
     for i_moment, moment in enumerate(['KAM', 'KFM']):
         for trial_index, trial_name in enumerate(TRIALS):
-            _data_IMU_OP, _data_fields = get_data('results/0131_all_feature_' + moment + '/8IMU_2camera/results.h5', trial_index, SUBJECTS[4])
+            _data_IMU_OP, _data_fields = get_data('results/0326' + moment + '/8IMU_2camera/results.h5', trial_index, SUBJECTS[15])
             mean_std_IMU_OP = get_mean_std(np.concatenate(_data_IMU_OP, axis=0), _data_fields, 'main_output')
             if moment == 'KFM':
                 mean_std_IMU_OP['true_mean'], mean_std_IMU_OP['pred_mean'] = -mean_std_IMU_OP['true_mean'], - \
                 mean_std_IMU_OP['pred_mean']
             draw_subplot(fig.add_subplot(gs[i_moment + 1, trial_index]), trial_index, mean_std_IMU_OP)
     organize_fig()
-    save_fig()
+    save_fig('f4')
     plt.show()

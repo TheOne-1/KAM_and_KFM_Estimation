@@ -13,6 +13,7 @@ from sklearn.metrics import r2_score, mean_squared_error as mse
 from scipy.stats import pearsonr
 import scipy.interpolate as interpo
 from const import DATA_PATH, TRIALS
+import random
 
 
 def execute_cmd(cmd):
@@ -73,16 +74,28 @@ class BaseFramework:
         logging.debug('Validate the model with subject ids: {}'.format(validate_sub_ids))
         model = self.preprocess_and_train(train_sub_ids, validate_sub_ids)
         test_results = self.model_evaluation(model, test_sub_ids)
+        plt.close('all')
         return test_results
 
     def cross_validation(self, sub_ids: List[str], test_set_sub_num=1):
+        sub_ids = shuffle(sub_ids, random_state=0)
         logging.info('Cross validation with subject ids: {}'.format(sub_ids))
-        folder_num = int(np.ceil(len(sub_ids) / test_set_sub_num))  # the number of cross validation times
+        folder_num = int(np.floor(len(sub_ids) / test_set_sub_num))  # the number of cross validation times
         results = []
         for i_folder in range(folder_num):
-            test_sub_ids = sub_ids[test_set_sub_num * i_folder:test_set_sub_num * (i_folder + 1)]
+            logging.info('Current folder: {}'.format(i_folder))
+            if i_folder < folder_num - 1:
+                test_sub_ids = sub_ids[test_set_sub_num * i_folder:test_set_sub_num * (i_folder + 1)]
+            else:
+                test_sub_ids = sub_ids[test_set_sub_num * i_folder:]    # make use of all the left subjects
             train_sub_ids = list(np.setdiff1d(sub_ids, test_sub_ids))
-            logging.info('Cross validation: Subjects for test: {}'.format(test_sub_ids))
+
+            random.seed(0)
+            hyper_vali_sub_ids = random.sample(train_sub_ids, test_set_sub_num)
+            hyper_train_sub_ids = list(np.setdiff1d(train_sub_ids, hyper_vali_sub_ids))
+            self.hyperparam_tuning(hyper_train_sub_ids, hyper_vali_sub_ids)
+
+            logging.info('Cross validation, subjects for test: {}'.format(test_sub_ids))
             results += self.preprocess_train_evaluation(train_sub_ids, test_sub_ids, test_sub_ids)
         results = sorted(results, key=lambda x: (x['output'], x['field'], np.mean(x['r_rmse'])))
         self.print_table(results)
@@ -117,6 +130,7 @@ class BaseFramework:
 
         validation_data_list = [self._data_all_sub[sub] for sub in validate_sub_ids]
         validation_data = np.concatenate(validation_data_list, axis=0) if validation_data_list else None
+        validation_data = shuffle(validation_data, random_state=0)
         x_validation, y_validation, validation_weight = [None] * 3
         if validation_data is not None:
             x_validation = self._get_raw_data_dict(validation_data, self._x_fields)
@@ -129,7 +143,7 @@ class BaseFramework:
         model = self.train_model(x_train, y_train, x_validation, y_validation, validation_weight)
         return model
 
-    def model_evaluation(self, model, test_sub_ids: List[str]):
+    def model_evaluation(self, model, test_sub_ids: List[str], save_results=True):
         test_data_list = [self._data_all_sub[sub] for sub in test_sub_ids]
         test_results = []
         for test_sub_id, test_sub_name in enumerate(test_sub_ids):
@@ -143,7 +157,8 @@ class BaseFramework:
             all_scores = self.get_all_scores(test_sub_y, pred_sub_y, self._evaluate_fields, test_sub_weight)
             all_scores = [{'subject': test_sub_name, **scores} for scores in all_scores]
             self.customized_analysis(test_sub_y, pred_sub_y, all_scores)
-            self.save_model_and_results(test_sub_y, pred_sub_y, test_sub_weight, model, test_sub_name)
+            if save_results:
+                self.save_model_and_results(test_sub_y, pred_sub_y, test_sub_weight, model, test_sub_name)
             test_results += all_scores
         self.print_table(test_results)
         return test_results
@@ -216,6 +231,9 @@ class BaseFramework:
 
     @staticmethod
     def predict(model, x_test):
+        raise RuntimeError('Method not implemented')
+
+    def hyperparam_tuning(self, model, x_test):
         raise RuntimeError('Method not implemented')
 
     @staticmethod

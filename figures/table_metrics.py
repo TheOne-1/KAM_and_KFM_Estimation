@@ -31,7 +31,7 @@ def get_all_results(test_folder_dir, test_condition):
     # all_data = all_data[(all_data.T != 0.).any()]
     all_results = []
     for trial_index, trial_name in enumerate(TRIALS):
-        if trial_index == 0: continue
+        # if trial_index == 0: continue
         for subject_index, subject_name in enumerate(SUBJECTS):
             trial_loc = (all_data['trial_id'] == trial_index) & (all_data['subject_id'] == subject_index)
             true_value = all_data['true_main_output'][trial_loc]
@@ -43,8 +43,8 @@ def get_all_results(test_folder_dir, test_condition):
     mean_std_RMSE = get_metric_mean_std_result(all_result_df, 'RMSE')
     mean_std_rRMSE = get_metric_mean_std_result(all_result_df, 'rRMSE')
     mean_std_r = get_metric_mean_std_result(all_result_df, 'r')
-    print("Overall RMSE (10^-3), rRMSE, and correlation coefficient were " +
-          "%.1f ± %.1f, " % mean_std_RMSE +
+    print("Overall RMSE (%BW), rRMSE, and correlation coefficient were " +
+          "%.2f ± %.2f, " % mean_std_RMSE +
           "%.1f ± %.1f, " % mean_std_rRMSE +
           "and %.2f ± %.2f" % mean_std_r +
           " for {} condition".format(test_condition))
@@ -52,12 +52,14 @@ def get_all_results(test_folder_dir, test_condition):
 
 
 if __name__ == '__main__':
-    result_date = 'results/0307'       # all_feature_
+    result_date = 'results/0326'       # all_feature_
     for target in ['KAM', 'KFM']:
-        combo_result = [get_all_results(result_date + target, sensor) for sensor in SENSOR_COMBINATION]
+        print(target)
+        combinations = SENSOR_COMBINATION   # ['8IMU_2camera', '8IMU', '3IMU_2camera', '1IMU_2camera', '2camera']
+        combo_result = [get_all_results(result_date + target, sensor) for sensor in combinations]
 
         result_df_all_three = pd.DataFrame(combo_result[0])[['subject', 'trial']]
-        for results, result_name in zip(combo_result, SENSOR_COMBINATION):
+        for results, result_name in zip(combo_result, combinations):
             result_df = results[['MAE', 'RMSE', 'rRMSE', 'r']]
             result_df.columns = [column_name + '_' + result_name for column_name in result_df.columns]
             result_df_all_three = pd.concat([result_df_all_three, result_df], axis=1)

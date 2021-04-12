@@ -1,5 +1,6 @@
 import os
 
+GRAVITY = 9.81
 VIDEO_PATH = os.environ.get('VIDEO_DATA_PATH')
 OPENPOSE_MODEL_PATH = os.environ.get('OPENPOSE_MODEL_PATH')
 VIDEO_ORIGINAL_SAMPLE_RATE = 119.99014859206962
@@ -71,11 +72,11 @@ LEVER_ARM_FIELDS = ['r_x', 'r_y', 'r_z']
 
 FONT_SIZE_LARGE = 24
 FONT_SIZE = 20
-FONT_SIZE_SMALL = 16
-FONT_DICT = {'fontsize': FONT_SIZE, 'fontname': 'DejaVu Sans'}
-FONT_DICT_LARGE = {'fontsize': FONT_SIZE_LARGE, 'fontname': 'DejaVu Sans'}
-FONT_DICT_SMALL = {'fontsize': FONT_SIZE_SMALL, 'fontname': 'DejaVu Sans'}
-FONT_DICT_X_SMALL = {'fontsize': 15, 'fontname': 'DejaVu Sans'}
+FONT_SIZE_SMALL = 18
+FONT_DICT = {'fontsize': FONT_SIZE, 'fontname': 'Arial'}
+FONT_DICT_LARGE = {'fontsize': FONT_SIZE_LARGE, 'fontname': 'Arial'}
+FONT_DICT_SMALL = {'fontsize': FONT_SIZE_SMALL, 'fontname': 'Arial'}
+FONT_DICT_X_SMALL = {'fontsize': 15, 'fontname': 'Arial'}
 LINE_WIDTH = 2
 LINE_WIDTH_THICK = 3
 
