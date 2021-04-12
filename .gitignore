@@ -134,4 +134,6 @@ dmypy.json
 
 # Pyre type checker
 .pyre/
+
 create_example_data.py
+figures/*.py
