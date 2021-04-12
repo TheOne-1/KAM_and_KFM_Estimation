@@ -136,7 +136,7 @@ Five types of models are provided:
 (3) an eight-IMU-based model
 ([KAM](./trained_models_and_example_data/8IMU_KAM.pth), [KFM](./trained_models_and_example_data/8IMU_KFM.pth))
 
-(4) a three-IMU-based model (pelvis and feet), and
+(4) a three-IMU-based model (pelvis and feet)
 ([KAM](./trained_models_and_example_data/3IMU_KAM.pth), [KFM](./trained_models_and_example_data/3IMU_KFM.pth))
 
 (5) a camera-based model.
