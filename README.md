@@ -125,10 +125,22 @@ Markers' field names are in the form of "MarkerName_Axis".
 
 ## Use KAM and KFM estimation models
 ### Trained models
-Six models are provided:
-Two IMU-based models (e.g. [IMU_based_KAM.pth](./trained_models_and_example_data/IMU_based_KAM.pth)),
-two camera-based models (e.g. [camera_based_KAM.pth](./trained_models_and_example_data/camera_based_KAM.pth)), and
-two IMU & camera fusion model (e.g. [fusion_KAM.pth](./trained_models_and_example_data/fusion_KAM.pth)).
+Five types of models are provided:
+
+(1) a fusion model based on eight IMUs and cameras
+([KAM](./trained_models_and_example_data/8IMU_camera_KAM.pth), [KFM](./trained_models_and_example_data/8IMU_camera_KFM.pth))
+
+(2) a fusion model based on three IMUs (pelvis and feet) and cameras
+([KAM](./trained_models_and_example_data/3IMU_camera_KAM.pth), [KFM](./trained_models_and_example_data/3IMU_camera_KFM.pth))
+
+(3) an eight-IMU-based model
+([KAM](./trained_models_and_example_data/8IMU_KAM.pth), [KFM](./trained_models_and_example_data/8IMU_KFM.pth))
+
+(4) a three-IMU-based model (pelvis and feet), and
+([KAM](./trained_models_and_example_data/3IMU_KAM.pth), [KFM](./trained_models_and_example_data/3IMU_KFM.pth))
+
+(5) a camera-based model.
+([KAM](./trained_models_and_example_data/camera_KAM.pth), [KFM](./trained_models_and_example_data/camera_KFM.pth))
 
 ### Running example code
 An implementation ([a_load_model_and_predict.py](a_load_model_and_predict.py)) is provided
