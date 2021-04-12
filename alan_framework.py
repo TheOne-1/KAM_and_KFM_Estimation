@@ -603,19 +603,19 @@ if __name__ == "__main__":
 
     """ Use all the IMU channels """
     result_date = '0326'
-    # run_kam(input_imu=input_imu_8_all, input_vid=input_vid_2, result_dir=result_date + 'KAM/8IMU_2camera')
-    # run_kam(input_imu=input_imu_8_all, input_vid={}, result_dir=result_date + 'KAM/8IMU')
-    # run_kam(input_imu={}, input_vid=input_vid_2, result_dir=result_date + 'KAM/2camera')
-    # run_kam(input_imu=input_imu_3_all, input_vid=input_vid_2, result_dir=result_date + 'KAM/3IMU_2camera')
-    # run_kam(input_imu=input_imu_1_all, input_vid=input_vid_2, result_dir=result_date + 'KAM/1IMU_2camera')
-    # run_kam(input_imu=input_imu_3_all, input_vid={}, result_dir=result_date + 'KAM/3IMU')
-    # run_kam(input_imu=input_imu_1_all, input_vid={}, result_dir=result_date + 'KAM/1IMU')
-    #
-    # run_kfm(input_imu=input_imu_8_all, input_vid=input_vid_2, result_dir=result_date + 'KFM/8IMU_2camera')
-    # run_kfm(input_imu=input_imu_8_all, input_vid={}, result_dir=result_date + 'KFM/8IMU')
-    # run_kfm(input_imu={}, input_vid=input_vid_2, result_dir=result_date + 'KFM/2camera')
-    # run_kfm(input_imu=input_imu_3_all, input_vid=input_vid_2, result_dir=result_date + 'KFM/3IMU_2camera')
-    # run_kfm(input_imu=input_imu_1_all, input_vid=input_vid_2, result_dir=result_date + 'KFM/1IMU_2camera')
+    run_kam(input_imu=input_imu_8_all, input_vid=input_vid_2, result_dir=result_date + 'KAM/8IMU_2camera')
+    run_kam(input_imu=input_imu_8_all, input_vid={}, result_dir=result_date + 'KAM/8IMU')
+    run_kam(input_imu={}, input_vid=input_vid_2, result_dir=result_date + 'KAM/2camera')
+    run_kam(input_imu=input_imu_3_all, input_vid=input_vid_2, result_dir=result_date + 'KAM/3IMU_2camera')
+    run_kam(input_imu=input_imu_1_all, input_vid=input_vid_2, result_dir=result_date + 'KAM/1IMU_2camera')
+    run_kam(input_imu=input_imu_3_all, input_vid={}, result_dir=result_date + 'KAM/3IMU')
+    run_kam(input_imu=input_imu_1_all, input_vid={}, result_dir=result_date + 'KAM/1IMU')
+
+    run_kfm(input_imu=input_imu_8_all, input_vid=input_vid_2, result_dir=result_date + 'KFM/8IMU_2camera')
+    run_kfm(input_imu=input_imu_8_all, input_vid={}, result_dir=result_date + 'KFM/8IMU')
+    run_kfm(input_imu={}, input_vid=input_vid_2, result_dir=result_date + 'KFM/2camera')
+    run_kfm(input_imu=input_imu_3_all, input_vid=input_vid_2, result_dir=result_date + 'KFM/3IMU_2camera')
+    run_kfm(input_imu=input_imu_1_all, input_vid=input_vid_2, result_dir=result_date + 'KFM/1IMU_2camera')
     run_kfm(input_imu=input_imu_3_all, input_vid={}, result_dir=result_date + 'KFM/3IMU')
     run_kfm(input_imu=input_imu_1_all, input_vid={}, result_dir=result_date + 'KFM/1IMU')
 
