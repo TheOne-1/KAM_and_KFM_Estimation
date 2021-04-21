@@ -1,4 +1,3 @@
-import pandas as pd
 import h5py
 import json
 from scipy.signal import find_peaks
@@ -15,8 +14,8 @@ from sklearn.metrics import mean_squared_error as mse
 def draw_peak(true_peaks, pred_peaks):
     def format_ticks():
         ax = plt.gca()
-        ax.set_xlabel('KAM: OMC and Force Plates (%BW·BH)', fontdict=FONT_DICT_LARGE, labelpad=12)
-        ax.set_ylabel('KAM: Proposed IMU-Camera Fusion Model (%BW·BH)', fontdict=FONT_DICT_LARGE)
+        ax.set_xlabel('KAM: OMC and Force Plates (%BW·BH)', fontdict=FONT_DICT_LARGE)
+        ax.set_ylabel('KAM: IMU-Camera Fusion Model (%BW·BH)', fontdict=FONT_DICT_LARGE)
         ax.set_xlim(0, 0.6)
         ax.set_ylim(0, 0.6)
         ax.set_yticks(range(7))      # [0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6]
@@ -25,7 +24,7 @@ def draw_peak(true_peaks, pred_peaks):
         ax.set_xticklabels(range(7), fontdict=FONT_DICT_LARGE)
 
     rc('font', family='Arial')
-    fig = plt.figure(figsize=(9, 9))
+    fig = plt.figure(figsize=(9, 7))
     blue_dot = plt.scatter(true_peaks, pred_peaks, s=50, marker='.')
 
     format_axis()
@@ -33,12 +32,12 @@ def draw_peak(true_peaks, pred_peaks):
     coef = np.polyfit(true_peaks, pred_peaks, 1)
     poly1d_fn = np.poly1d(coef)
     black_line, = plt.plot([0., 6], [0., 6], color='black', linewidth=LINE_WIDTH)
-    mean_absolute_error = np.mean(np.abs(np.array(true_peaks) - np.array(pred_peaks)))
+    RMSE = np.sqrt(mse(np.array(true_peaks), np.array(pred_peaks)))
     correlation = pearsonr(true_peaks, pred_peaks)[0]
 
     # plt.text(0.34, 0.02, 'ρ = {:4.2f}\ny = {:4.2f}x + {:4.2f}'.format(
     #     correlation, coef[0], coef[1]), fontdict=FONT_DICT_LARGE)
-    plt.text(0.2, 5.5, 'ρ = {:4.2f}\nMAE = {:4.2f} (%BW·BH)'.format(correlation, mean_absolute_error), fontdict=FONT_DICT_LARGE)
+    plt.text(0.2, 5.5, 'ρ = {:4.2f}\nRMSE = {:4.2f} (%BW·BH)'.format(correlation, RMSE), fontdict=FONT_DICT_LARGE)
     plt.tight_layout(rect=[0, 0, 1, 1])
 
     save_fig('f8_peak_each_gait_cycle')

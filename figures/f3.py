@@ -46,7 +46,7 @@ def draw_f3(mean_std_kam, mean_std_kfm):
         ax.set_yticklabels(ticks, fontdict=FONT_DICT_SMALL)
 
     rc('font', family='Arial')
-    fig = plt.figure(figsize=(16, 5.4))
+    fig = plt.figure(figsize=(16, 5.47))
     gs = gridspec.GridSpec(nrows=2, ncols=2, height_ratios=[1, 6])        # , width_ratios=[8, 1, 8]
     draw_subplot(fig.add_subplot(gs[1, 0]), mean_std_kam)
     subplot_1_style()
