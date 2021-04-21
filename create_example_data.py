@@ -33,7 +33,7 @@ if __name__ == "__main__":
         export_path = os.environ.get('KAM_DATA_PATH') + '/all_17_subjects.h5'
         with h5py.File(export_path, 'w') as hf:
             for i_sub in range(len(SUBJECTS)):
-                if i_sub < 10:
+                if i_sub < 9:
                     sub_num_str = 'subject_0' + str(i_sub+1)
                 else:
                     sub_num_str = 'subject_' + str(i_sub+1)
