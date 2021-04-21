@@ -2,9 +2,10 @@ import h5py
 import json
 from scipy.signal import find_peaks
 import numpy as np
-from const import LINE_WIDTH, FONT_DICT_SMALL, GRAVITY, FONT_SIZE_LARGE, LINE_WIDTH_THICK, FONT_DICT_LARGE, SUBJECTS
+from const import LINE_WIDTH, FONT_DICT_SMALL, GRAVITY, FONT_SIZE_LARGE, LINE_WIDTH_THICK, FONT_DICT_LARGE, SUBJECTS, \
+    TRIALS
 from figures.f6 import save_fig
-from figures.PaperFigures import format_axis
+from figures.PaperFigures import format_axis, get_mean_std
 import matplotlib.pyplot as plt
 from matplotlib import rc
 from scipy.stats import pearsonr
@@ -68,7 +69,7 @@ def find_peak_max(data_clip, height, width=None, prominence=None):
     return np.max(peak_heights)
 
 
-def get_peaks(data, columns, search_percent_from_start):
+def get_peak_of_each_gait_cycle(data, columns, search_percent_from_start):
     step_lens = get_step_len(data)
     search_lens = (search_percent_from_start * step_lens).astype(int)
     true_row, pred_row = columns.index('true_main_output'), columns.index('pred_main_output')
@@ -86,6 +87,14 @@ def get_peaks(data, columns, search_percent_from_start):
         pred_peaks.append(pred_peak / GRAVITY * 100)
     # print('Peaks of {:3.1f}% steps not found.'.format(peak_not_found/data.shape[0]*100))
     return true_peaks, pred_peaks
+
+
+def get_mean_gait_cycle_then_find_peak(data, columns, search_percent_from_start):
+    mean_std = get_mean_std(data, columns, 'main_output')
+    search_sample = int(100 *search_percent_from_start)
+    true_peak = find_peak_max(mean_std['true_mean'][:search_sample], 0.1)
+    pred_peak =find_peak_max(mean_std['pred_mean'][:search_sample], 0.1)
+    return true_peak, pred_peak
 
 
 def get_impulse(data, columns):
@@ -112,32 +121,66 @@ def get_rmse_sample(data, columns):
 
 
 if __name__ == "__main__":
+    with h5py.File('I:/all_17_subjects.h5', 'r') as hf:
+        temp_data = {subject: subject_data[:] for subject, subject_data in hf.items()}
+        temp_fields = json.loads(hf.attrs['columns'])
     result_date = 'results/0326'
     with h5py.File(result_date + 'KAM/8IMU_2camera/results.h5', 'r') as hf:
         kam_data_all_sub = {subject: subject_data[:] for subject, subject_data in hf.items()}
         kam_data_fields = json.loads(hf.attrs['columns'])
-    true_peaks, pred_peaks = get_peaks(kam_data_all_sub[SUBJECTS[16]], kam_data_fields, 0.5)
-    draw_peak(true_peaks, pred_peaks)
-
     with h5py.File(result_date + 'KFM/8IMU_2camera/results.h5', 'r') as hf:
         kfm_data_all_sub = {subject: subject_data[:] for subject, subject_data in hf.items()}
         kfm_data_fields = json.loads(hf.attrs['columns'])
-    for data, data_fields, sign in zip([kam_data_all_sub, kfm_data_all_sub], [kam_data_fields, kfm_data_fields], [1, -1]):
+
+    # !!!
+    for i_sub, subject in enumerate(SUBJECTS):
+        plt.figure()
+        plt.plot(kam_data_all_sub[subject][:, :, kam_data_fields.index('true_main_output')].ravel())
+        if i_sub < 10:
+            name = 'subject_0' + str(i_sub+1)
+        else:
+            name = 'subject_' + str(i_sub+1)
+        plt.plot(temp_data[name][:, :, temp_fields.index('EXT_KM_Y')].ravel())
+    plt.show()
+
+    print('average the gait cycle then find peak')
+    for data, data_fields, sign, name in zip([kam_data_all_sub, kfm_data_all_sub], [kam_data_fields, kfm_data_fields], [1, -1], ['KAM', 'KFM']):
+        print('{:20}{:6}\t\t{:6}'.format(name, 'true peak', 'pred peak'))
         for i_trial in range(4):
-            true_peak_average, rmse_peak_sub, rmse_sample_sub = [], [], []
+            true_peak_sub, pred_peak_sub = [], []
             for subject in SUBJECTS:
                 sub_data = data[subject]
                 sub_trial_data = sub_data[sub_data[:, 0, data_fields.index('trial_id')] == i_trial, :, :]
                 sub_trial_data = sub_trial_data * sign
-                true_peaks, pred_peaks = get_peaks(sub_trial_data, data_fields, 0.5)
+                true_peak_this_sub, pred_peak_this_sub = get_mean_gait_cycle_then_find_peak(sub_trial_data, data_fields, 0.5)
+                true_peak_sub.append(true_peak_this_sub)
+                pred_peak_sub.append(pred_peak_this_sub)
+            print('{:20}{:3.1f} ({:3.1f})\t\t{:3.1f} ({:3.1f})'.format(TRIALS[i_trial],
+                  np.mean(true_peak_sub), np.std(true_peak_sub),
+                  np.mean(pred_peak_sub), np.std(pred_peak_sub)))
+
+    # plot peaks of gait cycles from one representative subject
+    true_peaks, pred_peaks = get_peak_of_each_gait_cycle(kam_data_all_sub[SUBJECTS[16]], kam_data_fields, 0.5)
+    draw_peak(true_peaks, pred_peaks)
+
+    print('\nfind peak of each gait cycle then average')
+    for data, data_fields, sign, name in zip([kam_data_all_sub, kfm_data_all_sub], [kam_data_fields, kfm_data_fields], [1, -1], ['KAM', 'KFM']):
+        print('{:20}{:6}\t\t{:6}'.format(name, 'true peak', 'pred peak'))
+        for i_trial in range(4):
+            true_peak_average, pred_peak_average, rmse_peak_sub, rmse_sample_sub = [], [], [], []
+            for subject in SUBJECTS:
+                sub_data = data[subject]
+                sub_trial_data = sub_data[sub_data[:, 0, data_fields.index('trial_id')] == i_trial, :, :]
+                sub_trial_data = sub_trial_data * sign
+                true_peaks, pred_peaks = get_peak_of_each_gait_cycle(sub_trial_data, data_fields, 0.5)
                 true_peak_average.append(np.mean(true_peaks))
+                pred_peak_average.append(np.mean(pred_peaks))
                 rmse_peak_sub.append(np.mean(np.abs((np.array(true_peaks) - np.array(pred_peaks)))))
                 rmse_sample_sub.append(get_rmse_sample(sub_trial_data, data_fields))
                 # print('{}: {}'.format(subject, get_rmse_sample(sub_trial_data, data_fields)))
 
-            print('{:3.1f} ({:3.1f})\t\t{:4.2f} ({:4.2f})\t\t{:4.2f} ({:4.2f})'.format(
-                np.mean(true_peak_average), np.std(true_peak_average),
-                np.mean(rmse_peak_sub), np.std(rmse_peak_sub),
-                np.mean(rmse_sample_sub), np.std(rmse_sample_sub)))
+            print('{:20}{:3.1f} ({:3.1f})\t\t{:3.1f} ({:3.1f})'.format(TRIALS[i_trial],
+                  np.mean(true_peak_average), np.std(true_peak_average),
+                  np.mean(pred_peak_average), np.std(pred_peak_average)))
 
     plt.show()

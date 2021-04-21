@@ -63,3 +63,4 @@ def get_score(arr_true, arr_pred, w):
     cor_value = pearsonr(arr_true, arr_pred)[0]
     rmse = np.sqrt(mse(arr_true, arr_pred)) / GRAVITY * 100  # TODO: error-prone code here. Modify generate_combined_data to calculate external KAM.
     return {'MAE': mae, 'RMSE': rmse, 'rRMSE': r_rmse, 'r':  cor_value}
+
