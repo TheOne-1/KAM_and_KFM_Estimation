@@ -1,11 +1,10 @@
 import h5py
 import json
-from scipy.signal import find_peaks
 import numpy as np
-from const import LINE_WIDTH, FONT_DICT_SMALL, GRAVITY, FONT_SIZE_LARGE, LINE_WIDTH_THICK, FONT_DICT_LARGE, SUBJECTS, \
-    TRIALS
+from const import LINE_WIDTH, GRAVITY, FONT_DICT_LARGE, SUBJECTS, TRIALS
 from figures.f6 import save_fig
-from figures.PaperFigures import format_axis, get_mean_std
+from figures.PaperFigures import format_axis, find_peak_max, get_gait_params,\
+    get_peak_of_each_gait_cycle, get_mean_gait_cycle_then_find_peak
 import matplotlib.pyplot as plt
 from matplotlib import rc
 from scipy.stats import pearsonr
@@ -44,59 +43,6 @@ def draw_peak(true_peaks, pred_peaks):
     save_fig('f8_peak_each_gait_cycle')
 
 
-def get_step_len(data, feature_col_num=0):
-    """
-    :param data: Numpy array, 3d (step, sample, feature)
-    :param feature_col_num: int, feature column id for step length detection. Different id would probably return
-           the same results
-    :return:
-    """
-    data_the_feature = data[:, :, feature_col_num]
-    zero_loc = data_the_feature == 0.
-    step_lens = np.sum(~zero_loc, axis=1)
-    return step_lens
-
-
-def find_peak_max(data_clip, height, width=None, prominence=None):
-    """
-    find the maximum peak
-    :return:
-    """
-    peaks, properties = find_peaks(data_clip, width=width, height=height, prominence=prominence)
-    if len(peaks) == 0:
-        return None
-    peak_heights = properties['peak_heights']
-    return np.max(peak_heights)
-
-
-def get_peak_of_each_gait_cycle(data, columns, search_percent_from_start):
-    step_lens = get_step_len(data)
-    search_lens = (search_percent_from_start * step_lens).astype(int)
-    true_row, pred_row = columns.index('true_main_output'), columns.index('pred_main_output')
-    true_peaks, pred_peaks = [], []
-    peak_not_found = 0
-    for i_step in range(data.shape[0]):
-        true_peak = find_peak_max(data[i_step, :search_lens[i_step], true_row], 0.1)
-        if true_peak is None:
-            peak_not_found += 1
-            continue
-        pred_peak = find_peak_max(data[i_step, :search_lens[i_step], pred_row], 0.1)
-        if pred_peak is None:
-            pred_peak = np.max(data[i_step, :search_lens[i_step], pred_row])
-        true_peaks.append(true_peak / GRAVITY * 100)
-        pred_peaks.append(pred_peak / GRAVITY * 100)
-    # print('Peaks of {:3.1f}% steps not found.'.format(peak_not_found/data.shape[0]*100))
-    return true_peaks, pred_peaks
-
-
-def get_mean_gait_cycle_then_find_peak(data, columns, search_percent_from_start):
-    mean_std = get_mean_std(data, columns, 'main_output')
-    search_sample = int(100 *search_percent_from_start)
-    true_peak = find_peak_max(mean_std['true_mean'][:search_sample], 0.1)
-    pred_peak =find_peak_max(mean_std['pred_mean'][:search_sample], 0.1)
-    return true_peak, pred_peak
-
-
 def get_impulse(data, columns):
     true_row, pred_row = columns.index('true_main_output'), columns.index('pred_main_output')
     true_data = data[:, :, true_row]
@@ -121,9 +67,8 @@ def get_rmse_sample(data, columns):
 
 
 if __name__ == "__main__":
-    with h5py.File('I:/all_17_subjects.h5', 'r') as hf:
-        temp_data = {subject: subject_data[:] for subject, subject_data in hf.items()}
-        temp_fields = json.loads(hf.attrs['columns'])
+    data_path = 'D:\Tian\Research\Projects\VideoIMUCombined\experiment_data\KAM\\'
+    params = get_gait_params(data_path + '40samples+stance.h5', data_path + 'gait_parameters.h5')
     result_date = 'results/0326'
     with h5py.File(result_date + 'KAM/8IMU_2camera/results.h5', 'r') as hf:
         kam_data_all_sub = {subject: subject_data[:] for subject, subject_data in hf.items()}
@@ -131,17 +76,6 @@ if __name__ == "__main__":
     with h5py.File(result_date + 'KFM/8IMU_2camera/results.h5', 'r') as hf:
         kfm_data_all_sub = {subject: subject_data[:] for subject, subject_data in hf.items()}
         kfm_data_fields = json.loads(hf.attrs['columns'])
-
-    # !!!
-    for i_sub, subject in enumerate(SUBJECTS):
-        plt.figure()
-        plt.plot(kam_data_all_sub[subject][:, :, kam_data_fields.index('true_main_output')].ravel())
-        if i_sub < 10:
-            name = 'subject_0' + str(i_sub+1)
-        else:
-            name = 'subject_' + str(i_sub+1)
-        plt.plot(temp_data[name][:, :, temp_fields.index('EXT_KM_Y')].ravel())
-    plt.show()
 
     print('average the gait cycle then find peak')
     for data, data_fields, sign, name in zip([kam_data_all_sub, kfm_data_all_sub], [kam_data_fields, kfm_data_fields], [1, -1], ['KAM', 'KFM']):
