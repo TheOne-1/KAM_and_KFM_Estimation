@@ -57,7 +57,7 @@ def sort_gait_cycles_according_to_param(param_config, sub_param, sub_data):
 
 def init_f9():
     rc('font', family='Arial')
-    fig = plt.figure(figsize=(16, 7))
+    fig = plt.figure(figsize=(11, 7))
     gs = gridspec.GridSpec(nrows=2, ncols=1, height_ratios=[5, 5])        # , width_ratios=[8, 1, 8]
     return fig, gs
 
@@ -80,8 +80,8 @@ def draw_f9_subplot(mean_, std_, p_between_pattern, ax, moment_name):
         return ylim
 
     def format_x_ticks():
-        ax.set_xlabel(' Foot Progression Angle                                             Step Width          '
-                      '                                        Trunk Sway Angle    ', fontdict=FONT_DICT_SMALL, labelpad=5)
+        ax.set_xlabel('Foot Progression Angle                    Step Width             '
+                      '             Trunk Sway Angle   ', fontdict=FONT_DICT_SMALL, labelpad=5)
         ax.set_xlim(-1, 26)
         ax.set_xticks(np.arange(0.5, 25, 3))
         ax.set_xticklabels(['Toe-in', 'Normal', 'Toe-out', 'Narrow', 'Normal', 'Wide', 'Small', 'Medium', 'Large'],
@@ -100,22 +100,22 @@ def draw_f9_subplot(mean_, std_, p_between_pattern, ax, moment_name):
     format_errorbar_cap(caplines, 20)
     if moment_name == 'KAM':
         ylim = format_kam_y_ticks()
-        plt.legend(bar_[0:2], ['Laboratory Force Plate & Optical Motion Capture', 'Portable IMUs & Smartphone Cameras (Proposed Fusion Model)'],
-            handlelength=3, bbox_to_anchor=(0.42, 1.08), ncol=1, fontsize=FONT_DICT_SMALL['fontsize'], frameon=False)
+        plt.legend(bar_[0:2], ['Laboratory Force Plate & Optical Motion Capture', 'Portable IMUs & Smartphone Cameras'],
+            handlelength=2, bbox_to_anchor=(0.32, 1.07), ncol=1, fontsize=FONT_DICT_SMALL['fontsize'], frameon=False)
     elif moment_name == 'KFM':
         ylim = format_kfm_y_ticks()
     for i_trial, trial_name in enumerate(['fpa', 'step_width', 'trunk_sway']):
         index = [i_trial*6, i_trial*6 + 2, i_trial*6 + 4]
         draw_sigifi_sign([mean_[x] for x in index], [std_[x] for x in index], [bar_locs[x] for x in index],
                          p_between_pattern[trial_name], ylim)
-        plt.tight_layout(rect=[0., -0.01, 1, 1.01], w_pad=2, h_pad=1)
 
 
 def finalize_f9(fig):
-    l1 = lines.Line2D([0.365, 0.365], [0.01, 0.85], linestyle='--', transform=fig.transFigure, color='gray')
-    l2 = lines.Line2D([0.677, 0.677], [0.01, 0.85], linestyle='--', transform=fig.transFigure, color='gray')
+    plt.tight_layout(rect=[-0.01, -0.01, 1.06, 1.01], w_pad=2, h_pad=1)
+    l1 = lines.Line2D([0.372, 0.372], [0.01, 0.85], linestyle='--', transform=fig.transFigure, color='gray')
+    l2 = lines.Line2D([0.682, 0.682], [0.01, 0.85], linestyle='--', transform=fig.transFigure, color='gray')
     fig.lines.extend([l1, l2])
-    save_fig('f9')
+    save_fig('c5_gait_patterns')
 
 
 if __name__ == "__main__":
@@ -150,7 +150,6 @@ if __name__ == "__main__":
             for i_subject, subject in enumerate(SUBJECTS):
                 sub_param, sub_data = gait_param_all_sub[subject], data[subject]
                 sub_trial_data_sorted, param_sorted = sort_gait_cycles_according_to_param(config, sub_param, sub_data)
-                print(len(sub_trial_data_sorted))
                 small_steps, normal_steps, large_steps = np.array_split(sub_trial_data_sorted, 3)
                 small_param, normal_param, large_param = np.array_split(param_sorted, 3)
                 for steps, param, pattern_name in zip((small_steps, normal_steps, large_steps), (small_param, normal_param, large_param), config['pattern_names']):

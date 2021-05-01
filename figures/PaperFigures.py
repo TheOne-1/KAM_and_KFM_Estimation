@@ -53,13 +53,15 @@ def get_peak_of_each_gait_cycle(data, columns, search_percent_from_start):
     true_peaks, pred_peaks = [], []
     peak_not_found = 0
     for i_step in range(data.shape[0]):
-        true_peak = find_peak_max(data[i_step, :search_lens[i_step], true_row], 0.1)
-        if true_peak is None:
-            peak_not_found += 1
-            continue
-        pred_peak = find_peak_max(data[i_step, :search_lens[i_step], pred_row], 0.1)
-        if pred_peak is None:
-            pred_peak = np.max(data[i_step, :search_lens[i_step], pred_row])
+        true_peak = np.max(data[i_step, :search_lens[i_step], true_row])
+        pred_peak = np.max(data[i_step, :search_lens[i_step], pred_row])
+        # true_peak = find_peak_max(data[i_step, :search_lens[i_step], true_row], 0.1)
+        # if true_peak is None:
+        #     peak_not_found += 1
+        #     continue
+        # pred_peak = find_peak_max(data[i_step, :search_lens[i_step], pred_row], 0.1)
+        # if pred_peak is None:
+        #     pred_peak = np.max(data[i_step, :search_lens[i_step], pred_row])
         true_peaks.append(true_peak / GRAVITY * 100)
         pred_peaks.append(pred_peak / GRAVITY * 100)
     # print('Peaks of {:3.1f}% steps not found.'.format(peak_not_found/data.shape[0]*100))
