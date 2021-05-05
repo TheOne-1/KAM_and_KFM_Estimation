@@ -10,7 +10,7 @@ An [example implementation](#running-example-code) is provided.
 ## Environment
 
 ### Software
-Python 3.8; Pytorch 1.7.0; Cuda 11.0; Cudnn 8.0.4; matplotlib 3.3.2; numpy 1.19.4; h5py 3.0.0
+Python 3.8; Pytorch 1.7.0; Cuda 11.0; Cudnn 8.0.4; matplotlib 3.3.2; numpy 1.19.4; h5py 3.0.0; Scikit-learn 0.23.2
 
 Versions different from ours may still work.
 
@@ -136,7 +136,7 @@ Five types of models are provided:
 (3) an eight-IMU-based model
 ([KAM](./trained_models_and_example_data/8IMU_KAM.pth), [KFM](./trained_models_and_example_data/8IMU_KFM.pth))
 
-(4) a three-IMU-based model (pelvis and feet), and
+(4) a three-IMU-based model (pelvis and feet)
 ([KAM](./trained_models_and_example_data/3IMU_KAM.pth), [KFM](./trained_models_and_example_data/3IMU_KFM.pth))
 
 (5) a camera-based model.

@@ -31,7 +31,7 @@ def draw_f3(mean_std_kam, mean_std_kfm):
 
     def subplot_1_style():
         ax = plt.gca()
-        ax.set_ylabel('Knee Adduction Moment (%BW$\cdot$BH)', fontdict=FONT_DICT_SMALL)
+        ax.set_ylabel('KAM (%BW$\cdot$BH)', fontdict=FONT_DICT_SMALL, labelpad=15)
         ax.set_ylim(-2, 4)
         ticks = [-2, 0, 2, 4]
         ax.set_yticks(ticks)
@@ -39,21 +39,21 @@ def draw_f3(mean_std_kam, mean_std_kfm):
 
     def subplot_2_style():
         ax = plt.gca()
-        ax.set_ylabel('Knee Flexion Moment (%BW$\cdot$BH)', fontdict=FONT_DICT_SMALL)
+        ax.set_ylabel('KFM (%BW$\cdot$BH)', fontdict=FONT_DICT_SMALL, labelpad=15)
         ax.set_ylim(-2.5, 7.5)
         ticks = [-2.5, 0, 2.5, 5, 7.5]
         ax.set_yticks(ticks)
         ax.set_yticklabels(ticks, fontdict=FONT_DICT_SMALL)
 
     rc('font', family='Arial')
-    fig = plt.figure(figsize=(9, 12))
+    fig = plt.figure(figsize=(9, 9))
     gs = gridspec.GridSpec(nrows=3, ncols=1, height_ratios=[1, 10, 10])        # , width_ratios=[8, 1, 8]
     draw_subplot(fig.add_subplot(gs[1, 0]), mean_std_kam)
     subplot_1_style()
     draw_subplot(fig.add_subplot(gs[2, 0]), mean_std_kfm)
     subplot_2_style()
-    plt.tight_layout(rect=[0., -0., 1., 1], w_pad=3)
-    plt.legend(handlelength=3, bbox_to_anchor=(0.8, 2.5), ncol=1, fontsize=FONT_DICT_SMALL['fontsize'],
+    plt.tight_layout(rect=[0., -0., 1., 1.04], w_pad=3)
+    plt.legend(handlelength=3, bbox_to_anchor=(0.8, 2.6), ncol=1, fontsize=FONT_DICT_SMALL['fontsize'],
                frameon=False)
     save_fig('c5_overall')
 

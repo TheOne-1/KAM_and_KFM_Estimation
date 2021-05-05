@@ -62,9 +62,10 @@ def draw_f7_bar(_mean, _std, sigifi_sign_fun):
     format_axis()
     x_locs = [i + x for x in [0, 4, 9, 13] for i in range(3)]
     bars = []
+    color_0, color_1, color_2 = np.array([0, 103, 137]) / 255, np.array([79, 168, 205]) / 255, np.array([122, 207, 229]) / 255
     for i_condition in range(4):
         bars.append(plt.bar(x_locs[i_condition*3:(i_condition+1)*3], _mean[i_condition*3:(i_condition+1)*3],
-                            width=0.7, color=[[0.72, 0.47, 0.22], [0.9, 0.62, 0.29], [1, 0.87, 0.4]]))
+                            width=0.7, color=[color_0, color_1, color_2]))
         sigifi_sign_fun(_mean[i_condition * 3:(i_condition + 1) * 3], _std[i_condition * 3:(i_condition + 1) * 3],
                         x_locs[i_condition * 3:(i_condition + 1) * 3], one_two=False)
 
@@ -104,7 +105,7 @@ if __name__ == "__main__":
 
     draw_f7_bar([result.mean() for result in combo_results], [result.sem() for result in combo_results], draw_sigifi_sign)
     print_diff_from_the_first_bar(combo_results)
-    save_fig('f7')
+    save_fig('f7', 600)
     plt.show()
 
 

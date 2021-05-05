@@ -35,7 +35,7 @@ def draw_f6_various_imus(_mean, _std, title):
     format_ticks()
     sel_locs = range(0, 13, 2)
     for i_condition in range(7):
-        _bars = plt.bar(sel_locs[i_condition], _mean[i_condition], color=[0.8, 0.3, 0.3], width=0.6)
+        _bars = plt.bar(sel_locs[i_condition], _mean[i_condition], color=[0, 103, 137], width=0.6)
     ebar, caplines, barlinecols = plt.errorbar(sel_locs, _mean, _std,
                                                capsize=0, ecolor='black', fmt='none', lolims=True,
                                                elinewidth=LINE_WIDTH)
@@ -67,16 +67,12 @@ def draw_f6_kam_and_kfm(mean_, std_, sigifi_sign_fun):
     bar_ = []
     for i_condition in range(6):
         bar_.append(plt.bar(bar_locs[i_condition], mean_[i_condition],
-                               color=[0.72, 0.47, 0.22], width=1))
+                               color=np.array([0, 103, 137]) / 255, width=1))
     ebar, caplines, barlinecols = plt.errorbar(bar_locs, mean_, std_,
                                                capsize=0, ecolor='black', fmt='none', lolims=True,
                                                elinewidth=LINE_WIDTH)
     format_errorbar_cap(caplines, 20)
     plt.tight_layout(rect=[0., -0.01, 1, 1.01], w_pad=2, h_pad=3)
-    # plt.legend([bar_[0], bar_[-1]],
-    #            ['KAM estimation', 'KFM estimation'],
-    #            handlelength=3, bbox_to_anchor=(0.3, 0.95), ncol=1, fontsize=FONT_SIZE,
-    #            frameon=False, labelspacing=0.2)
     l2 = lines.Line2D([0.54, 0.54], [0.01, 0.96], linestyle='--', transform=fig.transFigure, color='gray')
     fig.lines.extend([l2])
 
@@ -191,5 +187,5 @@ if __name__ == "__main__":
     print_mean_rrmse(mean_compare_)
     # draw_f6_for_ISB(mean_compare_, sem_compare_, sigifi_sign_8)
     draw_f6_kam_and_kfm(mean_compare_, sem_compare_, sigifi_sign_8)
-    save_fig('f6')
+    save_fig('f6', 600)
     plt.show()

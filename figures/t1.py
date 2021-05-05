@@ -14,7 +14,7 @@ if __name__ == '__main__':
         result_df = pd.read_csv(result_date + target + '/estimation_result_individual.csv')
 
         """ print table """
-        for trial, trial_print in zip(['baseline', 'step_width', 'fpa', 'trunk_sway'], ['Baseline', 'Step Width', 'FPA', 'Trunk Sway']):
+        for trial, trial_print in zip(['baseline', 'fpa', 'step_width', 'trunk_sway'], ['Baseline', 'FPA', 'Step Width', 'Trunk Sway']):
             trial_df = result_df[result_df['trial'] == trial][[metric_incre + result_name for result_name in result_names]]
             print('\t\t& {:12}'.format(trial_print), end='')
             imu_camera_result = trial_df[metric_incre + result_names[0]]

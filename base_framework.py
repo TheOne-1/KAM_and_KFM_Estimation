@@ -210,7 +210,7 @@ class BaseFramework:
         y_resampled = np.zeros([y.shape[0], resampled_len, y.shape[2]])
         for i_output in range(y.shape[2]):
             for j_row in range(y.shape[0]):
-                data_array = y[j_row, weight[j_row, :, i_output] == 1, i_output]
+                data_array = y[j_row, np.abs(weight[j_row, :, i_output] - 0) > 1e-5, i_output]
                 y_resampled[j_row, :, i_output] = BaseFramework.resample_one_array(data_array, resampled_len)
         return y_resampled, np.full(y_resampled.shape, 1)
 
