@@ -10,7 +10,7 @@ An [example implementation](#running-example-code) is provided.
 ## Environment
 
 ### Software
-Python 3.8; Pytorch 1.7.0; Cuda 11.0; Cudnn 8.0.4; matplotlib 3.3.2; numpy 1.19.4; h5py 3.0.0
+Python 3.8; Pytorch 1.7.0; Cuda 11.0; Cudnn 8.0.4; matplotlib 3.3.2; numpy 1.19.4; h5py 3.0.0; Scikit-learn 0.23.2
 
 Versions different from ours may still work.
 

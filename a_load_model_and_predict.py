@@ -3,6 +3,7 @@ import copy
 import torch
 from torch.nn.utils.rnn import pack_padded_sequence, pad_packed_sequence
 import torch.nn as nn
+from sklearn.preprocessing import MinMaxScaler, StandardScaler
 import json
 import matplotlib.pyplot as plt
 import numpy as np
