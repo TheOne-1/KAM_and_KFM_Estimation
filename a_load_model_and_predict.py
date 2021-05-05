@@ -1,7 +1,8 @@
 import h5py
-from alan_framework import FourSourceModel, TianRNN
 import copy
 import torch
+from torch.nn.utils.rnn import pack_padded_sequence, pad_packed_sequence
+import torch.nn as nn
 import json
 import matplotlib.pyplot as plt
 import numpy as np
@@ -20,6 +21,73 @@ R_FOOT_SHANK_GYR = ["Gyro" + axis + sensor for sensor in ['R_SHANK', 'R_FOOT'] f
 SEGMENT_MASS_PERCENT = {'L_FOOT': 1.37, 'R_FOOT': 1.37, 'R_SHANK': 4.33, 'R_THIGH': 14.16,
                         'WAIST': 11.17, 'CHEST': 15.96, 'L_SHANK': 4.33, 'L_THIGH': 14.16}
 GRAVITY = 9.81
+
+
+# define deep learning model
+class TianRNN(nn.Module):
+    def __init__(self, x_dim, y_dim, input_fields, seed=0, nlayer=2):
+        super(TianRNN, self).__init__()
+        torch.manual_seed(seed)
+        self.rnn_layer = nn.LSTM(x_dim, globals()['lstm_unit'], nlayer, batch_first=True, bidirectional=True)
+        self.y_dim = y_dim
+        self.r2d = nn.Linear(2 * globals()['lstm_unit'], globals()['fcnn_unit'], bias=False)
+        self.d2o = nn.Linear(globals()['fcnn_unit'], y_dim, bias=False)
+        self.relu = nn.ReLU()
+        self.input_fields = input_fields
+        for layer in [self.r2d, self.d2o]:
+            nn.init.xavier_normal_(layer.weight)
+        for name, param in self.rnn_layer.named_parameters():
+            if 'bias' in name:
+                nn.init.constant_(param, 0.0)
+            elif 'weight' in name:
+                nn.init.xavier_normal_(param)
+
+    def forward(self, sequence, lens):
+        sequence = pack_padded_sequence(sequence, lens, batch_first=True, enforce_sorted=False)
+        lstm_out, _ = self.rnn_layer(sequence)
+        lstm_out, _ = pad_packed_sequence(lstm_out, batch_first=True, total_length=152)
+        sequence = self.r2d(lstm_out)
+        sequence = self.relu(sequence)
+        output = self.d2o(sequence)
+        return output
+
+
+class FourSourceModel(nn.Module):
+    def __init__(self, model_fx, model_fz, model_rx, model_rz, scalars):
+        super(FourSourceModel, self).__init__()
+        self.model_fx = model_fx
+        self.model_fz = model_fz
+        self.model_rx = model_rx
+        self.model_rz = model_rz
+        self.scalars = scalars
+
+    def forward(self, x_fx, x_fz, x_rx, x_rz, anthro, lens):
+        out_fx = self.model_fx(x_fx, lens)
+        out_fz = self.model_fz(x_fz, lens)
+        out_rx = self.model_rx(x_rx, lens)
+        out_rz = self.model_rz(x_rz, lens)
+        zero_padding_loc = (out_fx == 0.) & (out_fz == 0.) & (out_rx == 0.) & (out_rz == 0.)
+        out_fx = self.inverse_scaling(out_fx, 'midout_force_x')
+        out_fz = self.inverse_scaling(out_fz, 'midout_force_z')
+        out_rx = self.inverse_scaling(out_rx, 'midout_r_x')
+        out_rz = self.inverse_scaling(out_rz, 'midout_r_z')
+        weight = anthro[:, 0, 0].unsqueeze(1).unsqueeze(2)
+        height = anthro[:, 0, 1].unsqueeze(1).unsqueeze(2)
+        output = out_fx * out_rz - out_fz * out_rx
+        output = torch.div(output, weight * height)
+        output[zero_padding_loc] = 0
+        return output
+
+    def inverse_scaling(self, data, fields):
+        data[data == 0.] = np.nan
+        if isinstance(self.scalars[fields], MinMaxScaler):
+            bias_, scale_ = self.scalars[fields].min_[0], self.scalars[fields].scale_[0]
+        elif isinstance(self.scalars[fields], StandardScaler):
+            bias_, scale_ = self.scalars[fields].mean_[0], self.scalars[fields].scale_[0]
+        data = torch.add(data, - bias_)
+        data = torch.div(data, scale_)
+        data[torch.isnan(data)] = 0.
+        return data
 
 
 # define preprocess functions
