@@ -90,7 +90,8 @@ def draw_f9_subplot(mean_, std_, p_between_pattern, ax, moment_name):
     format_axis()
     format_x_ticks()
     bar_locs = [x + y for x in range(0, 27, 3) for y in [0, 1]]
-    colors = ['green', [0.72, 0.47, 0.22]] * int(len(bar_locs) / 2)
+    color_0, color_1 = np.array([255, 166, 0]) / 255, np.array([0, 103, 137]) / 255
+    colors = [color_0, color_1] * int(len(bar_locs) / 2)
     bar_ = []
     for i_condition in range(len(bar_locs)):
         bar_.append(plt.bar(bar_locs[i_condition], mean_[i_condition], color=colors[i_condition], width=1))

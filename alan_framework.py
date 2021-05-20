@@ -524,6 +524,7 @@ if __name__ == "__main__":
                       for axis in ['_x', '_y']]
     VID_90_FIELDS = [loc + axis + '_90' for loc in ["LShoulder", "RShoulder", "RKnee", "LKnee", "RAnkle", "LAnkle"] for axis in ['_x', '_y']]
     R_FOOT_SHANK_GYR = ["Gyro" + axis + sensor for sensor in ['R_SHANK', 'R_FOOT'] for axis in ['X_', 'Y_', 'Z_']]
+    R_FOOT_GYR = ["Gyro" + axis + sensor for sensor in ['R_FOOT'] for axis in ['X_', 'Y_', 'Z_']]
 
     ACC_GYR_ALL = [field + '_' + sensor for sensor in SENSOR_LIST for field in IMU_FIELDS[:6]]
     ACC_GYR_3 = [field + '_' + sensor for sensor in ['L_FOOT', 'R_FOOT', 'WAIST'] for field in IMU_FIELDS[:6]]
@@ -531,7 +532,7 @@ if __name__ == "__main__":
 
     input_vid_2 = {'force_x': VID_180_FIELDS, 'force_y': VID_90_FIELDS, 'force_z': VID_180_FIELDS, 'r_x': VID_180_FIELDS, 'r_y': VID_90_FIELDS, 'r_z': ['RKnee_y_90']}
     input_imu_8_all = {'force_x': ACC_GYR_ALL, 'force_y': ACC_GYR_ALL, 'force_z': ACC_GYR_ALL, 'r_x': ACC_GYR_ALL, 'r_y': ACC_GYR_ALL, 'r_z': R_FOOT_SHANK_GYR}
-    input_imu_3_all = {'force_x': ACC_GYR_3, 'force_y': ACC_GYR_3, 'force_z': ACC_GYR_3, 'r_x': ACC_GYR_3, 'r_y': ACC_GYR_3, 'r_z': R_FOOT_SHANK_GYR}
+    input_imu_3_all = {'force_x': ACC_GYR_3, 'force_y': ACC_GYR_3, 'force_z': ACC_GYR_3, 'r_x': ACC_GYR_3, 'r_y': ACC_GYR_3, 'r_z': R_FOOT_GYR}
     input_imu_1_all = {'force_x': ACC_GYR_1, 'force_y': ACC_GYR_1, 'force_z': ACC_GYR_1, 'r_x': ACC_GYR_1, 'r_y': ACC_GYR_1, 'r_z': ACC_GYR_1}
 
     """ Use all the IMU channels """
