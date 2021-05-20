@@ -12,7 +12,9 @@ def vid_static_cali():
     for sub_name, sub_data in data_all_sub.items():
         static_side_df = pd.read_csv(DATA_PATH + '/' + sub_name + '/combined/static_side.csv', index_col=0)
         r_ankle_z = np.mean(static_side_df['RAnkle_y_90'])
-        sub_data[:, :, vid_y_90_col_loc] = sub_data[:, :, vid_y_90_col_loc] - r_ankle_z + 1500
+        for i_step in range(sub_data.shape[0]):
+            zero_loc = np.where(sub_data[i_step, :, 0] == 0)[0]
+            sub_data[i_step, :zero_loc[0], vid_y_90_col_loc] = sub_data[i_step, :zero_loc[0], vid_y_90_col_loc] - r_ankle_z + 1500
         data_all_sub[sub_name] = sub_data
 
 
@@ -39,7 +41,6 @@ if __name__ == "__main__":
                     sub_num_str = 'subject_' + str(i_sub+1)
                 hf.create_dataset(sub_num_str, data=data_all_sub[SUBJECTS[i_sub]][:, :, example_col_loc], dtype='float32')
                 hf.attrs['columns'] = json.dumps(EXAMPLE_DATA_FIELDS)
-
 
     """Create model file"""
     test_name = '0307'
