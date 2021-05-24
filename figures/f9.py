@@ -151,7 +151,6 @@ if __name__ == "__main__":
             for i_subject, subject in enumerate(SUBJECTS):
                 sub_param, sub_data = gait_param_all_sub[subject], data[subject]
                 sub_trial_data_sorted, param_sorted = sort_gait_cycles_according_to_param(config, sub_param, sub_data)
-                print(len(sub_trial_data_sorted))
                 small_steps, normal_steps, large_steps = np.array_split(sub_trial_data_sorted, 3)
                 small_param, normal_param, large_param = np.array_split(param_sorted, 3)
                 for steps, param, pattern_name in zip((small_steps, normal_steps, large_steps), (small_param, normal_param, large_param), config['pattern_names']):

@@ -20,12 +20,11 @@ def init_figure():
 def draw_subplot(ax, trial_index, mean_std_IMU_OP):
     arr_true_mean = mean_std_IMU_OP['true_mean']
     arr_pred_mean_IMU_OP = mean_std_IMU_OP['pred_mean']
-    # arr_pred_mean_IMU = mean_std_IMU['pred_mean']
-
+    color_0, color_1 = np.array([255, 166, 0]) / 255, np.array([0, 103, 137]) / 255
     axis_x = range(arr_true_mean.shape[0])
-    ax.plot(axis_x, arr_true_mean, color='green', label='Laboratory Force Plate \& Optical Motion Capture',
+    ax.plot(axis_x, arr_true_mean, color=color_0, label='Laboratory Force Plate \& Optical Motion Capture',
             linewidth=LINE_WIDTH * 1)
-    ax.plot(axis_x, arr_pred_mean_IMU_OP, '--', color='peru', label='Portable IMU \& Smartphone Camera',
+    ax.plot(axis_x, arr_pred_mean_IMU_OP, '--', color=color_1, label='Portable IMU \& Smartphone Camera',
             linewidth=LINE_WIDTH * 1)
     # ax.plot(axis_x, arr_pred_mean_IMU, '--', color='peru', label='Portable IMU', linewidth=LINE_WIDTH * 1)
     ax.tick_params(labelsize=FONT_DICT['fontsize'])

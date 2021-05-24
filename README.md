@@ -59,14 +59,14 @@ and x-axis being perpendicular to the y and z axes following the right-hand rule
 ![img.png](figures/readme_fig/markers_posterior_view.png)
 
 ## Data Format 
-Each subject's data should be stored as a 3 dimensional matrix.
+Each subject's data should be stored as a 3-dimensional matrix.
 The first dimension is walking steps. The second dimension is
 time step from heel-strike - 20 samples to toe-off + 20 samples. Both heel-strike and toe-off are detected using right
 foot IMU data. Its length is 152, which is the lenghth of the longest step. Zeros were appended in the end of shorter
-steps. The third dimension contains 261 data fields, which are described in the following section.
+steps. The third dimension contains 256 data fields, which are described in the following section.
 
 [example_data.h5](./trained_models_and_example_data/example_data.h5) is a correctly formatted example data file
-containing 10 walking step of 2 subjects.
+containing 10 walking step of 2 subjects. The dimension of each subject's data is: 10 steps * 152 samples * 256 data fields.
 
 ### Data fields
 #### Basic information
