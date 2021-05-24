@@ -114,7 +114,7 @@ class AlanFramework(BaseFramework):
 
     def train_model(self, x_train, y_train, x_validation=None, y_validation=None, validation_weight=None):
         sub_model_hyper_param = {'epoch': globals()['epoch_1'], 'batch_size': globals()['batch_size_1'],
-                                 'lr': globals()['lr_1'], 'weight_decay': 0, 'use_ratio': 100}      # !!!
+                                 'lr': globals()['lr_1'], 'weight_decay': 0, 'use_ratio': 100}
         self.train_step_lens, self.validation_step_lens = self._get_step_len(x_train), self._get_step_len(x_validation)
 
         sub_models = []
@@ -413,12 +413,6 @@ class AlanFramework(BaseFramework):
         best_param = int_params(best_param)
         show_hyper(trials, self.result_dir)
 
-        # if self._y_fields['main_output'] == ['EXT_KM_X']:
-        #     best_param = {'epoch_1': 10, 'lr_1': 0.002786152260835523, 'batch_size_1': 20, 'lstm_unit': 40, 'fcnn_unit': 40}
-        # else:
-        #     best_param = {'epoch_1': 8, 'lr_1': 0.0023519313172782395, 'batch_size_1': 40, 'lstm_unit': 20, 'fcnn_unit': 5}
-        # best_param = {'epoch_1': 10, 'lr_1': 0.002786152260835523, 'batch_size_1': 20, 'lstm_unit': 40, 'fcnn_unit': 40}
-
         logging.disabled = False
         globals().update(best_param)
         best_param = {param: globals()[param] for param in ['epoch_1', 'lr_1', 'batch_size_1', 'weight_decay_1',
@@ -518,23 +512,23 @@ def run_kfm(input_imu, input_vid, result_dir):
     run(x_fields_renamed, y_fields_renamed, ['EXT_KM_X'], result_dir)
 
 
+data_path = DATA_PATH + '/40samples+stance.h5'
+VID_180_FIELDS = [loc + axis + '_180' for loc in ["LShoulder", "RShoulder", "RKnee", "LKnee", "RAnkle", "LAnkle"]
+                  for axis in ['_x', '_y']]
+VID_90_FIELDS = [loc + axis + '_90' for loc in ["LShoulder", "RShoulder", "RKnee", "LKnee", "RAnkle", "LAnkle"] for axis in ['_x', '_y']]
+R_FOOT_SHANK_GYR = ["Gyro" + axis + sensor for sensor in ['R_SHANK', 'R_FOOT'] for axis in ['X_', 'Y_', 'Z_']]
+R_FOOT_GYR = ["Gyro" + axis + sensor for sensor in ['R_FOOT'] for axis in ['X_', 'Y_', 'Z_']]
+
+ACC_GYR_ALL = [field + '_' + sensor for sensor in SENSOR_LIST for field in IMU_FIELDS[:6]]
+ACC_GYR_3 = [field + '_' + sensor for sensor in ['L_FOOT', 'R_FOOT', 'WAIST'] for field in IMU_FIELDS[:6]]
+ACC_GYR_1 = [field + '_' + sensor for sensor in ['WAIST'] for field in IMU_FIELDS[:6]]
+
+input_vid_2 = {'force_x': VID_180_FIELDS, 'force_y': VID_90_FIELDS, 'force_z': VID_180_FIELDS, 'r_x': VID_180_FIELDS, 'r_y': VID_90_FIELDS, 'r_z': ['RKnee_y_90']}
+input_imu_8_all = {'force_x': ACC_GYR_ALL, 'force_y': ACC_GYR_ALL, 'force_z': ACC_GYR_ALL, 'r_x': ACC_GYR_ALL, 'r_y': ACC_GYR_ALL, 'r_z': R_FOOT_SHANK_GYR}
+input_imu_3_all = {'force_x': ACC_GYR_3, 'force_y': ACC_GYR_3, 'force_z': ACC_GYR_3, 'r_x': ACC_GYR_3, 'r_y': ACC_GYR_3, 'r_z': R_FOOT_GYR}
+input_imu_1_all = {'force_x': ACC_GYR_1, 'force_y': ACC_GYR_1, 'force_z': ACC_GYR_1, 'r_x': ACC_GYR_1, 'r_y': ACC_GYR_1, 'r_z': ACC_GYR_1}
+
 if __name__ == "__main__":
-    data_path = DATA_PATH + '/40samples+stance.h5'
-    VID_180_FIELDS = [loc + axis + '_180' for loc in ["LShoulder", "RShoulder", "RKnee", "LKnee", "RAnkle", "LAnkle"]
-                      for axis in ['_x', '_y']]
-    VID_90_FIELDS = [loc + axis + '_90' for loc in ["LShoulder", "RShoulder", "RKnee", "LKnee", "RAnkle", "LAnkle"] for axis in ['_x', '_y']]
-    R_FOOT_SHANK_GYR = ["Gyro" + axis + sensor for sensor in ['R_SHANK', 'R_FOOT'] for axis in ['X_', 'Y_', 'Z_']]
-    R_FOOT_GYR = ["Gyro" + axis + sensor for sensor in ['R_FOOT'] for axis in ['X_', 'Y_', 'Z_']]
-
-    ACC_GYR_ALL = [field + '_' + sensor for sensor in SENSOR_LIST for field in IMU_FIELDS[:6]]
-    ACC_GYR_3 = [field + '_' + sensor for sensor in ['L_FOOT', 'R_FOOT', 'WAIST'] for field in IMU_FIELDS[:6]]
-    ACC_GYR_1 = [field + '_' + sensor for sensor in ['WAIST'] for field in IMU_FIELDS[:6]]
-
-    input_vid_2 = {'force_x': VID_180_FIELDS, 'force_y': VID_90_FIELDS, 'force_z': VID_180_FIELDS, 'r_x': VID_180_FIELDS, 'r_y': VID_90_FIELDS, 'r_z': ['RKnee_y_90']}
-    input_imu_8_all = {'force_x': ACC_GYR_ALL, 'force_y': ACC_GYR_ALL, 'force_z': ACC_GYR_ALL, 'r_x': ACC_GYR_ALL, 'r_y': ACC_GYR_ALL, 'r_z': R_FOOT_SHANK_GYR}
-    input_imu_3_all = {'force_x': ACC_GYR_3, 'force_y': ACC_GYR_3, 'force_z': ACC_GYR_3, 'r_x': ACC_GYR_3, 'r_y': ACC_GYR_3, 'r_z': R_FOOT_GYR}
-    input_imu_1_all = {'force_x': ACC_GYR_1, 'force_y': ACC_GYR_1, 'force_z': ACC_GYR_1, 'r_x': ACC_GYR_1, 'r_y': ACC_GYR_1, 'r_z': ACC_GYR_1}
-
     """ Use all the IMU channels """
     result_date = '0326'
     run_kam(input_imu=input_imu_8_all, input_vid=input_vid_2, result_dir=result_date + 'KAM/8IMU_2camera')
