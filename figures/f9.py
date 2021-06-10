@@ -2,7 +2,7 @@ import h5py
 import json
 import pandas as pd
 import numpy as np
-from const import LINE_WIDTH, GRAVITY, FONT_DICT_SMALL, SUBJECTS, TRIALS
+from const import LINE_WIDTH, FONT_DICT_SMALL, SUBJECTS, TRIALS
 from figures.f6 import save_fig
 from figures.PaperFigures import get_peak_of_each_gait_cycle, format_axis, get_mean_gait_cycle_then_find_peak
 import matplotlib.pyplot as plt
@@ -15,29 +15,21 @@ import matplotlib.gridspec as gridspec
 
 def draw_sigifi_sign(mean_, std_, bar_locs, p_between_pattern, ylim):
     one_two, two_three, one_three = p_between_pattern
-    lo = [0. for i in range(3)]        # line offset
-    for i_bar, there_are_two_lines in enumerate([one_two and one_three, one_two and two_three, two_three and one_three]):
-        if there_are_two_lines:
-            lo[i_bar] = 0.1
     y_top = max([a + b for a, b in zip(mean_, std_)])
-
-    for pair, loc_0, loc_1 in zip([one_two, two_three, one_three], [0, 1, 0], [1, 2, 2]):
-        if not pair: continue
+    top_lines = [y_top + 0.07 * ylim, y_top + 0.2 * ylim, y_top + 0.33 * ylim]
+    for i_pair, [pair, loc_0, loc_1] in enumerate(zip([one_two, two_three, one_three], [0, 1, 0], [1, 2, 2])):
+        if not pair[0] and not pair[1]: continue
+        top_line = top_lines.pop(0)
         if loc_0 == 0 and loc_1 == 2:
-            lo_sign = -1
-            if not one_two and not two_three:
-                top_line = y_top + 0.07 * ylim
-            else:
-                top_line = y_top + 0.22 * ylim
             coe_0, coe_1 = 0.53, 0.47
         else:
-            lo_sign = 1
-            top_line = y_top + 0.08 * ylim
             coe_0, coe_1 = 0.56, 0.44
-        diff_line_0x = [bar_locs[loc_0]+lo_sign*lo[loc_0], bar_locs[loc_0]+lo_sign*lo[loc_0], bar_locs[loc_1]-lo_sign*lo[loc_1], bar_locs[loc_1]-lo_sign*lo[loc_1]]
-        diff_line_0y = [mean_[loc_0] + std_[loc_0] + 0.04 * ylim, top_line, top_line, mean_[loc_1] + std_[loc_1] + 0.04 * ylim]
-        plt.plot(diff_line_0x, diff_line_0y, 'black', linewidth=LINE_WIDTH)
-        plt.text((bar_locs[loc_0]+lo_sign*lo[loc_0])*coe_0 + (bar_locs[loc_1]-lo_sign*lo[loc_1])*coe_1, top_line - 0.06 * ylim, '*', color='black', size=40)
+        if pair[0]:
+            plt.plot([bar_locs[2*loc_0], bar_locs[2*loc_1]], [top_line, top_line], color=color_0, linewidth=LINE_WIDTH)
+        if pair[1]:
+            plt.plot([bar_locs[2*loc_0+1], bar_locs[2*loc_1+1]], [top_line-0.025*ylim, top_line-0.025*ylim],
+                     color=color_1, linewidth=LINE_WIDTH)
+        plt.text(bar_locs[2*loc_0]*coe_0 + bar_locs[2*loc_1+1]*coe_1, top_line - 0.05 * ylim, '*', color='black', size=28)
 
 
 def format_errorbar_cap(caplines, size=15):
@@ -65,7 +57,7 @@ def init_f9():
 def draw_f9_subplot(mean_, std_, p_between_pattern, ax, moment_name):
     def format_kam_y_ticks():
         ax.set_ylabel('Peak KAM (%BW$\cdot$BH)', fontdict=FONT_DICT_SMALL)
-        ylim = 6
+        ylim = 8
         ax.set_ylim(0, ylim)
         ax.set_yticks(range(0, ylim+1, 2))
         ax.set_yticklabels(range(0, ylim+1, 2), fontdict=FONT_DICT_SMALL)
@@ -73,7 +65,7 @@ def draw_f9_subplot(mean_, std_, p_between_pattern, ax, moment_name):
 
     def format_kfm_y_ticks():
         ax.set_ylabel('Peak KFM (%BW$\cdot$BH)', fontdict=FONT_DICT_SMALL)
-        ylim = 10
+        ylim = 12
         ax.set_ylim(0, ylim)
         ax.set_yticks(range(0, ylim+1, 2))
         ax.set_yticklabels(range(0, ylim+1, 2), fontdict=FONT_DICT_SMALL)
@@ -90,7 +82,6 @@ def draw_f9_subplot(mean_, std_, p_between_pattern, ax, moment_name):
     format_axis()
     format_x_ticks()
     bar_locs = [x + y for x in range(0, 27, 3) for y in [0, 1]]
-    color_0, color_1 = np.array([255, 166, 0]) / 255, np.array([0, 103, 137]) / 255       # [255, 166, 0]
     colors = [color_0, color_1] * int(len(bar_locs) / 2)
     bar_ = []
     for i_condition in range(len(bar_locs)):
@@ -106,8 +97,7 @@ def draw_f9_subplot(mean_, std_, p_between_pattern, ax, moment_name):
     elif moment_name == 'KFM':
         ylim = format_kfm_y_ticks()
     for i_trial, trial_name in enumerate(['fpa', 'step_width', 'trunk_sway']):
-        index = [i_trial*6, i_trial*6 + 2, i_trial*6 + 4]
-        draw_sigifi_sign([mean_[x] for x in index], [std_[x] for x in index], [bar_locs[x] for x in index],
+        draw_sigifi_sign(mean_[6*i_trial:6*i_trial+6], std_[6*i_trial:6*i_trial+6], bar_locs[6*i_trial:6*i_trial+6],
                          p_between_pattern[trial_name], ylim)
         plt.tight_layout(rect=[0., -0.01, 1, 1.01], w_pad=2, h_pad=1)
 
@@ -121,6 +111,7 @@ def finalize_f9(fig):
 
 if __name__ == "__main__":
     data_path = 'D:\Tian\Research\Projects\VideoIMUCombined\experiment_data\KAM\\'
+    color_0, color_1 = np.array([255, 166, 0]) / 255, np.array([0, 103, 137]) / 255       # [255, 166, 0]
     result_date = 'results/0326'
     with h5py.File(result_date + 'KAM/8IMU_2camera/results.h5', 'r') as hf:
         kam_data_all_sub = {subject: subject_data[:] for subject, subject_data in hf.items()}
@@ -165,22 +156,23 @@ if __name__ == "__main__":
     for i_moment, moment_name in enumerate(['KAM', 'KFM']):
         moment_average, moment_std = [], []
         print(config)
-        p_between_pattern = {config['trial_name']: [False, False, False] for config in [fpa_config, ts_config, sw_config]}
+        p_between_pattern = {config['trial_name']: [[False, False], [False, False], [False, False]] for config in [fpa_config, ts_config, sw_config]}
         for config in [fpa_config, sw_config, ts_config]:
             config_df = peak_of_gait_df[(peak_of_gait_df['moment'] == moment_name) & (peak_of_gait_df['trial_name'] == config['trial_name'])]
             for pattern_name in config['pattern_names']:
                 pattern_df = config_df[config_df['pattern'] == pattern_name]
                 moment_average.extend([pattern_df['true_peak'].mean(), pattern_df['pred_peak'].mean()])
-                moment_std.extend([pattern_df['true_peak'].sem(), pattern_df['pred_peak'].sem()])
+                moment_std.extend([pattern_df['true_peak'].std(), pattern_df['pred_peak'].std()])
                 p_between_models = round(ttest_rel(pattern_df['true_peak'], pattern_df['pred_peak']).pvalue, 3)
                 print(p_between_models)
             for i_pair, pattern_pair in enumerate([(0, 1), (1, 2), (0, 2)]):
-                p_val = ttest_rel(
-                    config_df[config_df['pattern'] == config['pattern_names'][pattern_pair[0]]]['true_peak'].values,
-                    config_df[config_df['pattern'] == config['pattern_names'][pattern_pair[1]]]['true_peak'].values).pvalue
-                print('P between {} and {} is {}'.format(config['pattern_names'][pattern_pair[0]], config['pattern_names'][pattern_pair[1]], round(p_val, 3)))
-                if p_val < 0.05:
-                    p_between_pattern[config['trial_name']][i_pair] = True
+                pattern_0_results = config_df[config_df['pattern'] == config['pattern_names'][pattern_pair[0]]]
+                pattern_1_results = config_df[config_df['pattern'] == config['pattern_names'][pattern_pair[1]]]
+                p_true = ttest_rel(pattern_0_results['true_peak'].values, pattern_1_results['true_peak'].values).pvalue
+                p_pred = ttest_rel(pattern_0_results['pred_peak'].values, pattern_1_results['pred_peak'].values).pvalue
+                print('P between {} and {} is {} (ground-truth) and {} (prediction)'.format(
+                    config['pattern_names'][pattern_pair[0]], config['pattern_names'][pattern_pair[1]], round(p_true, 3), round(p_pred, 3)))
+                p_between_pattern[config['trial_name']][i_pair] = p_true < 0.05, p_pred < 0.05
         ax = fig.add_subplot(gs[i_moment, 0])
         draw_f9_subplot(moment_average, moment_std, p_between_pattern, ax, moment_name)
     finalize_f9(fig)
