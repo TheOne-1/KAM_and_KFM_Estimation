@@ -113,22 +113,22 @@ def sigifi_sign_8(mean_, std_, bar_locs):
     # star_offset =
     for i, lo in zip([0, 3], [(0.1, 0., 0.), (0.1, 0.1, 0.1)]):
         y_top = max([a + b for a, b in zip(mean_[i:i+3], std_[i:i+3])])
-        top_line_y0, top_line_y1 = y_top + 0.8, y_top + 2
+        top_line_y0, top_line_y1 = y_top + 0.8, y_top + 1.8
         diff_line_0x = [bar_locs[i]+lo[0], bar_locs[i]+lo[0], bar_locs[i+1]-lo[1], bar_locs[i+1]-lo[1]]
         diff_line_0y = [mean_[i] + std_[i] + x_offset, top_line_y0, top_line_y0, mean_[i+1] + std_[i+1] + x_offset]
         plt.plot(diff_line_0x, diff_line_0y, 'black', linewidth=LINE_WIDTH)
-        plt.text(bar_locs[i]*0.58 + bar_locs[i+1]*0.42, top_line_y0-0.35, '*', color='black', size=50)
+        plt.text(bar_locs[i]*0.58 + bar_locs[i+1]*0.42, top_line_y0-0.23, '*', fontdict={'fontname': 'Times New Roman'}, color='black', size=40)
 
         if i == 3:
             diff_line_0x = [bar_locs[i+1]+lo[1], bar_locs[i+1]+lo[1], bar_locs[i+2]-lo[2], bar_locs[i+2]-lo[2]]
             diff_line_0y = [mean_[i+1] + std_[i+1] + x_offset, top_line_y0, top_line_y0, mean_[i+2] + std_[i+2] + x_offset]
             plt.plot(diff_line_0x, diff_line_0y, 'black', linewidth=LINE_WIDTH)
-            plt.text(bar_locs[i+1]*0.58 + bar_locs[i+2]*0.42, top_line_y0-0.35, '*', color='black', size=50)
+            plt.text(bar_locs[i+1]*0.58 + bar_locs[i+2]*0.42, top_line_y0-0.23, '*', fontdict={'fontname': 'Times New Roman'}, color='black', size=40)
 
         diff_line_1x = [bar_locs[i]-lo[0], bar_locs[i]-lo[0], bar_locs[i+2]+lo[2], bar_locs[i+2]+lo[2]]
         diff_line_1y = [mean_[i] + std_[i] + x_offset, top_line_y1, top_line_y1, mean_[i+2] + std_[i+2] + x_offset]
         plt.plot(diff_line_1x, diff_line_1y, 'black', linewidth=LINE_WIDTH)
-        plt.text(bar_locs[i]*0.54 + bar_locs[i+2]*0.46, top_line_y1-0.35, '*', color='black', size=50)
+        plt.text(bar_locs[i]*0.54 + bar_locs[i+2]*0.46, top_line_y1-0.23, '*', fontdict={'fontname': 'Times New Roman'}, color='black', size=40)
 
 
 def sigifi_sign_8_asb(mean_, std_, bar_locs):
@@ -140,18 +140,18 @@ def sigifi_sign_8_asb(mean_, std_, bar_locs):
         diff_line_0x = [bar_locs[i]+lo[0], bar_locs[i]+lo[0], bar_locs[i+1]-lo[1], bar_locs[i+1]-lo[1]]
         diff_line_0y = [mean_[i] + std_[i] + x_offset, top_line_y0, top_line_y0, mean_[i+1] + std_[i+1] + x_offset]
         plt.plot(diff_line_0x, diff_line_0y, 'black', linewidth=LINE_WIDTH)
-        plt.text(bar_locs[i]*0.59 + bar_locs[i+1]*0.41, top_line_y0-0.5, '*', color='black', size=50)
+        plt.text(bar_locs[i]*0.59 + bar_locs[i+1]*0.41, top_line_y0-0.28, '*', fontdict={'fontname': 'Times New Roman'}, color='black', size=35)
 
         if i == 3:
             diff_line_0x = [bar_locs[i+1]+lo[1], bar_locs[i+1]+lo[1], bar_locs[i+2]-lo[2], bar_locs[i+2]-lo[2]]
             diff_line_0y = [mean_[i+1] + std_[i+1] + x_offset, top_line_y0, top_line_y0, mean_[i+2] + std_[i+2] + x_offset]
             plt.plot(diff_line_0x, diff_line_0y, 'black', linewidth=LINE_WIDTH)
-            plt.text(bar_locs[i+1]*0.59 + bar_locs[i+2]*0.41, top_line_y0-0.5, '*', color='black', size=50)
+            plt.text(bar_locs[i+1]*0.59 + bar_locs[i+2]*0.41, top_line_y0-0.28, '*', fontdict={'fontname': 'Times New Roman'}, color='black', size=35)
 
         diff_line_1x = [bar_locs[i]-lo[0], bar_locs[i]-lo[0], bar_locs[i+2]+lo[2], bar_locs[i+2]+lo[2]]
         diff_line_1y = [mean_[i] + std_[i] + x_offset, top_line_y1, top_line_y1, mean_[i+2] + std_[i+2] + x_offset]
         plt.plot(diff_line_1x, diff_line_1y, 'black', linewidth=LINE_WIDTH)
-        plt.text(bar_locs[i]*0.545 + bar_locs[i+2]*0.455, top_line_y1-0.5, '*', color='black', size=50)
+        plt.text(bar_locs[i]*0.545 + bar_locs[i+2]*0.455, top_line_y1-0.28, '*', fontdict={'fontname': 'Times New Roman'}, color='black', size=35)
 
 
 def print_anova_with_lsd(combo_results, combo_names=SENSOR_COMBINATION_SORTED):
@@ -208,7 +208,7 @@ if __name__ == "__main__":
     """ A KAM & KFM joint figure """
     pd.DataFrame(combo_results_all).to_csv('results/' + test_name + '_anova.csv', index=False)
     print_mean_rrmse(mean_compare_)
-    draw_f6_for_ASB(mean_compare_, sem_compare_, sigifi_sign_8_asb)
-    # draw_f6_kam_and_kfm(mean_compare_, sem_compare_, sigifi_sign_8)
+    # draw_f6_for_ASB(mean_compare_, sem_compare_, sigifi_sign_8_asb)
+    draw_f6_kam_and_kfm(mean_compare_, sem_compare_, sigifi_sign_8)
     save_fig('f6', 600)
     plt.show()

@@ -2,7 +2,7 @@
 By Tian Tan and Dianxin Wang
 
 ## Exclusive Summary
-This repository includes the code and models for the paper submitted to IEEE Transactions on Biomedical Engineering.
+This repository includes the code and models for a journal paper that is currently under review.
 When implementing our models, please place the cameras and IMUs according to [Hardware](#hardware)
 and store the data according to [Data Format](#data-format).
 An [example implementation](#running-example-code) is provided.

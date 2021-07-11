@@ -16,7 +16,7 @@ def draw_f3(mean_std_kam, mean_std_kfm):
         arr_true_mean, arr_true_std, arr_pred_mean, arr_pred_std = mean_std['true_mean'], mean_std['true_std'], \
                                                                    mean_std['pred_mean'], mean_std['pred_std']
         axis_x = range(arr_true_mean.shape[0])
-        color_0, color_1 = np.array([255, 166, 0]) / 255, np.array([0, 103, 137]) / 255
+        color_0, color_1 = np.array([90, 140, 20]) / 255, np.array([0, 103, 137]) / 255
         ax.plot(axis_x, arr_true_mean, color=color_0, label='Laboratory Force Plate & Optical Motion Capture', linewidth=LINE_WIDTH*2)
         ax.fill_between(axis_x, arr_true_mean - arr_true_std, arr_true_mean + arr_true_std,
                         facecolor=color_0, alpha=0.4)
@@ -41,8 +41,8 @@ def draw_f3(mean_std_kam, mean_std_kfm):
     def subplot_2_style():
         ax = plt.gca()
         ax.set_ylabel('Knee Flexion Moment (%BW$\cdot$BH)', fontdict=FONT_DICT_SMALL)
-        ax.set_ylim(-2.5, 7.5)
-        ticks = [-2.5, 0, 2.5, 5, 7.5]
+        ax.set_ylim(-3, 9)
+        ticks = [-3, 0, 3, 6, 9]
         ax.set_yticks(ticks)
         ax.set_yticklabels(ticks, fontdict=FONT_DICT_SMALL)
 
@@ -60,15 +60,16 @@ def draw_f3(mean_std_kam, mean_std_kfm):
 
 
 if __name__ == "__main__":
+    first_fold_subjects = ['s004_ouyangjue', 's009_sunyubo', 's011_wuxingze']
     with h5py.File('results/0326KAM/8IMU_2camera/results.h5', 'r') as hf:
-        kam_data_all_sub = {subject: subject_data[:] for subject, subject_data in hf.items()}
+        kam_data_sel_sub = {subject: subject_data[:] for subject, subject_data in hf.items() if subject in first_fold_subjects}
         kam_data_fields = json.loads(hf.attrs['columns'])
     with h5py.File('results/0326KFM/8IMU_2camera/results.h5', 'r') as hf:
-        kfm_data_all_sub = {subject: subject_data[:] for subject, subject_data in hf.items()}
+        kfm_data_sel_sub = {subject: subject_data[:] for subject, subject_data in hf.items() if subject in first_fold_subjects}
         kfm_data_fields = json.loads(hf.attrs['columns'])
 
-    kam_mean_std = get_mean_std(np.concatenate(list(kam_data_all_sub.values()), axis=0), kam_data_fields, 'main_output')
-    kfm_mean_std = get_mean_std(np.concatenate(list(kfm_data_all_sub.values()), axis=0), kfm_data_fields, 'main_output')
+    kam_mean_std = get_mean_std(np.concatenate(list(kam_data_sel_sub.values()), axis=0), kam_data_fields, 'main_output')
+    kfm_mean_std = get_mean_std(np.concatenate(list(kfm_data_sel_sub.values()), axis=0), kfm_data_fields, 'main_output')
     kfm_mean_std['true_mean'], kfm_mean_std['pred_mean'] = -kfm_mean_std['true_mean'], -kfm_mean_std['pred_mean']
     draw_f3(kam_mean_std, kfm_mean_std)
     plt.show()

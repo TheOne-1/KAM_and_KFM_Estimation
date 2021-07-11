@@ -30,8 +30,8 @@ def draw_sigifi_sign(mean_, std_, bar_locs, p_between_pattern, ylim):
         if pair[1]:
             plt.plot([bar_locs[2*loc_0+1], bar_locs[2*loc_1+1]], [top_line-0.025*ylim, top_line-0.025*ylim],
                      color=color_1, linewidth=LINE_WIDTH)
-        plt.text(bar_locs[2*loc_0]*coe_0 + bar_locs[2 * loc_1 + 1] * coe_1, top_line - 0.11 * ylim, '*', fontdict={'fontname': 'Times New Roman'}, size=35, zorder=20)
-        rect = patches.Rectangle((bar_locs[2*loc_0]*coe_0 + bar_locs[2 * loc_1 + 1] * coe_1, top_line - 0.11 * ylim), 0.47, 0.15*ylim, linewidth=0, color='white', zorder=10)
+        plt.text(bar_locs[2*loc_0]*coe_0 + bar_locs[2 * loc_1 + 1] * coe_1, top_line - 0.097 * ylim, '*', fontdict={'fontname': 'Times New Roman'}, size=32, zorder=20)
+        rect = patches.Rectangle((bar_locs[2*loc_0]*coe_0 + bar_locs[2 * loc_1 + 1] * coe_1, top_line - 0.097 * ylim), 0.4, 0.15*ylim, linewidth=0, color='white', zorder=10)
         ax.add_patch(rect)
 
 
@@ -114,7 +114,7 @@ def finalize_f9(fig):
 
 if __name__ == "__main__":
     data_path = 'D:\Tian\Research\Projects\VideoIMUCombined\experiment_data\KAM\\'
-    color_0, color_1 = np.array([255, 166, 0]) / 255, np.array([0, 103, 137]) / 255       # [255, 166, 0]
+    color_0, color_1 = np.array([90, 140, 20]) / 255, np.array([0, 103, 137]) / 255       # [255, 166, 0]
     result_date = 'results/0326'
     with h5py.File(result_date + 'KAM/8IMU_2camera/results.h5', 'r') as hf:
         kam_data_all_sub = {subject: subject_data[:] for subject, subject_data in hf.items()}
