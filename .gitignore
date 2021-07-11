@@ -137,6 +137,7 @@ dmypy.json
 
 create_example_data.py
 figures/f8_peaks.py
+figures/openpose_gif.py
 
 data_for_amit.py
 test.py
