@@ -172,108 +172,14 @@ if step == 4:
 
     vicon_knee = (trial_data[['RFME_X', 'RFME_Y', 'RFME_Z']].values + trial_data[['RFLE_X', 'RFLE_Y', 'RFLE_Z']].values) / 2
 
-    for axis in range(3):
-        plt.figure()
-        plt.plot(video_knee[:, axis])
-        plt.plot(vicon_knee[:, axis])
+    plt.figure()
+    for i_axis, axis in enumerate(['X', 'Y', 'Z']):      # 'Medio-lateral', 'Anterior-posterior', 'Vertical'
+        line, = plt.plot(vicon_knee[1000:1800, i_axis], label=axis+' - Mocap')
+        plt.plot(video_knee[1000:1800, i_axis], '--', color=line.get_color(), label=axis+' - Smartphone')
+        plt.ylabel('Knee center (mm)'.format(axis))
+        plt.legend()
+        plt.grid()
     plt.show()
 
 cv2.destroyAllWindows()
 
-
-"""Below are original manual solutions, not useful for now"""
-"""step 3, simplify projection matrix (only translation)"""
-if step == 30:
-    u, v, X, Y, Z, fx, fy, u0, v0 = sym.symbols('u, v, X, Y, Z, fx, fy, u0, v0', constant=True)
-    k, p, q = sym.symbols('k, p, q', constant=False)
-    mat_camera = sym.Matrix([[fx, 0, u0, 0],
-                             [0, fy, v0, 0],
-                             [0, 0, 1, 0]])
-    mat_transform = sym.Matrix([[0, 1, 0, k],
-                                [0, 0, -1, p],
-                                [-1, 0, 0, q],
-                                [0, 0, 0, 1]])
-    vec_world = sym.Matrix([[X], [Y], [Z], [1]])
-    vec_pix = sym.Matrix([[u], [v], [1]])
-    exp = mat_camera * mat_transform * vec_world + (X - q) * vec_pix
-    for row in exp:
-        collected = sym.expand(row)
-        collected = sym.collect(collected, [k, p, q])
-        print(collected)
-
-"""step 4, solve projection matrix (only translation)"""
-if step == 40:
-    number_of_pairs = len(right_camera_pairs[subject])
-    images = glob.glob(os.path.join(CAMERA_CALI_DATA_PATH, camera_ + '_camera_matrix', '*.png'))
-    cv2.waitKey()
-    ret, mtx, dist = get_camera_mat(images)
-
-    a, b = np.zeros([2 * number_of_pairs, 3]), np.zeros([2 * number_of_pairs])
-    for i_point, (p_3d, p_2d) in enumerate(right_camera_pairs[subject]):
-        X, Y, Z = p_3d
-        u, v = p_2d
-        fx, fy, u0, v0 = mtx[0, 0], mtx[1, 1], mtx[0, 2], mtx[1, 2]
-        a[2*i_point, :] = [fx, 0, -u + u0]
-        a[2*i_point+1, :] = [0, fy, -v + v0]
-        b[2*i_point] = - (X*u - X*u0 + Y*fx)
-        b[2*i_point+1] = - (X*v - X*v0 - Z*fy)
-    p = np.linalg.lstsq(a, b, rcond=-1)
-    print(p)
-
-"""step 5, simplify projection matrix"""
-if step == 50:
-    S, C, k, p, q, u, v, X, Y, Z, fx, fy, u0, v0 = sym.symbols('S, C, k, p, q, u, v, X, Y, Z, fx, fy, u0, v0')
-    mat_camera = sym.Matrix([[fx, 0, u0, 0],
-                             [0, fy, v0, 0],
-                             [0, 0, 1, 0]])
-    mat_transform = sym.Matrix([[S, 1, 0, k],
-                                [0, 0, -1, p],
-                                [-1, S, 0, q],
-                                [0, 0, 0, 1]])
-    vec_world = sym.Matrix([[X], [Y], [Z], [1]])
-    vec_pix = sym.Matrix([[u], [v], [1]])
-    exp = mat_camera * mat_transform * vec_world + (X - S * Y - q) * vec_pix
-    for row in exp:
-        collected = sym.expand(row)
-        collected = sym.collect(collected, [S, k, p, q])
-        print(collected)
-
-"""step 6, solve projection matrix"""
-if step == 60:
-    number_of_pairs = len(right_camera_pairs[subject])
-    images = glob.glob(os.path.join(CAMERA_CALI_DATA_PATH, camera_ + '_camera_matrix', '*.png'))
-    cv2.waitKey()
-    ret, mtx, dist = get_camera_mat(images)
-
-    a, b = np.zeros([2 * number_of_pairs, 4]), np.zeros([2 * number_of_pairs])
-    for i_point, (p_3d, p_2d) in enumerate(right_camera_pairs[subject]):
-        X, Y, Z = p_3d
-        u, v = p_2d
-        fx, fy, u0, v0 = mtx[0, 0], mtx[1, 1], mtx[0, 2], mtx[1, 2]
-        a[2*i_point, :] = [X*fx - Y*u + Y*u0, fx, 0, -u + u0]
-        a[2*i_point+1, :] = [-Y*v + Y*v0, 0, fy, -v + v0]
-        b[2*i_point] = -(X*u - X*u0 + Y*fx)
-        b[2*i_point+1] = - (X*v - X*v0 - Z*fy)
-    p = np.linalg.lstsq(a, b, rcond=-1)
-    print(p)
-
-# right_camera_pairs = {
-#     's002_wangdianxin': [
-#         [(-9., -121, -11), (84., 1472)],
-#         [(-9., 1675, -11), (882., 1468)],
-#         [(1110., 1675, -11), (1066., 1724)],
-#         #
-#         [(-140., 396, -33), (324., 1464)],
-#         # [(-140., 1160, -33), (651., 1460)],
-#         # [(1110., 778, -117), (487., 1904)]
-#     ]}
-#
-# back_camera_pairs = {
-#     's002_wangdianxin': [
-#         [(-9., -121, -11), (81., 1836)],
-#         [(-9., 1675, -11), (284., 1408)],
-#         [(1110., 1675, -11), (725., 1408)],
-#         #
-#         [(-140., 396, -33), (94., 1666)],
-#         [(-140., 1160, -33), (189., 1499)]
-#     ]}
