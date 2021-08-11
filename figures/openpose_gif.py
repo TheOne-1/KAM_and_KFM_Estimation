@@ -54,9 +54,9 @@ class VideoToGif(VideoReader):
             frames.append(cv_output)
 
         if '90' in self._vid_dir:
-            imageio.mimsave('exports/gif_90.gif', frames, fps=30)
+            imageio.mimsave('exports/gif_90.gif', frames, fps=30, loop=3)
         else:
-            imageio.mimsave('exports/gif_180.gif', frames, fps=30)
+            imageio.mimsave('exports/gif_180.gif', frames, fps=30, loop=3)
 
 
 
