@@ -108,8 +108,8 @@ def triangulate(joints, trial_data, camera_pairs_90, camera_pairs_180):
     return video_triangulated
 
 
-def calibrate_leg_in_global_frame(knee, ankle, R_glob_to_sens):
-    shank_in_sens = R_glob_to_sens.T @ (knee - ankle).T
+def calibrate_leg_in_global_frame(vector_shank_in_glob_static, R_glob_to_sens):
+    shank_in_sens = R_glob_to_sens.T @ vector_shank_in_glob_static.T
     return shank_in_sens / np.linalg.norm(shank_in_sens)
 
 
@@ -194,6 +194,8 @@ def get_vicon_orientation(data_df, segment):
                 return np.array([1, 0, 0, 0])
             else:
                 quat = mat2quat(dcm_mat)
+                if quat[3] < 0:
+                    quat = - quat
                 return quat / np.linalg.norm(quat)
 
         quat_vicon = np.array(list(map(temp_fun, dcm_mat)))
@@ -205,50 +207,5 @@ def get_vicon_orientation(data_df, segment):
         # plt.show()
 
         return quat_vicon, segment_x, segment_y, segment_z
-
-
-
-
-"""symble_examples"""
-def this_is_not_a_function_just_a_example():
-    """Below are original manual solutions, not useful for now"""
-    """step 3, simplify projection matrix (only translation)"""
-    if step == 30:
-        u, v, X, Y, Z, fx, fy, u0, v0 = sym.symbols('u, v, X, Y, Z, fx, fy, u0, v0', constant=True)
-        k, p, q = sym.symbols('k, p, q', constant=False)
-        mat_camera = sym.Matrix([[fx, 0, u0, 0],
-                                 [0, fy, v0, 0],
-                                 [0, 0, 1, 0]])
-        mat_transform = sym.Matrix([[0, 1, 0, k],
-                                    [0, 0, -1, p],
-                                    [-1, 0, 0, q],
-                                    [0, 0, 0, 1]])
-        vec_world = sym.Matrix([[X], [Y], [Z], [1]])
-        vec_pix = sym.Matrix([[u], [v], [1]])
-        exp = mat_camera * mat_transform * vec_world + (X - q) * vec_pix
-        for row in exp:
-            collected = sym.expand(row)
-            collected = sym.collect(collected, [k, p, q])
-            print(collected)
-
-    """step 4, solve projection matrix (only translation)"""
-    if step == 40:
-        number_of_pairs = len(right_camera_pairs[subject])
-        images = glob.glob(os.path.join(CAMERA_CALI_DATA_PATH, camera_ + '_camera_matrix', '*.png'))
-        cv2.waitKey()
-        ret, mtx, dist = get_camera_mat(images)
-
-        a, b = np.zeros([2 * number_of_pairs, 3]), np.zeros([2 * number_of_pairs])
-        for i_point, (p_3d, p_2d) in enumerate(right_camera_pairs[subject]):
-            X, Y, Z = p_3d
-            u, v = p_2d
-            fx, fy, u0, v0 = mtx[0, 0], mtx[1, 1], mtx[0, 2], mtx[1, 2]
-            a[2*i_point, :] = [fx, 0, -u + u0]
-            a[2*i_point+1, :] = [0, fy, -v + v0]
-            b[2*i_point] = - (X*u - X*u0 + Y*fx)
-            b[2*i_point+1] = - (X*v - X*v0 - Z*fy)
-        p = np.linalg.lstsq(a, b, rcond=-1)
-        print(p)
-
 
 
