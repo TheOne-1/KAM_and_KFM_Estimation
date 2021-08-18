@@ -2,7 +2,7 @@ import pandas as pd
 import numpy as np
 import glob
 import os
-from const import SUBJECTS
+from const import SUBJECTS, TRIALS, DATA_PATH, STATIC_TRIALS
 from triangulation.triangulation_toolkit import extract_a_vid_frame, compare_axes_results, triangulate, compute_rmse
 from wearable_toolkit import ViconCsvReader
 from const import IMSHOW_OFFSET, CAMERA_CALI_DATA_PATH, camera_pairs_all_sub_90, camera_pairs_all_sub_180
@@ -36,7 +36,7 @@ def on_click_top(event, x, y, flags, param):
 
 subject = SUBJECTS[0]
 
-step = 4
+step = 5
 
 """step 1, extract images from slow-motion video, only do once"""
 if step == 1:
@@ -89,6 +89,20 @@ if step == 4:
     #
     # compare_axes_results(vicon_knee_moments, video_knee_moments, ['X', 'Y'])
 
+"""step 5, save triangulated data """
+if step == 5:
+    joints = ['RHip', 'RKnee', 'RAnkle']
+    for subject in SUBJECTS[:2]:
+        os.makedirs(os.path.join(DATA_PATH, subject, 'triangulated'), exist_ok=True)
+        for trial in STATIC_TRIALS + TRIALS:
+            trial_data_dir = os.path.join(DATA_PATH, subject, 'combined', trial + '.csv')
+            trial_data = pd.read_csv(trial_data_dir, index_col=False)
+            video_triangulated = triangulate(joints, trial_data, camera_pairs_all_sub_90[subject],
+                                             camera_pairs_all_sub_180[subject])
+            # for joint in joints:
+            video_triangulated_df = pd.DataFrame(np.column_stack([video_triangulated[joint] for joint in joints]))
+            video_triangulated_df.columns = [joint + '_3d_' + axis for joint in joints for axis in ['x', 'y', 'z']]
+            video_triangulated_df.to_csv(os.path.join(DATA_PATH, subject, 'triangulated', trial+'.csv'))
 
 
 

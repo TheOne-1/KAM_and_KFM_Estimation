@@ -125,7 +125,7 @@ EXAMPLE_DATA_FIELDS = [
     'RTAM_Z', 'RFAL_Z', 'RSK_Z', 'RTT_Z', 'LFME_Z', 'LFLE_Z', 'LTH_Z', 'LFT_Z', 'RFME_Z', 'RFLE_Z', 'RTH_Z', 'RFT_Z',
     'LIPS_Z', 'RIPS_Z', 'LIAS_Z', 'RIAS_Z', 'MAI_Z', 'SXS_Z', 'SJN_Z', 'CV7_Z', 'LAC_Z', 'RAC_Z']
 
-CAMERA_CALI_DATA_PATH = 'D:\Tian\Research\Projects\VideoIMUCombined\\triangulation\camera cali'
+CAMERA_CALI_DATA_PATH = 'D:\Tian\Research\Projects\VideoIMUCombined\experiment_data\camera cali'
 IMSHOW_OFFSET = 1300
 
 

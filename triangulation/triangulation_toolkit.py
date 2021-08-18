@@ -1,14 +1,16 @@
 import numpy as np
+from numpy.linalg import norm
+import pandas as pd
 import cv2
 import matplotlib.pyplot as plt
 import sympy as sym
 from numpy import cos, sin, arctan2
 import os
 import glob
-from const import CAMERA_CALI_DATA_PATH, IMSHOW_OFFSET
+from const import CAMERA_CALI_DATA_PATH, DATA_PATH, camera_pairs_all_sub_90, GRAVITY, camera_pairs_all_sub_180
 from sklearn.metrics import mean_squared_error as mse
-from transforms3d.quaternions import mat2quat
-
+from types import SimpleNamespace
+from transforms3d.quaternions import rotate_vector, mat2quat
 
 
 def get_camera_mat(images):
@@ -29,7 +31,6 @@ def get_camera_mat(images):
             corners2 = cv2.cornerSubPix(gray, corners, (11, 11), (-1, -1), criteria)
             objpoints.append(objp)
             imgpoints.append(corners2)
-
             # # Draw and display the corners
             # cv2.drawChessboardCorners(img, (7, 6), corners2, ret)
             # cv2.imshow('img', cv2.resize(img, (int(img.shape[1]/5), int(img.shape[0]/5))))
@@ -72,12 +73,12 @@ def compute_rmse(data_vicon, data_video, axes=['X', 'Y', 'Z']):
         print(rmse)
 
 
-def compare_axes_results(vicon_knee, video_knee, axes=['X', 'Y', 'Z'], start=1000, end=2000):
+def compare_axes_results(vicon_knee, video_knee, axes=['X', 'Y', 'Z'], start=1000, end=2000, title=''):
     plt.figure()
+    plt.title(title)
     for i_axis, axis in enumerate(axes):      # 'Medio-lateral', 'Anterior-posterior', 'Vertical'
         line, = plt.plot(vicon_knee[start:end, i_axis], label=axis+' - Mocap')
         plt.plot(video_knee[start:end, i_axis], '--', color=line.get_color(), label=axis+' - Smartphone')
-        plt.ylabel('Knee center (mm)'.format(axis))
         plt.legend()
         plt.grid()
 
@@ -89,7 +90,6 @@ def triangulate(joints, trial_data, camera_pairs_90, camera_pairs_180):
                   'init_tvec': np.array([-600., 1200, 2100]), 'pairs': camera_pairs_180}
     data_to_triangluate, projMat = {}, {}
     for camera_, params in zip(['90', '180'], [params_90, params_180]):
-        # print(camera_)
         images = glob.glob(os.path.join(CAMERA_CALI_DATA_PATH, camera_ + '_camera_matrix', '*.png'))
         ret, mtx, dist = get_camera_mat(images)
         projMat[camera_] = compute_projection_mat(params['pairs'], mtx, dist, params['init_rot'], params['init_tvec'])
@@ -108,9 +108,10 @@ def triangulate(joints, trial_data, camera_pairs_90, camera_pairs_180):
     return video_triangulated
 
 
-def calibrate_leg_in_global_frame(vector_shank_in_glob_static, R_glob_to_sens):
-    shank_in_sens = R_glob_to_sens.T @ vector_shank_in_glob_static.T
-    return shank_in_sens / np.linalg.norm(shank_in_sens)
+def calibrate_segment_in_global_frame(segment_in_glob_static, R_glob_to_sens):
+    """ Note that segment_in_sens is constant after sensor placement. """
+    segment_in_sens = R_glob_to_sens @ segment_in_glob_static
+    return segment_in_sens / np.linalg.norm(segment_in_sens)        # this is a const
 
 
 def calibrate_segment_in_sensor_frame(acc_static):
@@ -145,13 +146,12 @@ def print_h_mat():
     R_glob_to_sens = sym.Matrix([[qk0**2 + qk1**2 - qk2**2 - qk3**2, 2*qk1*qk2+2*qk0*qk3, 2*qk1*qk3-2*qk0*qk2],
                            [2*qk1*qk2-2*qk0*qk3, qk0**2 - qk1**2 + qk2**2 - qk3**2, 2*qk2*qk3+2*qk0*qk1],
                            [2*qk1*qk3+2*qk0*qk2, 2*qk2*qk3-2*qk0*qk1, qk0**2 - qk1**2 - qk2**2 + qk3**2]])
-    shank_in_glob = sym.Matrix([sx, sy, sz])
-    shank_in_sens = R_glob_to_sens * shank_in_glob
-    H_k = shank_in_sens.jacobian([qk0, qk1, qk2, qk3])
+    segment_in_glob = sym.Matrix([sx, sy, sz])
+    segment_in_sens = R_glob_to_sens * segment_in_glob
+    H_k = segment_in_sens.jacobian([qk0, qk1, qk2, qk3])
     print('For IMU H_k_vid and h_vid')
-    print(shank_in_sens)
+    print(segment_in_sens)
     print(H_k)
-
 
     temp1 = [[sx*(qk0**2 + qk1**2 - qk2**2 - qk3**2) + sy*(2*qk0*qk3 + 2*qk1*qk2) + sz*(-2*qk0*qk2 + 2*qk1*qk3)],
              [sx*(-2*qk0*qk3 + 2*qk1*qk2) + sy*(qk0**2 - qk1**2 + qk2**2 - qk3**2) + sz*(2*qk0*qk1 + 2*qk2*qk3)],
@@ -207,5 +207,119 @@ def get_vicon_orientation(data_df, segment):
         # plt.show()
 
         return quat_vicon, segment_x, segment_y, segment_z
+
+
+def init_kalman_param_static(subject, segment):
+    if segment == 'SHANK':
+        upper_joint, lower_joint = 'RKnee', 'RAnkle'
+    elif segment == 'THIGH':
+        upper_joint, lower_joint = 'RHip', 'RKnee'
+    else:
+        raise ValueError('Incorrect segment name')
+    params_static = SimpleNamespace()
+    trial_static_data = pd.read_csv(os.path.join(DATA_PATH, subject, 'combined', 'static_back.csv'), index_col=0)
+
+    vid_data_static = pd.read_csv(os.path.join(DATA_PATH, subject, 'triangulated', 'static_back.csv'), index_col=0)
+    upper_joint_col = [upper_joint + '_3d_' + axis for axis in ['x', 'y', 'z']]
+    lower_joint_col = [lower_joint + '_3d_' + axis for axis in ['x', 'y', 'z']]
+    segment_in_glob_static = np.mean(vid_data_static[upper_joint_col].values - vid_data_static[lower_joint_col].values, axis=0)
+
+    R_sens_to_glob_static = calibrate_segment_in_sensor_frame(
+        trial_static_data[['AccelX_R_'+segment, 'AccelY_R_'+segment, 'AccelZ_R_'+segment]].values)
+    params_static.segment_length = norm(segment_in_glob_static)
+    params_static.segment_in_sens = calibrate_segment_in_global_frame(segment_in_glob_static, R_sens_to_glob_static.T)
+    print('{} vector in sensor frame: {}'.format(segment, params_static.segment_in_sens))
+    return params_static
+
+
+def init_kalman_param(subject, trial, segment, init_params):
+    trial_data_dir = 'D:\Tian\Research\Projects\VideoIMUCombined\experiment_data\KAM\\'\
+                     + subject + '\combined\\' + trial + '.csv'
+    trial_data = pd.read_csv(trial_data_dir, index_col=False)
+    data_len = trial_data.shape[0]
+
+    if segment == 'SHANK':
+        upper_joint, lower_joint = 'RKnee', 'RAnkle'
+    elif segment == 'THIGH':
+        upper_joint, lower_joint = 'RHip', 'RKnee'
+    else:
+        raise ValueError('Incorrect segment name')
+
+    params = SimpleNamespace()
+    params.q_esti = np.zeros([data_len, 4])
+    params.q_esti[0, :] = init_params.quat_init
+    params.P = np.zeros([4, 4, data_len])
+    params.P[:, :, 0] = np.eye(4)
+    params.Q = init_params.gyro_noise * np.eye(4)
+    params.acc = trial_data[['AccelX_R_'+segment, 'AccelY_R_'+segment, 'AccelZ_R_'+segment]].values
+    params.gyr = np.deg2rad(trial_data[['GyroX_R_'+segment, 'GyroY_R_'+segment, 'AccelZ_R_'+segment]].values)
+
+    vid_data = pd.read_csv(os.path.join(DATA_PATH, subject, 'triangulated', trial+'.csv'), index_col=0)
+    upper_joint_col = [upper_joint + '_3d_' + axis for axis in ['x', 'y', 'z']]
+    lower_joint_col = [lower_joint + '_3d_' + axis for axis in ['x', 'y', 'z']]
+    params.segment_in_glob = vid_data[upper_joint_col].values - vid_data[lower_joint_col].values
+    params.segment_confidence = trial_data[upper_joint+'_probability_90'] * trial_data[upper_joint+'_probability_180'] * \
+                                trial_data[lower_joint+'_probability_90'] * trial_data[lower_joint+'_probability_180']
+
+    params.R_acc_base = np.eye(3) * init_params.acc_noise
+    params.R_vid_base = np.eye(3) * init_params.vid_noise
+    params.V_acc = np.eye(3)               # correlation between the acc noise and angular position
+    params.V_vid = np.eye(3)
+    return params, trial_data
+
+
+def update_kalman(params, params_static, T, k):
+    gyr, q_esti, acc, P, Q, R_acc_base, V_acc, R_vid_base, V_vid, segment_confidence, segment_in_glob, segment_length = \
+        params.gyr, params.q_esti, params.acc, params.P, params.Q, params.R_acc_base, params.V_acc, params.R_vid_base,\
+        params.V_vid, params.segment_confidence, params.segment_in_glob, params_static.segment_length
+    sx, sy, sz = params_static.segment_in_sens
+
+    """ a prior system estimation """
+    omega = np.array([[0, -gyr[k, 0], -gyr[k, 1], -gyr[k, 2]],
+                      [gyr[k, 0], 0, gyr[k, 2], -gyr[k, 1]],
+                      [gyr[k, 1], -gyr[k, 2], 0, gyr[k, 0]],
+                      [gyr[k, 2], gyr[k, 1], -gyr[k, 0], 0]])
+    Ak = np.eye(4) + 0.5 * omega * T
+    qk_ = Ak @ q_esti[k-1]
+    qk0, qk1, qk2, qk3 = qk_
+
+    P_k_minus = Ak @ P[:, :, k-1] @ Ak.T + Q
+
+    """ correction stage 1, based on acc. Note that the h_vid, z_vid, and R are normalized by the gravity """
+    H_k_acc = 2 * np.array([[-qk2, qk3, -qk0, qk1],
+                            [qk1, qk0, qk3, qk2],
+                            [qk0, -qk1, -qk2, qk3]])
+    acc_diff = norm(rotate_vector(acc[k], qk_) - np.array([0, 0, GRAVITY]))
+    R_acc = R_acc_base + 10 * np.array([
+        [acc_diff**2, 0, 0],
+        [0, acc_diff**2, 0],
+        [0, 0, acc_diff**2]])
+    R_acc = R_acc / GRAVITY         # related to acc magnitude !!! plot K_k_acc with acc_diff
+    K_k_acc = P_k_minus @ H_k_acc.T @ np.matrix(H_k_acc @ P_k_minus @ H_k_acc.T + V_acc @ R_acc @ V_acc.T).I
+
+    h_acc = np.array([2*qk1*qk3 - 2*qk0*qk2,
+                      2*qk0*qk1 + 2*qk2*qk3,
+                      qk0**2 - qk1**2 - qk2**2 + qk3**2])
+    z_acc = acc[k, :].T / GRAVITY
+    q_acc_eps = K_k_acc @ (z_acc - h_acc)
+
+    """ correction stage 2, based on vid. Note that the h_vid, z_vid, and R are normalized by the segment length """
+    H_k_vid = 2 * np.array([[2*qk0*sx - 2*qk2*sz + 2*qk3*sy, 2*qk1*sx + 2*qk2*sy + 2*qk3*sz, -2*qk0*sz + 2*qk1*sy - 2*qk2*sx, 2*qk0*sy + 2*qk1*sz - 2*qk3*sx],
+                            [2*qk0*sy + 2*qk1*sz - 2*qk3*sx, 2*qk0*sz - 2*qk1*sy + 2*qk2*sx, 2*qk1*sx + 2*qk2*sy + 2*qk3*sz, -2*qk0*sx + 2*qk2*sz - 2*qk3*sy],
+                            [2*qk0*sz - 2*qk1*sy + 2*qk2*sx, -2*qk0*sy - 2*qk1*sz + 2*qk3*sx, 2*qk0*sx - 2*qk2*sz + 2*qk3*sy, 2*qk1*sx + 2*qk2*sy + 2*qk3*sz]])
+    R_vid = R_vid_base / segment_confidence[k] / segment_length
+    K_k_vid = P_k_minus @ H_k_vid.T @ np.matrix(H_k_vid @ P_k_minus @ H_k_vid.T + V_vid @ R_vid @ V_vid.T).I
+
+    h_vid = np.array(
+        [sx*(qk0**2 + qk1**2 - qk2**2 - qk3**2) + sy*(2*qk0*qk3 + 2*qk1*qk2) + sz*(-2*qk0*qk2 + 2*qk1*qk3),
+         sx*(-2*qk0*qk3 + 2*qk1*qk2) + sy*(qk0**2 - qk1**2 + qk2**2 - qk3**2) + sz*(2*qk0*qk1 + 2*qk2*qk3),
+         sx*(2*qk0*qk2 + 2*qk1*qk3) + sy*(-2*qk0*qk1 + 2*qk2*qk3) + sz*(qk0**2 - qk1**2 - qk2**2 + qk3**2)])
+    z_vid = segment_in_glob[k, :].T / segment_length
+    q_vid_eps = K_k_vid @ (z_vid - h_vid)
+
+    """ combine """
+    qk = qk_ + q_acc_eps + q_vid_eps
+    q_esti[k, :] = qk / norm(qk)
+    P[:, :, k] = (np.eye(4) - K_k_vid @ H_k_vid) @ (np.eye(4) - K_k_acc @ H_k_acc) @ P_k_minus
 
 
