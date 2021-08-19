@@ -4,13 +4,13 @@ import pandas as pd
 import cv2
 import matplotlib.pyplot as plt
 import sympy as sym
-from numpy import cos, sin, arctan2
+from numpy import cos, sin, arctan2, arcsin
 import os
 import glob
-from const import CAMERA_CALI_DATA_PATH, DATA_PATH, camera_pairs_all_sub_90, GRAVITY, camera_pairs_all_sub_180
+from const import CAMERA_CALI_DATA_PATH, DATA_PATH, GRAVITY, TARGETS_LIST
 from sklearn.metrics import mean_squared_error as mse
 from types import SimpleNamespace
-from transforms3d.quaternions import rotate_vector, mat2quat
+from transforms3d.quaternions import rotate_vector, mat2quat, quat2mat
 
 
 def get_camera_mat(images):
@@ -73,12 +73,12 @@ def compute_rmse(data_vicon, data_video, axes=['X', 'Y', 'Z']):
         print(rmse)
 
 
-def compare_axes_results(vicon_knee, video_knee, axes=['X', 'Y', 'Z'], start=1000, end=2000, title=''):
+def compare_axes_results(vicon_data, esti_data, axes=['X', 'Y', 'Z'], start=1000, end=2000, title=''):
     plt.figure()
     plt.title(title)
     for i_axis, axis in enumerate(axes):      # 'Medio-lateral', 'Anterior-posterior', 'Vertical'
-        line, = plt.plot(vicon_knee[start:end, i_axis], label=axis+' - Mocap')
-        plt.plot(video_knee[start:end, i_axis], '--', color=line.get_color(), label=axis+' - Smartphone')
+        line, = plt.plot(vicon_data[start:end, i_axis], label=axis + ' - Mocap')
+        plt.plot(esti_data[start:end, i_axis], '--', color=line.get_color(), label=axis + ' - Smartphone')
         plt.legend()
         plt.grid()
 
@@ -224,10 +224,10 @@ def init_kalman_param_static(subject, segment):
     lower_joint_col = [lower_joint + '_3d_' + axis for axis in ['x', 'y', 'z']]
     segment_in_glob_static = np.mean(vid_data_static[upper_joint_col].values - vid_data_static[lower_joint_col].values, axis=0)
 
-    R_sens_to_glob_static = calibrate_segment_in_sensor_frame(
+    params_static.R_sens_to_glob_static = calibrate_segment_in_sensor_frame(
         trial_static_data[['AccelX_R_'+segment, 'AccelY_R_'+segment, 'AccelZ_R_'+segment]].values)
     params_static.segment_length = norm(segment_in_glob_static)
-    params_static.segment_in_sens = calibrate_segment_in_global_frame(segment_in_glob_static, R_sens_to_glob_static.T)
+    params_static.segment_in_sens = calibrate_segment_in_global_frame(segment_in_glob_static, params_static.R_sens_to_glob_static.T)
     print('{} vector in sensor frame: {}'.format(segment, params_static.segment_in_sens))
     return params_static
 
@@ -236,6 +236,7 @@ def init_kalman_param(subject, trial, segment, init_params):
     trial_data_dir = 'D:\Tian\Research\Projects\VideoIMUCombined\experiment_data\KAM\\'\
                      + subject + '\combined\\' + trial + '.csv'
     trial_data = pd.read_csv(trial_data_dir, index_col=False)
+    knee_angles_vicon = trial_data[TARGETS_LIST[:3]].values
     data_len = trial_data.shape[0]
 
     if segment == 'SHANK':
@@ -265,7 +266,7 @@ def init_kalman_param(subject, trial, segment, init_params):
     params.R_vid_base = np.eye(3) * init_params.vid_noise
     params.V_acc = np.eye(3)               # correlation between the acc noise and angular position
     params.V_vid = np.eye(3)
-    return params, trial_data
+    return params, trial_data, knee_angles_vicon
 
 
 def update_kalman(params, params_static, T, k):
@@ -321,5 +322,31 @@ def update_kalman(params, params_static, T, k):
     qk = qk_ + q_acc_eps + q_vid_eps
     q_esti[k, :] = qk / norm(qk)
     P[:, :, k] = (np.eye(4) - K_k_vid @ H_k_vid) @ (np.eye(4) - K_k_acc @ H_k_acc) @ P_k_minus
+
+
+def q_to_knee_angle(q_shank_sens_to_glob, q_thigh_sens_to_glob, R_shank_sens_to_body, R_thigh_sens_to_body):
+    data_len = q_shank_sens_to_glob.shape[0]
+    R_shank_to_thigh = np.zeros([data_len, 3, 3])
+    knee_angles = np.zeros([data_len, 3])
+    for k in range(data_len):
+        R_shank_body_to_glob = quat2mat(q_shank_sens_to_glob[k]) @ R_shank_sens_to_body
+        R_thigh_body_to_glob = quat2mat(q_thigh_sens_to_glob[k]) @ R_thigh_sens_to_body
+        R_shank_to_thigh[k] = R_thigh_body_to_glob.T @ R_shank_body_to_glob
+        knee_angles[k, 0] = - arctan2(- R_shank_to_thigh[k, 1, 2], R_shank_to_thigh[k, 2, 2])
+        knee_angles[k, 1] = arcsin(R_shank_to_thigh[k, 0, 2])
+        knee_angles[k, 2] = arctan2(- R_shank_to_thigh[k, 0, 1], R_shank_to_thigh[k, 0, 0])
+
+    return np.rad2deg(knee_angles)
+
+
+
+
+
+
+
+
+
+
+
 
 
