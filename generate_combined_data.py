@@ -101,6 +101,7 @@ def get_static_combined_data():
             video_data_path_90 = os.path.join(DATA_PATH, subject, 'raw_video_output', trial + '_90.csv')
             video_data_path_180 = os.path.join(DATA_PATH, subject, 'raw_video_output', trial + '_180.csv')
             imu_data_path = os.path.join(DATA_PATH, subject, 'imu', trial + '.csv')
+            v3d_data_path = os.path.join(DATA_PATH, subject, 'v3d', trial + '.csv')
             middle_data_path = os.path.join(DATA_PATH, subject, 'combined', trial + '.csv')
             subject_info = subject_infos.loc[subject, :]
             vicon_data = wearable_toolkit.ViconCsvReader(vicon_data_path, SEGMENT_DEFINITIONS, calibrate_vicon_data_path, subject_info)
@@ -112,13 +113,14 @@ def get_static_combined_data():
             video_180_data.low_pass_filtering(15, 100, 2)
             video_90_data.resample_to_100hz()
             video_180_data.resample_to_100hz()
+            V3d_data = wearable_toolkit.Visual3dCsvReader(v3d_data_path)
 
             video_90_data.data_frame.columns = [col + '_90' for col in video_90_data.data_frame.columns]
             video_180_data.data_frame.columns = [col + '_180' for col in video_180_data.data_frame.columns]
             imu_data = wearable_toolkit.SageCsvReader(imu_data_path)
             middle_data = pd.concat(
                 [imu_data.data_frame.loc[:450], video_90_data.data_frame.loc[:450], video_180_data.data_frame.loc[:450],
-                 vicon_data.data_frame.loc[:450]], axis=1)
+                 V3d_data.data_frame.loc[:450], vicon_data.data_frame.loc[:450]], axis=1)
             middle_data.to_csv(middle_data_path)
 
 
