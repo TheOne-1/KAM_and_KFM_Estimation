@@ -11,6 +11,7 @@ from const import CAMERA_CALI_DATA_PATH, DATA_PATH, GRAVITY, TARGETS_LIST
 from sklearn.metrics import mean_squared_error as mse
 from types import SimpleNamespace
 from transforms3d.quaternions import rotate_vector, mat2quat, quat2mat
+from transforms3d.euler import mat2euler
 
 
 def get_camera_mat(images):
@@ -108,9 +109,9 @@ def triangulate(joints, trial_data, camera_pairs_90, camera_pairs_180):
     return video_triangulated
 
 
-def calibrate_segment_in_global_frame(segment_in_glob_static, R_glob_to_sens):
+def calibrate_segment_in_global_frame(segment_in_glob_static, R_sens_glob):
     """ Note that segment_in_sens is constant after sensor placement. """
-    segment_in_sens = R_glob_to_sens @ segment_in_glob_static
+    segment_in_sens = R_sens_glob @ segment_in_glob_static
     return segment_in_sens / np.linalg.norm(segment_in_sens)        # this is a const
 
 
@@ -121,9 +122,9 @@ def calibrate_segment_in_sensor_frame(acc_static):
     print('IMU sensor calibration, roll = {:5.2f} deg, pitch = {:5.2f} deg'.
           format(np.rad2deg(r), np.rad2deg(p)))     # to check, r and p should be small
     Cr, Sr, Cp, Sp = sym.symbols('Cr, Sr, Cp, Sp', constant=True)
-    R_sens_to_glob = print_orientation_cali_mat()
-    R_sens_to_glob = np.array(R_sens_to_glob.subs({Cr: cos(r), Sr: sin(r), Cp: cos(p), Sp: sin(p)})).astype(np.float64)
-    return R_sens_to_glob
+    R_glob_sens = print_orientation_cali_mat()
+    R_glob_sens = np.array(R_glob_sens.subs({Cr: cos(r), Sr: sin(r), Cp: cos(p), Sp: sin(p)})).astype(np.float64)
+    return R_glob_sens
 
 
 def print_orientation_cali_mat():
@@ -131,23 +132,23 @@ def print_orientation_cali_mat():
     R_coordinate_switch = sym.Matrix([[-1, 0, 0], [0, 0, 1], [0, 1, 0]])
     R_pitch = sym.Matrix([[1, 0, 0], [0, Cp, -Sp], [0, Sp, Cp]])
     R_roll = sym.Matrix([[Cr, -Sr, 0], [Sr, Cr, 0], [0, 0, 1]])
-    R_sens_to_glob = R_coordinate_switch * R_pitch * R_roll
+    R_glob_sens = R_coordinate_switch * R_pitch * R_roll
 
-    # exp = R_sens_to_glob * sym.Matrix([ax, ay, az])
+    # exp = R_glob_sens * sym.Matrix([ax, ay, az])
     # collected = sym.expand(exp[1])
     # collected = sym.collect(collected, [Cp, Sp])
     # print('For IMU calibration,', end=' ')
     # print(collected)        # assist my derivation, only need once
-    return R_sens_to_glob
+    return R_glob_sens
 
 
 def print_h_mat():
     qk0, qk1, qk2, qk3, sx, sy, sz = sym.symbols('qk0, qk1, qk2, qk3, sx, sy, sz', constant=True)
-    R_glob_to_sens = sym.Matrix([[qk0**2 + qk1**2 - qk2**2 - qk3**2, 2*qk1*qk2+2*qk0*qk3, 2*qk1*qk3-2*qk0*qk2],
+    R_sens_glob = sym.Matrix([[qk0**2 + qk1**2 - qk2**2 - qk3**2, 2*qk1*qk2+2*qk0*qk3, 2*qk1*qk3-2*qk0*qk2],
                            [2*qk1*qk2-2*qk0*qk3, qk0**2 - qk1**2 + qk2**2 - qk3**2, 2*qk2*qk3+2*qk0*qk1],
                            [2*qk1*qk3+2*qk0*qk2, 2*qk2*qk3-2*qk0*qk1, qk0**2 - qk1**2 - qk2**2 + qk3**2]])
     segment_in_glob = sym.Matrix([sx, sy, sz])
-    segment_in_sens = R_glob_to_sens * segment_in_glob
+    segment_in_sens = R_sens_glob * segment_in_glob
     H_k = segment_in_sens.jacobian([qk0, qk1, qk2, qk3])
     print('For IMU H_k_vid and h_vid')
     print(segment_in_sens)
@@ -224,10 +225,10 @@ def init_kalman_param_static(subject, segment):
     lower_joint_col = [lower_joint + '_3d_' + axis for axis in ['x', 'y', 'z']]
     segment_in_glob_static = np.mean(vid_data_static[upper_joint_col].values - vid_data_static[lower_joint_col].values, axis=0)
 
-    params_static.R_sens_to_glob_static = calibrate_segment_in_sensor_frame(
+    params_static.R_glob_sens_static = calibrate_segment_in_sensor_frame(
         trial_static_data[['AccelX_R_'+segment, 'AccelY_R_'+segment, 'AccelZ_R_'+segment]].values)
     params_static.segment_length = norm(segment_in_glob_static)
-    params_static.segment_in_sens = calibrate_segment_in_global_frame(segment_in_glob_static, params_static.R_sens_to_glob_static.T)
+    params_static.segment_in_sens = calibrate_segment_in_global_frame(segment_in_glob_static, params_static.R_glob_sens_static.T)
     print('{} vector in sensor frame: {}'.format(segment, params_static.segment_in_sens))
     return params_static
 
@@ -324,17 +325,15 @@ def update_kalman(params, params_static, T, k):
     P[:, :, k] = (np.eye(4) - K_k_vid @ H_k_vid) @ (np.eye(4) - K_k_acc @ H_k_acc) @ P_k_minus
 
 
-def q_to_knee_angle(q_shank_sens_to_glob, q_thigh_sens_to_glob, R_shank_sens_to_body, R_thigh_sens_to_body):
-    data_len = q_shank_sens_to_glob.shape[0]
-    R_shank_to_thigh = np.zeros([data_len, 3, 3])
+def q_to_knee_angle(q_shank_glob_sens, q_thigh_glob_sens, R_shank_body_sens, R_thigh_body_sens):
+    data_len = q_shank_glob_sens.shape[0]
+    R_thigh_shank = np.zeros([data_len, 3, 3])
     knee_angles = np.zeros([data_len, 3])
     for k in range(data_len):
-        R_shank_body_to_glob = quat2mat(q_shank_sens_to_glob[k]) @ R_shank_sens_to_body
-        R_thigh_body_to_glob = quat2mat(q_thigh_sens_to_glob[k]) @ R_thigh_sens_to_body
-        R_shank_to_thigh[k] = R_thigh_body_to_glob.T @ R_shank_body_to_glob
-        knee_angles[k, 0] = - arctan2(- R_shank_to_thigh[k, 1, 2], R_shank_to_thigh[k, 2, 2])
-        knee_angles[k, 1] = arcsin(R_shank_to_thigh[k, 0, 2])
-        knee_angles[k, 2] = arctan2(- R_shank_to_thigh[k, 0, 1], R_shank_to_thigh[k, 0, 0])
+        R_shank_glob_body = quat2mat(q_shank_glob_sens[k]) @ R_shank_body_sens.T
+        R_thigh_glob_body = quat2mat(q_thigh_glob_sens[k]) @ R_thigh_body_sens.T
+        R_thigh_shank[k] = R_thigh_glob_body.T @ R_shank_glob_body
+        knee_angles[k] = mat2euler(R_thigh_shank[k].T) * np.array([1, -1, 1])
 
     return np.rad2deg(knee_angles)
 

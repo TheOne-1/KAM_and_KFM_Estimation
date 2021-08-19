@@ -8,7 +8,7 @@ from transforms3d.quaternions import rotate_vector, mat2quat
 
 
 # during static trial, all three angles = 0, use it to calibrate !!! very important, potentially solving discrepancy between Openpose and markers
-subject = SUBJECTS[1]
+subject = SUBJECTS[0]
 trial = TRIALS[0]            # TRIALS STATIC_TRIALS
 sampling_rate = 100
 T = 1 / sampling_rate
@@ -43,9 +43,9 @@ for k in range(1, trial_data.shape[0]-1):
 # compare_axes_results(q_vicon_shank, params_shank.q_esti, ['q0', 'q1', 'q2', 'q3'], title='shank orientation')
 # compare_axes_results(q_vicon_thigh, params_thigh.q_esti, ['q0', 'q1', 'q2', 'q3'], title='thigh orientation')
 
-R_shank_sens_to_body = np.eye(3) @ params_shank_static.R_sens_to_glob_static        # this is correct
-R_thigh_sens_to_body = np.eye(3) @ params_thigh_static.R_sens_to_glob_static
-knee_angles_esti = q_to_knee_angle(params_shank.q_esti, params_thigh.q_esti, R_shank_sens_to_body, R_thigh_sens_to_body)
+R_shank_body_sens = np.eye(3) @ params_shank_static.R_glob_sens_static        # this is correct
+R_thigh_body_sens = np.eye(3) @ params_thigh_static.R_glob_sens_static
+knee_angles_esti = q_to_knee_angle(params_shank.q_esti, params_thigh.q_esti, R_shank_body_sens, R_thigh_body_sens)
 
 compare_axes_results(knee_angles_vicon, knee_angles_esti, ['FE', 'AA', 'IE'])       # , start=0, end=trial_data.shape[0]
 
