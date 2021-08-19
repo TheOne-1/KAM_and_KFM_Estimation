@@ -81,7 +81,8 @@ class Visual3dCsvReader:
         self.data = pd.read_csv(file_path, delimiter='\t', header=1, skiprows=[2, 3, 4])
         self.data.fillna(0)
         self.data_frame = self.data[[
-            'RIGHT_KNEE_MOMENT', 'RIGHT_KNEE_MOMENT.1', 'RIGHT_KNEE_ANGLE', 'RIGHT_KNEE_VELOCITY']].fillna(0)
+            'RIGHT_KNEE_ANGLE', 'RIGHT_KNEE_ANGLE.1', 'RIGHT_KNEE_ANGLE.2', 'RIGHT_KNEE_MOMENT',
+            'RIGHT_KNEE_MOMENT.1', 'RIGHT_KNEE_MOMENT.2', 'RIGHT_KNEE_VELOCITY']].fillna(0)
         self.data_frame.columns = TARGETS_LIST
 
     def create_step_id(self, step_type):
