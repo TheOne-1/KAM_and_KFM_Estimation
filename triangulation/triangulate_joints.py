@@ -34,9 +34,9 @@ def on_click_top(event, x, y, flags, param):
         print(x, y)
 
 
-subject = SUBJECTS[0]
+subject = SUBJECTS[1]
 
-step = 5
+step = 4
 
 """step 1, extract images from slow-motion video, only do once"""
 if step == 1:
@@ -75,11 +75,16 @@ if step == 3:
 if step == 4:
     trial_data_dir = 'D:\Tian\Research\Projects\VideoIMUCombined\experiment_data\KAM\\' + subject + '\combined\\baseline.csv'
     trial_data = pd.read_csv(trial_data_dir, index_col=False)
-    video_triangulated = triangulate(['RKnee'], trial_data, camera_pairs_all_sub_90[subject], camera_pairs_all_sub_180[subject])
+    video_triangulated = triangulate(['RHip', 'RKnee', 'RAnkle'], trial_data, camera_pairs_all_sub_90[subject], camera_pairs_all_sub_180[subject])
+    video_hip = video_triangulated['RHip']
+    vicon_hip = trial_data[['RFT_X', 'RFT_Y', 'RFT_Z']].values
+    compare_axes_results(vicon_hip, video_hip, ylabel='hip joint center (mm)')
     video_knee = video_triangulated['RKnee']
     vicon_knee = (trial_data[['RFME_X', 'RFME_Y', 'RFME_Z']].values + trial_data[['RFLE_X', 'RFLE_Y', 'RFLE_Z']].values) / 2
-    compare_axes_results(vicon_knee, video_knee)
-    compute_rmse(vicon_knee, video_knee)
+    compare_axes_results(vicon_knee, video_knee, ylabel='knee joint center (mm)')
+    video_ankle = video_triangulated['RAnkle']
+    vicon_ankle = (trial_data[['RFAL_X', 'RFAL_Y', 'RFAL_Z']].values + trial_data[['RTAM_X', 'RTAM_Y', 'RTAM_Z']].values) / 2
+    compare_axes_results(vicon_ankle, video_ankle, ylabel='ankle joint center (mm)')
 
     # sub_height, sub_weight = trial_data['body height'].iloc[0], trial_data['body weight'].iloc[0]
     # grf = - trial_data[['plate_2_force_x', 'plate_2_force_y', 'plate_2_force_z']].values
@@ -103,12 +108,6 @@ if step == 5:
             video_triangulated_df = pd.DataFrame(np.column_stack([video_triangulated[joint] for joint in joints]))
             video_triangulated_df.columns = [joint + '_3d_' + axis for joint in joints for axis in ['x', 'y', 'z']]
             video_triangulated_df.to_csv(os.path.join(DATA_PATH, subject, 'triangulated', trial+'.csv'))
-
-
-
-
-
-
 
 plt.show()
 

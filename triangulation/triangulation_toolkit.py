@@ -74,9 +74,15 @@ def compute_rmse(data_vicon, data_video, axes=['X', 'Y', 'Z']):
         print(rmse)
 
 
-def compare_axes_results(vicon_data, esti_data, axes=['X', 'Y', 'Z'], start=1000, end=2000, title=''):
-    plt.figure()
+def compare_axes_results(vicon_data, esti_data, axes=['X', 'Y', 'Z'], start=0, end=1000, title='', ylabel=''):
+    print('{:10}'.format(title), end='')
+    [print('{:5.1f}\t'.format(np.sqrt(mse(vicon_data[:, i_axis], esti_data[:, i_axis]))), end='')
+     for i_axis, axis in enumerate(axes)]
+    print()
+    plt.figure(figsize=(8, 5))
     plt.title(title)
+    plt.ylabel(ylabel)
+    plt.xlabel('sample')
     for i_axis, axis in enumerate(axes):      # 'Medio-lateral', 'Anterior-posterior', 'Vertical'
         line, = plt.plot(vicon_data[start:end, i_axis], label=axis + ' - Mocap')
         plt.plot(esti_data[start:end, i_axis], '--', color=line.get_color(), label=axis + ' - Smartphone')
@@ -219,6 +225,7 @@ def init_kalman_param_static(subject, segment):
         raise ValueError('Incorrect segment name')
     params_static = SimpleNamespace()
     trial_static_data = pd.read_csv(os.path.join(DATA_PATH, subject, 'combined', 'static_back.csv'), index_col=0)
+    knee_angles_vicon_static = trial_static_data[TARGETS_LIST[:3]].values
 
     vid_data_static = pd.read_csv(os.path.join(DATA_PATH, subject, 'triangulated', 'static_back.csv'), index_col=0)
     upper_joint_col = [upper_joint + '_3d_' + axis for axis in ['x', 'y', 'z']]
@@ -230,7 +237,7 @@ def init_kalman_param_static(subject, segment):
     params_static.segment_length = norm(segment_in_glob_static)
     params_static.segment_in_sens = calibrate_segment_in_global_frame(segment_in_glob_static, params_static.R_glob_sens_static.T)
     print('{} vector in sensor frame: {}'.format(segment, params_static.segment_in_sens))
-    return params_static
+    return params_static, knee_angles_vicon_static
 
 
 def init_kalman_param(subject, trial, segment, init_params):
@@ -263,6 +270,7 @@ def init_kalman_param(subject, trial, segment, init_params):
     params.segment_confidence = trial_data[upper_joint+'_probability_90'] * trial_data[upper_joint+'_probability_180'] * \
                                 trial_data[lower_joint+'_probability_90'] * trial_data[lower_joint+'_probability_180']
 
+    params.R_acc_diff_coeff = init_params.R_acc_diff_coeff
     params.R_acc_base = np.eye(3) * init_params.acc_noise
     params.R_vid_base = np.eye(3) * init_params.vid_noise
     params.V_acc = np.eye(3)               # correlation between the acc noise and angular position
@@ -271,9 +279,9 @@ def init_kalman_param(subject, trial, segment, init_params):
 
 
 def update_kalman(params, params_static, T, k):
-    gyr, q_esti, acc, P, Q, R_acc_base, V_acc, R_vid_base, V_vid, segment_confidence, segment_in_glob, segment_length = \
-        params.gyr, params.q_esti, params.acc, params.P, params.Q, params.R_acc_base, params.V_acc, params.R_vid_base,\
-        params.V_vid, params.segment_confidence, params.segment_in_glob, params_static.segment_length
+    gyr, q_esti, acc, P, Q, R_acc_base, R_acc_diff_coeff, V_acc, R_vid_base, V_vid, segment_confidence, segment_in_glob, segment_length = \
+        params.gyr, params.q_esti, params.acc, params.P, params.Q, params.R_acc_base, params.R_acc_diff_coeff,\
+        params.V_acc, params.R_vid_base, params.V_vid, params.segment_confidence, params.segment_in_glob, params_static.segment_length
     sx, sy, sz = params_static.segment_in_sens
 
     """ a prior system estimation """
@@ -292,7 +300,7 @@ def update_kalman(params, params_static, T, k):
                             [qk1, qk0, qk3, qk2],
                             [qk0, -qk1, -qk2, qk3]])
     acc_diff = norm(rotate_vector(acc[k], qk_) - np.array([0, 0, GRAVITY]))
-    R_acc = R_acc_base + 10 * np.array([
+    R_acc = R_acc_base + R_acc_diff_coeff * np.array([
         [acc_diff**2, 0, 0],
         [0, acc_diff**2, 0],
         [0, 0, acc_diff**2]])
@@ -338,7 +346,48 @@ def q_to_knee_angle(q_shank_glob_sens, q_thigh_glob_sens, R_shank_body_sens, R_t
     return np.rad2deg(knee_angles)
 
 
+def get_knee_angle_vicon_from_raw_marker(trial_data):
+    q_vicon_shank, shank_x, shank_y, shank_z = get_vicon_orientation(trial_data, 'R_SHANK')
+    q_vicon_thigh, thigh_x, thigh_y, thigh_z = get_vicon_orientation(trial_data, 'R_THIGH')
+    knee_angle_vicon = q_to_knee_angle(q_vicon_shank, q_vicon_thigh, np.eye(3), np.eye(3))
+    return knee_angle_vicon
 
+
+def figure_for_FE_AA_angles(vicon_data, esti_data, axes=['X', 'Y', 'Z'], start=0, end=1000, title=''):
+    print('{:10}'.format(title), end='')
+    [print('{:5.1f}\t'.format(np.sqrt(mse(vicon_data[:, i_axis], esti_data[:, i_axis]))), end='')
+     for i_axis, axis in enumerate(axes)]
+    print()
+
+    colors = plt.rcParams['axes.prop_cycle'].by_key()['color']
+    for i_axis, axis in enumerate(axes):      # 'Medio-lateral', 'Anterior-posterior', 'Vertical'
+        plt.figure(figsize=(6, 3.5))
+        line, = plt.plot(vicon_data[start:end, i_axis], label=axis + ' - Mocap', color=colors[i_axis])
+        plt.plot(esti_data[start:end, i_axis], '--', color=line.get_color(), label=axis + ' - Smartphone')
+        plt.legend()
+        plt.grid()
+        plt.title(title)
+        plt.ylabel(axis + ' angle (°)')
+        plt.xlabel('sample')
+        plt.tight_layout()
+        plt.savefig('{}.png'.format(axis))
+
+
+def plot_q_for_debug():
+    q_vicon_shank, shank_x, shank_y, shank_z = get_vicon_orientation(trial_data, 'R_SHANK')
+    q_vicon_thigh, thigh_x, thigh_y, thigh_z = get_vicon_orientation(trial_data, 'R_THIGH')
+
+    acc_global_esti, acc_global_vicon = np.zeros(params_thigh.acc.shape), np.zeros(params_thigh.acc.shape)
+    for i in range(1, trial_data.shape[0]-1):
+        acc_global_esti[i] = rotate_vector(params_thigh.acc[i], params_thigh.q_esti[i])
+        acc_global_vicon[i] = rotate_vector(params_thigh.acc[i], q_vicon_shank[i])
+    for i_axis in range(3):
+        plt.figure()
+        plt.plot(acc_global_esti[:, i_axis])
+        plt.plot(acc_global_vicon[:, i_axis])
+
+    compare_axes_results(q_vicon_shank, params_shank.q_esti, ['q0', 'q1', 'q2', 'q3'], title='shank orientation')
+    compare_axes_results(q_vicon_thigh, params_thigh.q_esti, ['q0', 'q1', 'q2', 'q3'], title='thigh orientation')
 
 
 
