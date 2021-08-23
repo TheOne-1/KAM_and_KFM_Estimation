@@ -1,7 +1,7 @@
 import numpy as np
 from const import SUBJECTS, GRAVITY, TRIALS, STATIC_TRIALS
 from triangulation.triangulation_toolkit import init_kalman_param_static, update_kalman, q_to_knee_angle, \
-    compare_axes_results, get_vicon_orientation, init_kalman_param, get_knee_angle_vicon_from_raw_marker, \
+    compare_axes_results, plot_q_for_debug, init_kalman_param, get_knee_angle_vicon_from_raw_marker, \
     figure_for_FE_AA_angles
 import matplotlib.pyplot as plt
 from types import SimpleNamespace
@@ -22,7 +22,7 @@ for subject in SUBJECTS[0:2]:
     R_shank_body_sens = np.eye(3) @ params_shank_static.R_glob_sens_static        # this is correct
     R_thigh_body_sens = np.eye(3) @ params_thigh_static.R_glob_sens_static
     print('{:10} FE \tAA \tIE'.format(''))
-    for trial in TRIALS:            # TRIALS STATIC_TRIALS
+    for trial in TRIALS[:1]:            # TRIALS STATIC_TRIALS
         params_shank, _, _ = init_kalman_param(subject, trial, 'SHANK', SimpleNamespace(**init_params))
         params_thigh, trial_data, knee_angles_vicon = init_kalman_param(subject, trial, 'THIGH', SimpleNamespace(**init_params))
 
@@ -33,10 +33,11 @@ for subject in SUBJECTS[0:2]:
         knee_angles_esti = q_to_knee_angle(params_shank.q_esti, params_thigh.q_esti, R_shank_body_sens, R_thigh_body_sens)
         knee_angles_vicon = knee_angles_vicon - np.mean(knee_angles_vicon_static, axis=0)     # to remove static knee angle
         knee_angle_vicon = get_knee_angle_vicon_from_raw_marker(trial_data)
-        figure_for_FE_AA_angles(knee_angles_vicon, knee_angles_esti, ['Flexion', 'Adduction'],
-                                start=1000, end=1400)
+        compare_axes_results(knee_angles_vicon, knee_angles_esti, ['Flexion', 'Adduction', 'IE'],
+                                start=0, end=trial_data.shape[0])
 
+        # plot_q_for_debug(trial_data, params_shank, params_thigh)
 
-    plt.show()
+plt.show()
 
 

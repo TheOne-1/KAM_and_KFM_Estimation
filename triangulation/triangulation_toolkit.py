@@ -10,7 +10,7 @@ import glob
 from const import CAMERA_CALI_DATA_PATH, DATA_PATH, GRAVITY, TARGETS_LIST
 from sklearn.metrics import mean_squared_error as mse
 from types import SimpleNamespace
-from transforms3d.quaternions import rotate_vector, mat2quat, quat2mat
+from transforms3d.quaternions import rotate_vector, mat2quat, quat2mat, qconjugate
 from transforms3d.euler import mat2euler
 
 
@@ -193,19 +193,20 @@ def get_vicon_orientation(data_df, segment):
         segment_y = np.apply_along_axis(fun_norm_vect, 1, segment_y)
         segment_z = np.apply_along_axis(fun_norm_vect, 1, segment_z)
 
-        dcm_mat = np.array([segment_x, segment_y, segment_z])
-        dcm_mat = np.swapaxes(dcm_mat, 0, 1)
+        R_sensor_segment = np.array([segment_x, segment_y, segment_z])
+        R_sensor_segment = np.swapaxes(R_sensor_segment, 0, 1)
+        R_segment_sensor = np.swapaxes(R_sensor_segment, 1, 2)
 
-        def temp_fun(dcm_mat):
-            if np.isnan(dcm_mat).any():
+        def temp_fun(R):
+            if np.isnan(R).any():
                 return np.array([1, 0, 0, 0])
             else:
-                quat = mat2quat(dcm_mat)
+                quat = mat2quat(R.T)
                 if quat[3] < 0:
                     quat = - quat
                 return quat / np.linalg.norm(quat)
 
-        quat_vicon = np.array(list(map(temp_fun, dcm_mat)))
+        quat_vicon = np.array(list(map(temp_fun, R_segment_sensor)))
 
         # for i_axis in range(4):
         #     plt.figure()
@@ -261,7 +262,7 @@ def init_kalman_param(subject, trial, segment, init_params):
     params.P[:, :, 0] = np.eye(4)
     params.Q = init_params.gyro_noise * np.eye(4)
     params.acc = trial_data[['AccelX_R_'+segment, 'AccelY_R_'+segment, 'AccelZ_R_'+segment]].values
-    params.gyr = np.deg2rad(trial_data[['GyroX_R_'+segment, 'GyroY_R_'+segment, 'AccelZ_R_'+segment]].values)
+    params.gyr = np.deg2rad(trial_data[['GyroX_R_'+segment, 'GyroY_R_'+segment, 'GyroZ_R_'+segment]].values)
 
     vid_data = pd.read_csv(os.path.join(DATA_PATH, subject, 'triangulated', trial+'.csv'), index_col=0)
     upper_joint_col = [upper_joint + '_3d_' + axis for axis in ['x', 'y', 'z']]
@@ -335,13 +336,13 @@ def update_kalman(params, params_static, T, k):
 
 def q_to_knee_angle(q_shank_glob_sens, q_thigh_glob_sens, R_shank_body_sens, R_thigh_body_sens):
     data_len = q_shank_glob_sens.shape[0]
-    R_thigh_shank = np.zeros([data_len, 3, 3])
+    R_shankbody_thighbody = np.zeros([data_len, 3, 3])
     knee_angles = np.zeros([data_len, 3])
     for k in range(data_len):
         R_shank_glob_body = quat2mat(q_shank_glob_sens[k]) @ R_shank_body_sens.T
         R_thigh_glob_body = quat2mat(q_thigh_glob_sens[k]) @ R_thigh_body_sens.T
-        R_thigh_shank[k] = R_thigh_glob_body.T @ R_shank_glob_body
-        knee_angles[k] = mat2euler(R_thigh_shank[k].T) * np.array([1, -1, 1])
+        R_shankbody_thighbody[k] = R_shank_glob_body.T @ R_thigh_glob_body
+        knee_angles[k] = mat2euler(R_shankbody_thighbody[k].T) * np.array([1, -1, 1])
 
     return np.rad2deg(knee_angles)
 
@@ -370,21 +371,20 @@ def figure_for_FE_AA_angles(vicon_data, esti_data, axes=['X', 'Y', 'Z'], start=0
         plt.ylabel(axis + ' angle (°)')
         plt.xlabel('sample')
         plt.tight_layout()
-        plt.savefig('{}.png'.format(axis))
 
 
-def plot_q_for_debug():
+def plot_q_for_debug(trial_data, params_shank, params_thigh):
     q_vicon_shank, shank_x, shank_y, shank_z = get_vicon_orientation(trial_data, 'R_SHANK')
     q_vicon_thigh, thigh_x, thigh_y, thigh_z = get_vicon_orientation(trial_data, 'R_THIGH')
 
-    acc_global_esti, acc_global_vicon = np.zeros(params_thigh.acc.shape), np.zeros(params_thigh.acc.shape)
-    for i in range(1, trial_data.shape[0]-1):
-        acc_global_esti[i] = rotate_vector(params_thigh.acc[i], params_thigh.q_esti[i])
-        acc_global_vicon[i] = rotate_vector(params_thigh.acc[i], q_vicon_shank[i])
-    for i_axis in range(3):
-        plt.figure()
-        plt.plot(acc_global_esti[:, i_axis])
-        plt.plot(acc_global_vicon[:, i_axis])
+    # acc_global_esti, acc_global_vicon = np.zeros(params_thigh.acc.shape), np.zeros(params_thigh.acc.shape)
+    # for i in range(1, trial_data.shape[0]-1):
+    #     acc_global_esti[i] = rotate_vector(params_thigh.acc[i], params_thigh.q_esti[i])
+    #     acc_global_vicon[i] = rotate_vector(params_thigh.acc[i], q_vicon_shank[i])
+    # for i_axis in range(3):
+    #     plt.figure()
+    #     plt.plot(acc_global_esti[:, i_axis])
+    #     plt.plot(acc_global_vicon[:, i_axis])
 
     compare_axes_results(q_vicon_shank, params_shank.q_esti, ['q0', 'q1', 'q2', 'q3'], title='shank orientation')
     compare_axes_results(q_vicon_thigh, params_thigh.q_esti, ['q0', 'q1', 'q2', 'q3'], title='thigh orientation')
