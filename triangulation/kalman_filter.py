@@ -1,8 +1,7 @@
 import numpy as np
 from const import SUBJECTS, GRAVITY, TRIALS, STATIC_TRIALS
 from triangulation.triangulation_toolkit import init_kalman_param_static, q_to_knee_angle, \
-    compare_axes_results, plot_q_for_debug, get_knee_angle_vicon_from_raw_marker, \
-    figure_for_FE_AA_angles, print_h_mat
+    compare_axes_results, plot_q_for_debug, figure_for_FE_AA_angles, print_h_mat
 import matplotlib.pyplot as plt
 from types import SimpleNamespace
 
@@ -23,7 +22,7 @@ elif method == 'magneto-IMU':
 elif method == 'vid':
     pass
 
-for subject in SUBJECTS[1:2]:
+for subject in SUBJECTS[0:2]:
     print('\n' + subject)
     params_shank_static, _ = init_kalman_param_static(subject, 'SHANK')
     params_thigh_static, knee_angles_vicon_static = init_kalman_param_static(subject, 'THIGH')      # confidence of right camera for AP and V axis; back camera for ML and V axis
@@ -40,12 +39,14 @@ for subject in SUBJECTS[1:2]:
 
         knee_angles_esti = q_to_knee_angle(params_shank.q_esti, params_thigh.q_esti, R_shank_body_sens, R_thigh_body_sens)
         knee_angles_vicon = knee_angles_vicon - np.mean(knee_angles_vicon_static, axis=0)     # to remove static knee angle
-        knee_angle_vicon = get_knee_angle_vicon_from_raw_marker(trial_data)
         compare_axes_results(knee_angles_vicon, knee_angles_esti, ['Flexion', 'Adduction', 'IE'],
-                                start=0, end=trial_data.shape[0])
+                             start=0, end=trial_data.shape[0])
 
-        plot_q_for_debug(trial_data, params_shank, params_thigh)
+        plot_q_for_debug(trial_data, params_shank.q_esti, params_thigh.q_esti)
 
     plt.show()
 
+
+""" Notes """
+# 1. subject 1, trial 2, the video-vicon data sync is bad
 

@@ -185,9 +185,9 @@ def get_vicon_orientation(data_df, segment):
         segment_y = np.apply_along_axis(fun_norm_vect, 1, segment_y)
         segment_z = np.apply_along_axis(fun_norm_vect, 1, segment_z)
 
-        R_sens_glob = np.array([segment_x, segment_y, segment_z])
-        R_sens_glob = np.swapaxes(R_sens_glob, 0, 1)
-        R_glob_sens = np.swapaxes(R_sens_glob, 1, 2)
+        R_body_glob = np.array([segment_x, segment_y, segment_z])
+        R_body_glob = np.swapaxes(R_body_glob, 0, 1)
+        R_glob_body = np.swapaxes(R_body_glob, 1, 2)
 
         def temp_fun(R):
             if np.isnan(R).any():
@@ -198,15 +198,15 @@ def get_vicon_orientation(data_df, segment):
                     quat = - quat
                 return quat / np.linalg.norm(quat)
 
-        quat_vicon = np.array(list(map(temp_fun, R_glob_sens)))
+        q_vicon = np.array(list(map(temp_fun, R_glob_body)))
 
         # for i_axis in range(4):
         #     plt.figure()
-        #     plt.plot(quat_vicon[:, i_axis])
+        #     plt.plot(q_vicon[:, i_axis])
         #     plt.plot(data_df['Quat' + str(i_axis+1) + '_R_SHANK'])
         # plt.show()
 
-        return quat_vicon, segment_x, segment_y, segment_z
+        return q_vicon, segment_x, segment_y, segment_z
 
 
 def init_kalman_param_static(subject, segment):
@@ -340,13 +340,6 @@ def q_to_knee_angle(q_shank_glob_sens, q_thigh_glob_sens, R_shank_body_sens, R_t
     return np.rad2deg(knee_angles)
 
 
-def get_knee_angle_vicon_from_raw_marker(trial_data):
-    q_vicon_shank, shank_x, shank_y, shank_z = get_vicon_orientation(trial_data, 'R_SHANK')
-    q_vicon_thigh, thigh_x, thigh_y, thigh_z = get_vicon_orientation(trial_data, 'R_THIGH')
-    knee_angle_vicon = q_to_knee_angle(q_vicon_shank, q_vicon_thigh, np.eye(3), np.eye(3))
-    return knee_angle_vicon
-
-
 def figure_for_FE_AA_angles(vicon_data, esti_data, axes=['X', 'Y', 'Z'], start=0, end=1000, title=''):
     print('{:10}'.format(title), end='')
     [print('{:5.1f}\t'.format(np.sqrt(mse(vicon_data[:, i_axis], esti_data[:, i_axis]))), end='')
@@ -366,7 +359,7 @@ def figure_for_FE_AA_angles(vicon_data, esti_data, axes=['X', 'Y', 'Z'], start=0
         plt.tight_layout()
 
 
-def plot_q_for_debug(trial_data, params_shank, params_thigh):
+def plot_q_for_debug(trial_data, q_shank_esti, q_thigh_esti):
     q_vicon_shank, shank_x, shank_y, shank_z = get_vicon_orientation(trial_data, 'R_SHANK')
     q_vicon_thigh, thigh_x, thigh_y, thigh_z = get_vicon_orientation(trial_data, 'R_THIGH')
 
@@ -379,8 +372,8 @@ def plot_q_for_debug(trial_data, params_shank, params_thigh):
     #     plt.plot(acc_global_esti[:, i_axis])
     #     plt.plot(acc_global_vicon[:, i_axis])
 
-    compare_axes_results(q_vicon_shank, params_shank.q_esti, ['q0', 'q1', 'q2', 'q3'], title='shank orientation', end=shank_x.shape[0])
-    compare_axes_results(q_vicon_thigh, params_thigh.q_esti, ['q0', 'q1', 'q2', 'q3'], title='thigh orientation', end=thigh_x.shape[0])
+    compare_axes_results(q_vicon_shank, q_shank_esti, ['q0', 'q1', 'q2', 'q3'], title='shank orientation', end=shank_x.shape[0])
+    compare_axes_results(q_vicon_thigh, q_thigh_esti, ['q0', 'q1', 'q2', 'q3'], title='thigh orientation', end=thigh_x.shape[0])
 
 
 
