@@ -16,7 +16,6 @@ from transforms3d.euler import mat2euler
 
 def get_camera_mat(images):
     criteria = (cv2.TERM_CRITERIA_EPS + cv2.TERM_CRITERIA_MAX_ITER, 30, 0.001)
-    # prepare object points, like (0,0,0), (1,0,0), (2,0,0) ....,(6,5,0)
     objp = np.zeros((6 * 9, 3), np.float32)
     objp[:, :2] = np.mgrid[0:9, 0:6].T.reshape(-1, 2) * 33.33
     # Arrays to store object points and image points from all the images.
@@ -153,20 +152,12 @@ def print_h_mat():
     R_sens_glob = sym.Matrix([[qk0**2 + qk1**2 - qk2**2 - qk3**2, 2*qk1*qk2+2*qk0*qk3, 2*qk1*qk3-2*qk0*qk2],
                               [2*qk1*qk2-2*qk0*qk3, qk0**2 - qk1**2 + qk2**2 - qk3**2, 2*qk2*qk3+2*qk0*qk1],
                               [2*qk1*qk3+2*qk0*qk2, 2*qk2*qk3-2*qk0*qk1, qk0**2 - qk1**2 - qk2**2 + qk3**2]])
-    segment_in_glob = sym.Matrix([sx, sy, sz])
-    segment_in_sens = R_sens_glob * segment_in_glob      # !!! check this! use R_glob_sens in stead
-    H_k = segment_in_sens.jacobian([qk0, qk1, qk2, qk3])
+    segment_in_sens = sym.Matrix([sx, sy, sz])
+    segment_in_glob = R_sens_glob.T * segment_in_sens
+    H_k = segment_in_glob.jacobian([qk0, qk1, qk2, qk3])
     print('For IMU H_k_vid and h_vid')
-    print(segment_in_sens)
+    print(segment_in_glob.T)
     print(H_k)
-
-    temp1 = [[sx*(qk0**2 + qk1**2 - qk2**2 - qk3**2) + sy*(2*qk0*qk3 + 2*qk1*qk2) + sz*(-2*qk0*qk2 + 2*qk1*qk3)],
-             [sx*(-2*qk0*qk3 + 2*qk1*qk2) + sy*(qk0**2 - qk1**2 + qk2**2 - qk3**2) + sz*(2*qk0*qk1 + 2*qk2*qk3)],
-             [sx*(2*qk0*qk2 + 2*qk1*qk3) + sy*(-2*qk0*qk1 + 2*qk2*qk3) + sz*(qk0**2 - qk1**2 - qk2**2 + qk3**2)]]
-
-    temp2 = [[2*qk0*sx - 2*qk2*sz + 2*qk3*sy, 2*qk1*sx + 2*qk2*sy + 2*qk3*sz, -2*qk0*sz + 2*qk1*sy - 2*qk2*sx, 2*qk0*sy + 2*qk1*sz - 2*qk3*sx],
-             [2*qk0*sy + 2*qk1*sz - 2*qk3*sx, 2*qk0*sz - 2*qk1*sy + 2*qk2*sx, 2*qk1*sx + 2*qk2*sy + 2*qk3*sz, -2*qk0*sx + 2*qk2*sz - 2*qk3*sy],
-             [2*qk0*sz - 2*qk1*sy + 2*qk2*sx, -2*qk0*sy - 2*qk1*sz + 2*qk3*sx, 2*qk0*sx - 2*qk2*sz + 2*qk3*sy, 2*qk1*sx + 2*qk2*sy + 2*qk3*sz]]
 
 
 def get_vicon_orientation(data_df, segment, R_earth_tread=None):
@@ -294,6 +285,7 @@ def update_kalman(params, params_static, T, k):
                       [gyr[k, 2], gyr[k, 1], -gyr[k, 0], 0]])
     Ak = np.eye(4) + 0.5 * omega * T
     qk_ = Ak @ q_esti[k-1]
+    qk_ = qk_ / norm(qk_)      # should there be a norm? !!!
     qk0, qk1, qk2, qk3 = qk_
 
     P_k_minus = Ak @ P[:, :, k-1] @ Ak.T + Q
@@ -302,7 +294,7 @@ def update_kalman(params, params_static, T, k):
     H_k_acc = 2 * np.array([[-qk2, qk3, -qk0, qk1],
                             [qk1, qk0, qk3, qk2],
                             [qk0, -qk1, -qk2, qk3]])
-    acc_diff = norm(rotate_vector(acc[k], qk_) - np.array([0, 0, GRAVITY]))     # !!! just compare the magnitude
+    acc_diff = norm(rotate_vector(acc[k], qk_) - np.array([0, 0, GRAVITY]))
     R_acc = R_acc_base + R_acc_diff_coeff * np.array([
         [acc_diff**2, 0, 0],
         [0, acc_diff**2, 0],
@@ -317,16 +309,15 @@ def update_kalman(params, params_static, T, k):
     q_acc_eps = K_k_acc @ (z_acc - h_acc)
 
     """ correction stage 2, based on vid. Note that the h_vid, z_vid, and R are normalized by the segment length """
-    H_k_vid = np.array([[2*qk0*sx - 2*qk2*sz + 2*qk3*sy, 2*qk1*sx + 2*qk2*sy + 2*qk3*sz, -2*qk0*sz + 2*qk1*sy - 2*qk2*sx, 2*qk0*sy + 2*qk1*sz - 2*qk3*sx],
-                        [2*qk0*sy + 2*qk1*sz - 2*qk3*sx, 2*qk0*sz - 2*qk1*sy + 2*qk2*sx, 2*qk1*sx + 2*qk2*sy + 2*qk3*sz, -2*qk0*sx + 2*qk2*sz - 2*qk3*sy],
-                        [2*qk0*sz - 2*qk1*sy + 2*qk2*sx, -2*qk0*sy - 2*qk1*sz + 2*qk3*sx, 2*qk0*sx - 2*qk2*sz + 2*qk3*sy, 2*qk1*sx + 2*qk2*sy + 2*qk3*sz]])
-    R_vid = R_vid_base / segment_confidence[k] / segment_length
+    H_k_vid = np.array([[2*qk0*sx + 2*qk2*sz - 2*qk3*sy, 2*qk1*sx + 2*qk2*sy + 2*qk3*sz, 2*qk0*sz + 2*qk1*sy - 2*qk2*sx, -2*qk0*sy + 2*qk1*sz - 2*qk3*sx],
+                        [2*qk0*sy - 2*qk1*sz + 2*qk3*sx, -2*qk0*sz - 2*qk1*sy + 2*qk2*sx, 2*qk1*sx + 2*qk2*sy + 2*qk3*sz, 2*qk0*sx + 2*qk2*sz - 2*qk3*sy],
+                        [2*qk0*sz + 2*qk1*sy - 2*qk2*sx, 2*qk0*sy - 2*qk1*sz + 2*qk3*sx, -2*qk0*sx - 2*qk2*sz + 2*qk3*sy, 2*qk1*sx + 2*qk2*sy + 2*qk3*sz]])
+    R_vid = R_vid_base / segment_confidence[k] / segment_length     # this could be more innovative
     K_k_vid = P_k_minus @ H_k_vid.T @ np.matrix(H_k_vid @ P_k_minus @ H_k_vid.T + V_vid @ R_vid @ V_vid.T).I
 
-    h_vid = np.array(
-        [sx*(qk0**2 + qk1**2 - qk2**2 - qk3**2) + sy*(2*qk0*qk3 + 2*qk1*qk2) + sz*(-2*qk0*qk2 + 2*qk1*qk3),
-         sx*(-2*qk0*qk3 + 2*qk1*qk2) + sy*(qk0**2 - qk1**2 + qk2**2 - qk3**2) + sz*(2*qk0*qk1 + 2*qk2*qk3),
-         sx*(2*qk0*qk2 + 2*qk1*qk3) + sy*(-2*qk0*qk1 + 2*qk2*qk3) + sz*(qk0**2 - qk1**2 - qk2**2 + qk3**2)])
+    h_vid = np.array([sx*(qk0**2 + qk1**2 - qk2**2 - qk3**2) + sy*(-2*qk0*qk3 + 2*qk1*qk2) + sz*(2*qk0*qk2 + 2*qk1*qk3),
+                      sx*(2*qk0*qk3 + 2*qk1*qk2) + sy*(qk0**2 - qk1**2 + qk2**2 - qk3**2) + sz*(-2*qk0*qk1 + 2*qk2*qk3),
+                      sx*(-2*qk0*qk2 + 2*qk1*qk3) + sy*(2*qk0*qk1 + 2*qk2*qk3) + sz*(qk0**2 - qk1**2 - qk2**2 + qk3**2)])
     z_vid = segment_in_glob[k, :].T / segment_length
     q_vid_eps = K_k_vid @ (z_vid - h_vid)
 
@@ -388,9 +379,8 @@ def plot_q_for_debug(trial_data, params_shank, params_thigh):
     #     plt.plot(acc_global_esti[:, i_axis])
     #     plt.plot(acc_global_vicon[:, i_axis])
 
-    compare_axes_results(q_vicon_shank, params_shank.q_esti, ['q0', 'q1', 'q2', 'q3'], title='shank orientation')
-    compare_axes_results(q_vicon_thigh, params_thigh.q_esti, ['q0', 'q1', 'q2', 'q3'], title='thigh orientation')
-
+    compare_axes_results(q_vicon_shank, params_shank.q_esti, ['q0', 'q1', 'q2', 'q3'], title='shank orientation', end=shank_x.shape[0])
+    compare_axes_results(q_vicon_thigh, params_thigh.q_esti, ['q0', 'q1', 'q2', 'q3'], title='thigh orientation', end=thigh_x.shape[0])
 
 
 

@@ -178,7 +178,8 @@ camera_pairs_all_sub_180 = {
         },
     }
 
-TREADMILL_MAG_FIELD = np.array([-11.6, -32., -66.3])        # unit is uT
+# TREADMILL_MAG_FIELD = np.array([-0.116, -0.320, -0.663])        # from one xsens
+TREADMILL_MAG_FIELD = np.array([0.042, -0.529, -1.45])        # from another xsens
 TREADMILL_MAG_FIELD = TREADMILL_MAG_FIELD / np.linalg.norm(TREADMILL_MAG_FIELD)
 
 
