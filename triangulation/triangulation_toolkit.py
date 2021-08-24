@@ -152,8 +152,9 @@ def print_h_mat():
     R_sens_glob = sym.Matrix([[qk0**2 + qk1**2 - qk2**2 - qk3**2, 2*qk1*qk2+2*qk0*qk3, 2*qk1*qk3-2*qk0*qk2],
                               [2*qk1*qk2-2*qk0*qk3, qk0**2 - qk1**2 + qk2**2 - qk3**2, 2*qk2*qk3+2*qk0*qk1],
                               [2*qk1*qk3+2*qk0*qk2, 2*qk2*qk3-2*qk0*qk1, qk0**2 - qk1**2 - qk2**2 + qk3**2]])
+    R_glob_sens = R_sens_glob.T
     segment_in_sens = sym.Matrix([sx, sy, sz])
-    segment_in_glob = R_sens_glob.T * segment_in_sens
+    segment_in_glob = R_glob_sens * segment_in_sens
     H_k = segment_in_glob.jacobian([qk0, qk1, qk2, qk3])
     print('For IMU H_k_vid and h_vid')
     print(segment_in_glob.T)
@@ -227,7 +228,8 @@ def init_kalman_param_static(subject, segment):
     params_static.R_glob_sens_static = calibrate_segment_in_sensor_frame(
         trial_static_data[['AccelX_R_'+segment, 'AccelY_R_'+segment, 'AccelZ_R_'+segment]].values)
     params_static.segment_length = norm(segment_in_glob_static)
-    params_static.segment_in_sens = calibrate_segment_in_global_frame(segment_in_glob_static, params_static.R_glob_sens_static.T)
+    R_sens_glob_static = params_static.R_glob_sens_static.T
+    params_static.segment_in_sens = calibrate_segment_in_global_frame(segment_in_glob_static, R_sens_glob_static)
     print('{} vector in sensor frame: {}'.format(segment, params_static.segment_in_sens))
     return params_static, knee_angles_vicon_static
 
