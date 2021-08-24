@@ -151,10 +151,10 @@ def print_orientation_cali_mat():
 def print_h_mat():
     qk0, qk1, qk2, qk3, sx, sy, sz = sym.symbols('qk0, qk1, qk2, qk3, sx, sy, sz', constant=True)
     R_sens_glob = sym.Matrix([[qk0**2 + qk1**2 - qk2**2 - qk3**2, 2*qk1*qk2+2*qk0*qk3, 2*qk1*qk3-2*qk0*qk2],
-                           [2*qk1*qk2-2*qk0*qk3, qk0**2 - qk1**2 + qk2**2 - qk3**2, 2*qk2*qk3+2*qk0*qk1],
-                           [2*qk1*qk3+2*qk0*qk2, 2*qk2*qk3-2*qk0*qk1, qk0**2 - qk1**2 - qk2**2 + qk3**2]])
+                              [2*qk1*qk2-2*qk0*qk3, qk0**2 - qk1**2 + qk2**2 - qk3**2, 2*qk2*qk3+2*qk0*qk1],
+                              [2*qk1*qk3+2*qk0*qk2, 2*qk2*qk3-2*qk0*qk1, qk0**2 - qk1**2 - qk2**2 + qk3**2]])
     segment_in_glob = sym.Matrix([sx, sy, sz])
-    segment_in_sens = R_sens_glob * segment_in_glob
+    segment_in_sens = R_sens_glob * segment_in_glob      # !!! check this! use R_glob_sens in stead
     H_k = segment_in_sens.jacobian([qk0, qk1, qk2, qk3])
     print('For IMU H_k_vid and h_vid')
     print(segment_in_sens)
@@ -169,7 +169,7 @@ def print_h_mat():
              [2*qk0*sz - 2*qk1*sy + 2*qk2*sx, -2*qk0*sy - 2*qk1*sz + 2*qk3*sx, 2*qk0*sx - 2*qk2*sz + 2*qk3*sy, 2*qk1*sx + 2*qk2*sy + 2*qk3*sz]]
 
 
-def get_vicon_orientation(data_df, segment):
+def get_vicon_orientation(data_df, segment, R_earth_tread=None):
         if segment == 'R_SHANK':
             knee_l, knee_r = data_df[['RFME_X', 'RFME_Y', 'RFME_Z']].values, data_df[['RFLE_X', 'RFLE_Y', 'RFLE_Z']].values
             ankle_l, ankle_r = data_df[['RTAM_X', 'RTAM_Y', 'RTAM_Z']].values, data_df[
@@ -201,6 +201,8 @@ def get_vicon_orientation(data_df, segment):
             if np.isnan(R).any():
                 return np.array([1, 0, 0, 0])
             else:
+                if R_earth_tread is not None:
+                    R = R_earth_tread @ R
                 quat = mat2quat(R.T)
                 if quat[3] < 0:
                     quat = - quat
@@ -300,12 +302,12 @@ def update_kalman(params, params_static, T, k):
     H_k_acc = 2 * np.array([[-qk2, qk3, -qk0, qk1],
                             [qk1, qk0, qk3, qk2],
                             [qk0, -qk1, -qk2, qk3]])
-    acc_diff = norm(rotate_vector(acc[k], qk_) - np.array([0, 0, GRAVITY]))
+    acc_diff = norm(rotate_vector(acc[k], qk_) - np.array([0, 0, GRAVITY]))     # !!! just compare the magnitude
     R_acc = R_acc_base + R_acc_diff_coeff * np.array([
         [acc_diff**2, 0, 0],
         [0, acc_diff**2, 0],
         [0, 0, acc_diff**2]])
-    R_acc = R_acc / GRAVITY         # related to acc magnitude !!! plot K_k_acc with acc_diff
+    R_acc = R_acc / GRAVITY
     K_k_acc = P_k_minus @ H_k_acc.T @ np.matrix(H_k_acc @ P_k_minus @ H_k_acc.T + V_acc @ R_acc @ V_acc.T).I
 
     h_acc = np.array([2*qk1*qk3 - 2*qk0*qk2,
@@ -315,9 +317,9 @@ def update_kalman(params, params_static, T, k):
     q_acc_eps = K_k_acc @ (z_acc - h_acc)
 
     """ correction stage 2, based on vid. Note that the h_vid, z_vid, and R are normalized by the segment length """
-    H_k_vid = 2 * np.array([[2*qk0*sx - 2*qk2*sz + 2*qk3*sy, 2*qk1*sx + 2*qk2*sy + 2*qk3*sz, -2*qk0*sz + 2*qk1*sy - 2*qk2*sx, 2*qk0*sy + 2*qk1*sz - 2*qk3*sx],
-                            [2*qk0*sy + 2*qk1*sz - 2*qk3*sx, 2*qk0*sz - 2*qk1*sy + 2*qk2*sx, 2*qk1*sx + 2*qk2*sy + 2*qk3*sz, -2*qk0*sx + 2*qk2*sz - 2*qk3*sy],
-                            [2*qk0*sz - 2*qk1*sy + 2*qk2*sx, -2*qk0*sy - 2*qk1*sz + 2*qk3*sx, 2*qk0*sx - 2*qk2*sz + 2*qk3*sy, 2*qk1*sx + 2*qk2*sy + 2*qk3*sz]])
+    H_k_vid = np.array([[2*qk0*sx - 2*qk2*sz + 2*qk3*sy, 2*qk1*sx + 2*qk2*sy + 2*qk3*sz, -2*qk0*sz + 2*qk1*sy - 2*qk2*sx, 2*qk0*sy + 2*qk1*sz - 2*qk3*sx],
+                        [2*qk0*sy + 2*qk1*sz - 2*qk3*sx, 2*qk0*sz - 2*qk1*sy + 2*qk2*sx, 2*qk1*sx + 2*qk2*sy + 2*qk3*sz, -2*qk0*sx + 2*qk2*sz - 2*qk3*sy],
+                        [2*qk0*sz - 2*qk1*sy + 2*qk2*sx, -2*qk0*sy - 2*qk1*sz + 2*qk3*sx, 2*qk0*sx - 2*qk2*sz + 2*qk3*sy, 2*qk1*sx + 2*qk2*sy + 2*qk3*sz]])
     R_vid = R_vid_base / segment_confidence[k] / segment_length
     K_k_vid = P_k_minus @ H_k_vid.T @ np.matrix(H_k_vid @ P_k_minus @ H_k_vid.T + V_vid @ R_vid @ V_vid.T).I
 
@@ -342,7 +344,7 @@ def q_to_knee_angle(q_shank_glob_sens, q_thigh_glob_sens, R_shank_body_sens, R_t
         R_shank_glob_body = quat2mat(q_shank_glob_sens[k]) @ R_shank_body_sens.T
         R_thigh_glob_body = quat2mat(q_thigh_glob_sens[k]) @ R_thigh_body_sens.T
         R_shankbody_thighbody[k] = R_shank_glob_body.T @ R_thigh_glob_body
-        knee_angles[k] = mat2euler(R_shankbody_thighbody[k].T) * np.array([1, -1, 1])
+        knee_angles[k] = mat2euler(R_shankbody_thighbody[k]) * np.array([1, -1, 1])
 
     return np.rad2deg(knee_angles)
 

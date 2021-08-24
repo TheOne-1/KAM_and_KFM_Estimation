@@ -1,4 +1,5 @@
 import os
+import numpy as np
 
 GRAVITY = 9.81
 VIDEO_PATH = os.environ.get('VIDEO_DATA_PATH')
@@ -177,8 +178,8 @@ camera_pairs_all_sub_180 = {
         },
     }
 
-
-
+TREADMILL_MAG_FIELD = np.array([-11.6, -32., -66.3])        # unit is uT
+TREADMILL_MAG_FIELD = TREADMILL_MAG_FIELD / np.linalg.norm(TREADMILL_MAG_FIELD)
 
 
 
