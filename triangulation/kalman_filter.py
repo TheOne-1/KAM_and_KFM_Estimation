@@ -3,20 +3,27 @@ from const import SUBJECTS, GRAVITY, TRIALS, STATIC_TRIALS
 from triangulation.triangulation_toolkit import init_kalman_param_static, q_to_knee_angle, \
     compare_axes_results, plot_q_for_debug, get_knee_angle_vicon_from_raw_marker, \
     figure_for_FE_AA_angles, print_h_mat
-from triangulation.triangulation_toolkit import init_kalman_param, update_kalman
-# from triangulation.magneto_imu_toolkit import init_kalman_param, update_kalman
 import matplotlib.pyplot as plt
 from types import SimpleNamespace
 
+
+method = 'magneto-IMU'          # 'vid-IMU', 'magneto-IMU', 'vid'
 
 sampling_rate = 100
 T = 1 / sampling_rate
 
 init_params = {'quat_init': [0, 0, 0.707, 0.707], 'acc_noise': 150 * 1e-6 * GRAVITY * np.sqrt(sampling_rate),
                'R_acc_diff_coeff': 20, 'gyro_noise': np.deg2rad(0.014 * np.sqrt(sampling_rate)), 'vid_noise': 2e4,
-               'R_mag_diff_coeff': 100, 'mag_noise': 0.6*10}
+               'R_mag_diff_coeff': 0, 'mag_noise': 10}
 
-for subject in SUBJECTS[0:2]:
+if method == 'vid-IMU':
+    from triangulation.triangulation_toolkit import init_kalman_param, update_kalman
+elif method == 'magneto-IMU':
+    from triangulation.magneto_imu_toolkit import init_kalman_param, update_kalman
+elif method == 'vid':
+    pass
+
+for subject in SUBJECTS[1:2]:
     print('\n' + subject)
     params_shank_static, _ = init_kalman_param_static(subject, 'SHANK')
     params_thigh_static, knee_angles_vicon_static = init_kalman_param_static(subject, 'THIGH')      # confidence of right camera for AP and V axis; back camera for ML and V axis

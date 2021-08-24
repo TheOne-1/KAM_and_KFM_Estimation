@@ -71,15 +71,19 @@ def update_kalman(params, temp, T, k):
     H_k_acc = 2 * np.array([[-qk2, qk3, -qk0, qk1],
                             [qk1, qk0, qk3, qk2],
                             [qk0, -qk1, -qk2, qk3]])
-    acc_diff = norm(rotate_vector(acc[k], qk_)/GRAVITY - np.array([0, 0, 1]))     # ONE UPDATE
-    R_acc = R_acc_base + R_acc_diff_coeff * np.array([[acc_diff**2, 0, 0], [0, acc_diff**2, 0], [0, 0, acc_diff**2]])
+
+    acc_diff = norm(rotate_vector(acc[k], qk_) - np.array([0, 0, GRAVITY]))
+    R_acc = R_acc_base + R_acc_diff_coeff * np.array([
+        [acc_diff**2, 0, 0],
+        [0, acc_diff**2, 0],
+        [0, 0, acc_diff**2]])
     R_acc = R_acc / GRAVITY
     K_k_acc = P_k_minus @ H_k_acc.T @ np.matrix(H_k_acc @ P_k_minus @ H_k_acc.T + V_acc @ R_acc @ V_acc.T).I
 
     h_acc = np.array([2*qk1*qk3 - 2*qk0*qk2,
                       2*qk0*qk1 + 2*qk2*qk3,
                       qk0**2 - qk1**2 - qk2**2 + qk3**2])
-    z_acc = acc[k, :].T / norm(acc[k, :])         # !!! try this
+    z_acc = acc[k, :].T / norm(acc[k, :])
     q_acc_eps = K_k_acc @ (z_acc - h_acc)
 
     """ correction stage 2, based on mag. Note that the h_mag, z_mag, and R are normalized by the segment length """

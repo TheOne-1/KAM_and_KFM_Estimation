@@ -160,7 +160,7 @@ def print_h_mat():
     print(H_k)
 
 
-def get_vicon_orientation(data_df, segment, R_earth_tread=None):
+def get_vicon_orientation(data_df, segment):
         if segment == 'R_SHANK':
             knee_l, knee_r = data_df[['RFME_X', 'RFME_Y', 'RFME_Z']].values, data_df[['RFLE_X', 'RFLE_Y', 'RFLE_Z']].values
             ankle_l, ankle_r = data_df[['RTAM_X', 'RTAM_Y', 'RTAM_Z']].values, data_df[
@@ -184,22 +184,20 @@ def get_vicon_orientation(data_df, segment, R_earth_tread=None):
         segment_y = np.apply_along_axis(fun_norm_vect, 1, segment_y)
         segment_z = np.apply_along_axis(fun_norm_vect, 1, segment_z)
 
-        R_sensor_segment = np.array([segment_x, segment_y, segment_z])
-        R_sensor_segment = np.swapaxes(R_sensor_segment, 0, 1)
-        R_segment_sensor = np.swapaxes(R_sensor_segment, 1, 2)
+        R_sens_glob = np.array([segment_x, segment_y, segment_z])
+        R_sens_glob = np.swapaxes(R_sens_glob, 0, 1)
+        R_glob_sens = np.swapaxes(R_sens_glob, 1, 2)
 
         def temp_fun(R):
             if np.isnan(R).any():
                 return np.array([1, 0, 0, 0])
             else:
-                if R_earth_tread is not None:
-                    R = R_earth_tread @ R
-                quat = mat2quat(R.T)
+                quat = mat2quat(R)
                 if quat[3] < 0:
                     quat = - quat
                 return quat / np.linalg.norm(quat)
 
-        quat_vicon = np.array(list(map(temp_fun, R_segment_sensor)))
+        quat_vicon = np.array(list(map(temp_fun, R_glob_sens)))
 
         # for i_axis in range(4):
         #     plt.figure()
@@ -305,7 +303,7 @@ def update_kalman(params, params_static, T, k):
     h_acc = np.array([2*qk1*qk3 - 2*qk0*qk2,
                       2*qk0*qk1 + 2*qk2*qk3,
                       qk0**2 - qk1**2 - qk2**2 + qk3**2])
-    z_acc = acc[k, :].T / GRAVITY
+    z_acc = acc[k].T / norm(acc[k])
     q_acc_eps = K_k_acc @ (z_acc - h_acc)
 
     """ correction stage 2, based on vid. Note that the h_vid, z_vid, and R are normalized by the segment length """
@@ -318,12 +316,12 @@ def update_kalman(params, params_static, T, k):
     h_vid = np.array([sx*(qk0**2 + qk1**2 - qk2**2 - qk3**2) + sy*(-2*qk0*qk3 + 2*qk1*qk2) + sz*(2*qk0*qk2 + 2*qk1*qk3),
                       sx*(2*qk0*qk3 + 2*qk1*qk2) + sy*(qk0**2 - qk1**2 + qk2**2 - qk3**2) + sz*(-2*qk0*qk1 + 2*qk2*qk3),
                       sx*(-2*qk0*qk2 + 2*qk1*qk3) + sy*(2*qk0*qk1 + 2*qk2*qk3) + sz*(qk0**2 - qk1**2 - qk2**2 + qk3**2)])
-    z_vid = segment_in_glob[k, :].T / segment_length
+    z_vid = segment_in_glob[k].T / norm(segment_in_glob[k])
     q_vid_eps = K_k_vid @ (z_vid - h_vid)
 
     """ combine """
     qk = qk_ + q_acc_eps + q_vid_eps
-    q_esti[k, :] = qk / norm(qk)
+    q_esti[k] = qk / norm(qk)
     P[:, :, k] = (np.eye(4) - K_k_vid @ H_k_vid) @ (np.eye(4) - K_k_acc @ H_k_acc) @ P_k_minus
 
 
