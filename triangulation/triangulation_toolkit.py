@@ -89,6 +89,23 @@ def compare_axes_results(vicon_data, esti_data, axes=['X', 'Y', 'Z'], start=0, e
         plt.grid()
 
 
+def compare_three_methods(vicon_data, vid_imu, mag_imu, vid_only, axes, tb, trial, start=0, end=1000):
+    mses = [round(np.sqrt(mse(vicon_data[:, i_axis], esti_data[:, i_axis])), 2)
+            for i_axis in range(len(axes)) for esti_data in [vid_imu, mag_imu, vid_only]]
+    tb.add_row([trial] + mses)
+    for i_axis, axis in enumerate(axes):
+        plt.figure(figsize=(8, 5))
+        plt.title(axis)
+        plt.ylabel('angle (°)')
+        plt.xlabel('sample')
+        plt.plot(vicon_data[start:end, i_axis], label='OMC')
+        plt.plot(vid_imu[start:end, i_axis], '--', label='Video-IMU')
+        plt.plot(mag_imu[start:end, i_axis], '--', label='Magneto-IMU')
+        plt.plot(vid_only[start:end, i_axis], '--', label='Video only')
+        plt.legend()
+        plt.grid()
+
+
 def triangulate(joints, trial_data, camera_pairs_90, camera_pairs_180):
     params_90 = {'init_rot': np.array([[0., 1, 0], [0, 0, -1], [-1, 0, 0]]),
                  'init_tvec': np.array([-900., 1200, 3600]), 'pairs': camera_pairs_90}

@@ -15,10 +15,10 @@ import matplotlib.gridspec as gridspec
 
 def draw_sigifi_sign(mean_, std_, bar_locs, p_between_pattern, ylim):
     one_two, two_three, one_three = p_between_pattern
-    if y_tops[0] in [a + b for a, b in zip(mean_, std_)]:
-        y_top = y_tops[0]
+    if len([p[0] for p in p_between_pattern if p[0]]) == 3:
+        y_top = sorted([a + b for a, b in zip(mean_, std_)])[-3]
     else:
-        y_top = y_tops[1]
+        y_top = sorted([a + b for a, b in zip(mean_, std_)])[-1]
     print([a + b for a, b in zip(mean_, std_)])
     top_lines = [y_top + 0.12 * ylim, y_top + 0.25 * ylim, y_top + 0.38 * ylim]
     for i_pair, [pair, loc_0, loc_1] in enumerate(zip([one_two, two_three, one_three], [0, 1, 0], [1, 2, 2])):
@@ -106,20 +106,19 @@ def draw_f9_subplot(mean_, std_, p_between_pattern, ax, moment_name):
 def finalize_f9(fig):
     # pass
     plt.tight_layout(rect=[0, -0.01, 1, 0.9], w_pad=4, h_pad=1)
-    plt.legend(bar_[0:2], ['Ground-Truth Moment', 'Estimated Moment'],
+    plt.legend(bar_[0:2], ['Ground-Truth Moment', 'Estimated Moment'], frameon=False,
                bbox_to_anchor=(0.2, 1.24), ncol=2, fontsize=FONT_DICT_SMALL['fontsize'])
-    save_fig('asb')
+    save_fig('defense')
 
 
 if __name__ == "__main__":
     data_path = 'D:\Tian\Research\Projects\VideoIMUCombined\experiment_data\KAM\\'
     result_date = 'results/0326'
     color_0, color_1 = np.array([255, 166, 0]) / 255, np.array([0, 103, 137]) / 255
-    y_tops = (3.448762135552531, 6.435362697311724)
-    with h5py.File(result_date + 'KAM/8IMU_2camera/results.h5', 'r') as hf:
+    with h5py.File(result_date + 'KAM/8IMU/results.h5', 'r') as hf:
         kam_data_all_sub = {subject: subject_data[:] for subject, subject_data in hf.items()}
         kam_data_fields = json.loads(hf.attrs['columns'])
-    with h5py.File(result_date + 'KFM/8IMU_2camera/results.h5', 'r') as hf:
+    with h5py.File(result_date + 'KFM/8IMU/results.h5', 'r') as hf:
         kfm_data_all_sub = {subject: subject_data[:] for subject, subject_data in hf.items()}
         kfm_data_fields = json.loads(hf.attrs['columns'])
     with h5py.File(data_path + 'gait_parameters.h5', 'r') as hf:

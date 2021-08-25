@@ -34,9 +34,9 @@ def on_click_top(event, x, y, flags, param):
         print(x, y)
 
 
-subject = SUBJECTS[1]
+subject = SUBJECTS[5]
 
-step = 4
+step = 5
 
 """step 1, extract images from slow-motion video, only do once"""
 if step == 1:
@@ -50,6 +50,7 @@ if step == 1:
 
 """step 2, get 2d points from baseline trial pic"""
 if step == 2:
+    print(subject)
     camera_ = '90'
     angle = camera_ + '.MOV'
     vid_dir = 'D:\Tian\Research\Projects\VideoIMUCombined\experiment_data\\video\\' + subject + '\\baseline_' + angle
@@ -61,7 +62,7 @@ if step == 2:
     cv2.setMouseCallback('bottom', on_click_bottom)
     cv2.waitKey(0)
 
-"""step 3, get 3d points from vicon"""
+"""step 3, get 3d points from vicon, only need once"""
 if step == 3:
     point_3d_vicon = {}
     marker_radius = 7
@@ -97,7 +98,7 @@ if step == 4:
 """step 5, save triangulated data """
 if step == 5:
     joints = ['RHip', 'RKnee', 'RAnkle']
-    for subject in SUBJECTS[:2]:
+    for subject in SUBJECTS[:7]:
         os.makedirs(os.path.join(DATA_PATH, subject, 'triangulated'), exist_ok=True)
         for trial in STATIC_TRIALS + TRIALS:
             trial_data_dir = os.path.join(DATA_PATH, subject, 'combined', trial + '.csv')

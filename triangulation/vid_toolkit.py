@@ -45,19 +45,19 @@ def angle_between_vectors(subject, trial):
     return knee_angles_esti, q_shank_glob_body, q_thigh_glob_body
 
 
-for subject in SUBJECTS[:2]:
-    for trial in TRIALS:
-        knee_angles_esti, q_shank_glob_body, q_thigh_glob_body = angle_between_vectors(subject, trial)
-
-        trial_static_data = pd.read_csv(os.path.join(DATA_PATH, subject, 'combined', 'static_back.csv'), index_col=0)
-        knee_angles_vicon_static = trial_static_data[TARGETS_LIST[:3]].values
-
-        trial_data = pd.read_csv(os.path.join(DATA_PATH, subject, 'combined', trial + '.csv'), index_col=False)
-        knee_angles_vicon = trial_data[TARGETS_LIST[:3]].values
-
-        knee_angles_vicon = knee_angles_vicon - np.mean(knee_angles_vicon_static, axis=0)  # to remove static knee angle
-        compare_axes_results(knee_angles_vicon, knee_angles_esti, ['Flexion', 'Adduction', 'IE'],
-                             start=0, end=trial_data.shape[0])
-plt.show()
+# for subject in SUBJECTS[:2]:
+#     for trial in TRIALS:
+#         knee_angles_esti, q_shank_glob_body, q_thigh_glob_body = angle_between_vectors(subject, trial)
+#
+#         trial_static_data = pd.read_csv(os.path.join(DATA_PATH, subject, 'combined', 'static_back.csv'), index_col=0)
+#         knee_angles_vicon_static = trial_static_data[TARGETS_LIST[:3]].values
+#
+#         trial_data = pd.read_csv(os.path.join(DATA_PATH, subject, 'combined', trial + '.csv'), index_col=False)
+#         knee_angles_vicon = trial_data[TARGETS_LIST[:3]].values
+#
+#         knee_angles_vicon = knee_angles_vicon - np.mean(knee_angles_vicon_static, axis=0)  # to remove static knee angle
+#         compare_axes_results(knee_angles_vicon, knee_angles_esti, ['Flexion', 'Adduction', 'IE'],
+#                              start=0, end=trial_data.shape[0])
+# plt.show()
 
 
