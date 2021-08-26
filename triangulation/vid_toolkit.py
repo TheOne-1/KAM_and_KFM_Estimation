@@ -1,11 +1,9 @@
 import numpy as np
-import matplotlib.pyplot as plt
 import pandas as pd
 import os
 from const import SUBJECTS, DATA_PATH, TRIALS, TARGETS_LIST
 from transforms3d.quaternions import rotate_vector, mat2quat, quat2mat
-from triangulation.triangulation_toolkit import q_to_knee_angle, init_kalman_param, compare_axes_results
-from triangulation.triangulation_toolkit import plot_q_for_debug
+from triangulation.vid_imu_toolkit import q_to_knee_angle
 
 
 def get_orientation_from_vectors(segment_z, segment_ml):

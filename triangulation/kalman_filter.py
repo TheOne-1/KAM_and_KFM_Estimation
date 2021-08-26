@@ -1,9 +1,10 @@
 import numpy as np
 from const import SUBJECTS, GRAVITY, TRIALS, STATIC_TRIALS
-from triangulation.triangulation_toolkit import init_kalman_param_static, q_to_knee_angle, \
-    compare_axes_results, plot_q_for_debug, figure_for_FE_AA_angles, print_h_mat, compare_three_methods
+from triangulation.triangulation_toolkit import compare_axes_results
+from triangulation.vid_imu_toolkit import init_kalman_param_static, q_to_knee_angle, \
+    init_kalman_param, update_kalman, plot_q_for_debug, print_h_mat, compare_three_methods
+from wearable_toolkit import data_filter
 import matplotlib.pyplot as plt
-from triangulation.triangulation_toolkit import init_kalman_param, update_kalman
 import triangulation.magneto_imu_toolkit as mag_imu
 from triangulation.vid_toolkit import angle_between_vectors
 from types import SimpleNamespace
@@ -27,7 +28,7 @@ for subject in SUBJECTS[0:6]:
     tb = pt.PrettyTable()
     tb.field_names = ['Trial'] + [axis + ' - ' + method for axis in ['FE', 'AA'] for method in ['Vid_IMU', 'Magn_IMU', 'Video']]
 
-    for trial in TRIALS[:]:            # TRIALS STATIC_TRIALS
+    for trial in TRIALS[:1]:            # TRIALS STATIC_TRIALS
         """ vid-IMU """
         params_shank, _, _ = init_kalman_param(subject, trial, 'SHANK', SimpleNamespace(**init_params))
         params_thigh, trial_data, knee_angles_vicon = init_kalman_param(subject, trial, 'THIGH', SimpleNamespace(**init_params))
@@ -49,6 +50,9 @@ for subject in SUBJECTS[0:6]:
         knee_angles_vid_esti, _, _ = angle_between_vectors(subject, trial)
 
         """ Compare results"""
+        knee_angles_vid_imu_esti = data_filter(knee_angles_vid_imu_esti, 15, 100, 2)
+        knee_angles_mag_imu_esti = data_filter(knee_angles_mag_imu_esti, 15, 100, 2)
+        knee_angles_vid_esti = data_filter(knee_angles_vid_esti, 15, 100, 2)
         compare_three_methods(knee_angles_vicon[:, :2], knee_angles_vid_imu_esti[:, :2], knee_angles_mag_imu_esti[:, :2],
                               knee_angles_vid_esti[:, :2], ['Flexion', 'Adduction'], tb, trial)
     print(tb)
@@ -57,5 +61,5 @@ for subject in SUBJECTS[0:6]:
 
 """ Notes """
 # 1. subject 1, trial 2, the video-vicon data sync is bad
-# !!! apply the V3D filtering to Vid_IMU data !!!
-
+# 2. vid-IMU underestimate during stance phase, while magneto-IMU overestimate at the same phase.
+#    This might be because different reference homogenous field
