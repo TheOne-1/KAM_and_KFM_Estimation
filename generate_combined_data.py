@@ -78,7 +78,7 @@ def sync_and_crop_data_frame(subject, trial):
     middle_data = pd.concat(
         [imu_data.data_frame, video_90_data.data_frame, video_180_data.data_frame, V3d_data.data_frame,
          vicon_data.data_frame], axis=1)
-    middle_data = middle_data.loc[:min_length]
+    middle_data = middle_data.loc[:min_length-1]
     middle_data[SUBJECT_HEIGHT] = subject_info[SUBJECT_HEIGHT]
     middle_data[SUBJECT_WEIGHT] = subject_info[SUBJECT_WEIGHT]
     middle_data[SUBJECT_ID] = SUBJECTS.index(subject)

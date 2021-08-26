@@ -6,14 +6,14 @@ import sympy as sym
 from numpy import cos, sin, arctan2
 import os
 from triangulation.triangulation_toolkit import compare_axes_results
-from const import DATA_PATH, GRAVITY, TARGETS_LIST
+from const import DATA_PATH, GRAVITY, TARGETS_LIST, TREADMILL_MAG_FIELD
 from sklearn.metrics import mean_squared_error as mse
 from types import SimpleNamespace
 from transforms3d.quaternions import rotate_vector, mat2quat, quat2mat
 from transforms3d.euler import mat2euler
 
 
-def compare_three_methods(vicon_data, vid_imu, mag_imu, vid_only, axes, tb, trial, start=5000, end=6500):
+def compare_three_methods(vicon_data, vid_imu, mag_imu, vid_only, axes, tb, trial, start=5000, end=5500):
     mses = [round(np.sqrt(mse(vicon_data[:, i_axis], esti_data[:, i_axis])), 2)
             for i_axis in range(len(axes)) for esti_data in [vid_imu, mag_imu, vid_only]]
     tb.add_row([trial] + mses)
@@ -125,122 +125,125 @@ def get_vicon_orientation(data_df, segment):
         return q_vicon, segment_x, segment_y, segment_z
 
 
-def init_kalman_param_static(subject, segment):
-    if segment == 'SHANK':
-        upper_joint, lower_joint = 'RKnee', 'RAnkle'
-    elif segment == 'THIGH':
-        upper_joint, lower_joint = 'RHip', 'RKnee'
-    else:
-        raise ValueError('Incorrect segment name')
-    params_static = SimpleNamespace()
-    trial_static_data = pd.read_csv(os.path.join(DATA_PATH, subject, 'combined', 'static_back.csv'), index_col=0)
-    knee_angles_vicon_static = trial_static_data[TARGETS_LIST[:3]].values
+class KalmanFilterVidIMU:
+    def __init__(self, subject, segment, trial, init_params):
+        self.subject = subject
+        self.segment = segment
+        self.trial = trial
+        self.t = init_params.t
+        if segment == 'SHANK':
+            self.upper_joint, self.lower_joint = 'RKnee', 'RAnkle'
+        elif segment == 'THIGH':
+            self.upper_joint, self.lower_joint = 'RHip', 'RKnee'
+        else:
+            raise ValueError('Incorrect segment name')
+        self.params_static, self.knee_angles_vicon_static = self.init_kalman_static_param()
+        self.params, self.trial_data, self.knee_angles_vicon = self.init_kalman_trial_param(init_params)
+        self.R_body_sens = np.eye(3) @ self.params_static.R_glob_sens_static
 
-    vid_data_static = pd.read_csv(os.path.join(DATA_PATH, subject, 'triangulated', 'static_back.csv'), index_col=0)
-    upper_joint_col = [upper_joint + '_3d_' + axis for axis in ['x', 'y', 'z']]
-    lower_joint_col = [lower_joint + '_3d_' + axis for axis in ['x', 'y', 'z']]
-    segment_in_glob_static = np.mean(vid_data_static[upper_joint_col].values - vid_data_static[lower_joint_col].values, axis=0)
+    def init_kalman_static_param(self):
+        subject, segment = self.subject, self.segment
+        trial_static_data = pd.read_csv(os.path.join(DATA_PATH, subject, 'combined', 'static_back.csv'), index_col=0)
+        knee_angles_vicon_static = trial_static_data[TARGETS_LIST[:3]].values
 
-    params_static.R_glob_sens_static = calibrate_segment_in_sensor_frame(
-        trial_static_data[['AccelX_R_'+segment, 'AccelY_R_'+segment, 'AccelZ_R_'+segment]].values)
-    params_static.segment_length = norm(segment_in_glob_static)
-    R_sens_glob_static = params_static.R_glob_sens_static.T
-    params_static.segment_in_sens = calibrate_segment_in_global_frame(segment_in_glob_static, R_sens_glob_static)
-    print('{} vector in sensor frame: {}'.format(segment, params_static.segment_in_sens))
-    return params_static, knee_angles_vicon_static
+        vid_data_static = pd.read_csv(os.path.join(DATA_PATH, subject, 'triangulated', 'static_back.csv'), index_col=0)
+        upper_joint_col = [self.upper_joint + '_3d_' + axis for axis in ['x', 'y', 'z']]
+        lower_joint_col = [self.lower_joint + '_3d_' + axis for axis in ['x', 'y', 'z']]
+        segment_in_glob_static = np.mean(vid_data_static[upper_joint_col].values - vid_data_static[lower_joint_col].values, axis=0)
+        params_static = SimpleNamespace()
+        params_static.R_glob_sens_static = calibrate_segment_in_sensor_frame(
+            trial_static_data[['AccelX_R_'+segment, 'AccelY_R_'+segment, 'AccelZ_R_'+segment]].values)
+        params_static.segment_length = norm(segment_in_glob_static)
+        R_sens_glob_static = params_static.R_glob_sens_static.T
+        params_static.segment_in_sens = calibrate_segment_in_global_frame(segment_in_glob_static, R_sens_glob_static)
+        print('{} vector in sensor frame: {}'.format(segment, params_static.segment_in_sens))
+        return params_static, knee_angles_vicon_static
 
+    def init_kalman_trial_param(self, init_params):
+        subject, trial, segment = self.subject, self.trial, self.segment
+        upper_joint, lower_joint = self.upper_joint, self.lower_joint
+        trial_data = pd.read_csv(os.path.join(DATA_PATH, subject, 'combined', trial+'.csv'), index_col=False)
+        knee_angles_vicon = trial_data[TARGETS_LIST[:3]].values
+        data_len = trial_data.shape[0]
 
-def init_kalman_param(subject, trial, segment, init_params):
-    trial_data_dir = 'D:\Tian\Research\Projects\VideoIMUCombined\experiment_data\KAM\\'\
-                     + subject + '\combined\\' + trial + '.csv'
-    trial_data = pd.read_csv(trial_data_dir, index_col=False)
-    knee_angles_vicon = trial_data[TARGETS_LIST[:3]].values
-    data_len = trial_data.shape[0]
+        params = SimpleNamespace()
+        params.q_esti = np.zeros([data_len, 4])
+        params.q_esti[0, :] = init_params.quat_init
+        params.P = np.zeros([4, 4, data_len])
+        params.P[:, :, 0] = np.eye(4)
+        params.Q = init_params.gyro_noise * np.eye(4)
+        params.acc = trial_data[['AccelX_R_'+segment, 'AccelY_R_'+segment, 'AccelZ_R_'+segment]].values
+        params.gyr = np.deg2rad(trial_data[['GyroX_R_'+segment, 'GyroY_R_'+segment, 'GyroZ_R_'+segment]].values)
 
-    if segment == 'SHANK':
-        upper_joint, lower_joint = 'RKnee', 'RAnkle'
-    elif segment == 'THIGH':
-        upper_joint, lower_joint = 'RHip', 'RKnee'
-    else:
-        raise ValueError('Incorrect segment name')
+        vid_data = pd.read_csv(os.path.join(DATA_PATH, subject, 'triangulated', trial+'.csv'), index_col=0)
+        upper_joint_col = [upper_joint + '_3d_' + axis for axis in ['x', 'y', 'z']]
+        lower_joint_col = [lower_joint + '_3d_' + axis for axis in ['x', 'y', 'z']]
+        params.segment_in_glob = vid_data[upper_joint_col].values - vid_data[lower_joint_col].values
+        params.segment_confidence = trial_data[upper_joint+'_probability_90'] * trial_data[upper_joint+'_probability_180'] * \
+                                    trial_data[lower_joint+'_probability_90'] * trial_data[lower_joint+'_probability_180']
 
-    params = SimpleNamespace()
-    params.q_esti = np.zeros([data_len, 4])
-    params.q_esti[0, :] = init_params.quat_init
-    params.P = np.zeros([4, 4, data_len])
-    params.P[:, :, 0] = np.eye(4)
-    params.Q = init_params.gyro_noise * np.eye(4)
-    params.acc = trial_data[['AccelX_R_'+segment, 'AccelY_R_'+segment, 'AccelZ_R_'+segment]].values
-    params.gyr = np.deg2rad(trial_data[['GyroX_R_'+segment, 'GyroY_R_'+segment, 'GyroZ_R_'+segment]].values)
+        params.R_acc_diff_coeff = init_params.R_acc_diff_coeff
+        params.R_acc_base = np.eye(3) * init_params.acc_noise
+        params.R_vid_base = np.eye(3) * init_params.vid_noise
+        params.V_acc = np.eye(3)               # correlation between the acc noise and angular position
+        params.V_vid = np.eye(3)
+        return params, trial_data, knee_angles_vicon
 
-    vid_data = pd.read_csv(os.path.join(DATA_PATH, subject, 'triangulated', trial+'.csv'), index_col=0)
-    upper_joint_col = [upper_joint + '_3d_' + axis for axis in ['x', 'y', 'z']]
-    lower_joint_col = [lower_joint + '_3d_' + axis for axis in ['x', 'y', 'z']]
-    params.segment_in_glob = vid_data[upper_joint_col].values - vid_data[lower_joint_col].values
-    params.segment_confidence = trial_data[upper_joint+'_probability_90'] * trial_data[upper_joint+'_probability_180'] * \
-                                trial_data[lower_joint+'_probability_90'] * trial_data[lower_joint+'_probability_180']
+    def update_kalman(self, k):
+        params = self.params
+        gyr, q_esti, acc, P, Q, R_acc_base, R_acc_diff_coeff, V_acc, R_vid_base, V_vid, segment_confidence, segment_in_glob = \
+            params.gyr, params.q_esti, params.acc, params.P, params.Q, params.R_acc_base, params.R_acc_diff_coeff,\
+            params.V_acc, params.R_vid_base, params.V_vid, params.segment_confidence, params.segment_in_glob
+        segment_length = self.params_static.segment_length
+        sx, sy, sz = self.params_static.segment_in_sens
 
-    params.R_acc_diff_coeff = init_params.R_acc_diff_coeff
-    params.R_acc_base = np.eye(3) * init_params.acc_noise
-    params.R_vid_base = np.eye(3) * init_params.vid_noise
-    params.V_acc = np.eye(3)               # correlation between the acc noise and angular position
-    params.V_vid = np.eye(3)
-    return params, trial_data, knee_angles_vicon
+        """ a prior system estimation """
+        omega = np.array([[0, -gyr[k, 0], -gyr[k, 1], -gyr[k, 2]],
+                          [gyr[k, 0], 0, gyr[k, 2], -gyr[k, 1]],
+                          [gyr[k, 1], -gyr[k, 2], 0, gyr[k, 0]],
+                          [gyr[k, 2], gyr[k, 1], -gyr[k, 0], 0]])
+        Ak = np.eye(4) + 0.5 * omega * self.t
+        qk_ = Ak @ q_esti[k-1]
+        qk_ = qk_ / norm(qk_)      # should there be a norm? !!!
+        qk0, qk1, qk2, qk3 = qk_
 
+        P_k_minus = Ak @ P[:, :, k-1] @ Ak.T + Q
 
-def update_kalman(params, params_static, T, k):
-    gyr, q_esti, acc, P, Q, R_acc_base, R_acc_diff_coeff, V_acc, R_vid_base, V_vid, segment_confidence, segment_in_glob, segment_length = \
-        params.gyr, params.q_esti, params.acc, params.P, params.Q, params.R_acc_base, params.R_acc_diff_coeff,\
-        params.V_acc, params.R_vid_base, params.V_vid, params.segment_confidence, params.segment_in_glob, params_static.segment_length
-    sx, sy, sz = params_static.segment_in_sens
+        """ correction stage 1, based on acc. Note that the h_vid, z_vid, and R are normalized by the gravity """
+        H_k_acc = 2 * np.array([[-qk2, qk3, -qk0, qk1],
+                                [qk1, qk0, qk3, qk2],
+                                [qk0, -qk1, -qk2, qk3]])
+        acc_diff = norm(rotate_vector(acc[k], qk_) - np.array([0, 0, GRAVITY]))
+        R_acc = R_acc_base + R_acc_diff_coeff * np.array([
+            [acc_diff**2, 0, 0],
+            [0, acc_diff**2, 0],
+            [0, 0, acc_diff**2]])
+        R_acc = R_acc / GRAVITY
+        K_k_acc = P_k_minus @ H_k_acc.T @ np.matrix(H_k_acc @ P_k_minus @ H_k_acc.T + V_acc @ R_acc @ V_acc.T).I
 
-    """ a prior system estimation """
-    omega = np.array([[0, -gyr[k, 0], -gyr[k, 1], -gyr[k, 2]],
-                      [gyr[k, 0], 0, gyr[k, 2], -gyr[k, 1]],
-                      [gyr[k, 1], -gyr[k, 2], 0, gyr[k, 0]],
-                      [gyr[k, 2], gyr[k, 1], -gyr[k, 0], 0]])
-    Ak = np.eye(4) + 0.5 * omega * T
-    qk_ = Ak @ q_esti[k-1]
-    qk_ = qk_ / norm(qk_)      # should there be a norm? !!!
-    qk0, qk1, qk2, qk3 = qk_
+        h_acc = np.array([2*qk1*qk3 - 2*qk0*qk2,
+                          2*qk0*qk1 + 2*qk2*qk3,
+                          qk0**2 - qk1**2 - qk2**2 + qk3**2])
+        z_acc = acc[k].T / norm(acc[k])
+        q_acc_eps = K_k_acc @ (z_acc - h_acc)
 
-    P_k_minus = Ak @ P[:, :, k-1] @ Ak.T + Q
+        """ correction stage 2, based on vid. Note that the h_vid, z_vid, and R are normalized by the segment length """
+        H_k_vid = np.array([[2*qk0*sx + 2*qk2*sz - 2*qk3*sy, 2*qk1*sx + 2*qk2*sy + 2*qk3*sz, 2*qk0*sz + 2*qk1*sy - 2*qk2*sx, -2*qk0*sy + 2*qk1*sz - 2*qk3*sx],
+                            [2*qk0*sy - 2*qk1*sz + 2*qk3*sx, -2*qk0*sz - 2*qk1*sy + 2*qk2*sx, 2*qk1*sx + 2*qk2*sy + 2*qk3*sz, 2*qk0*sx + 2*qk2*sz - 2*qk3*sy],
+                            [2*qk0*sz + 2*qk1*sy - 2*qk2*sx, 2*qk0*sy - 2*qk1*sz + 2*qk3*sx, -2*qk0*sx - 2*qk2*sz + 2*qk3*sy, 2*qk1*sx + 2*qk2*sy + 2*qk3*sz]])
+        R_vid = R_vid_base / segment_confidence[k] / segment_length     # this could be more innovative
+        K_k_vid = P_k_minus @ H_k_vid.T @ np.matrix(H_k_vid @ P_k_minus @ H_k_vid.T + V_vid @ R_vid @ V_vid.T).I
 
-    """ correction stage 1, based on acc. Note that the h_vid, z_vid, and R are normalized by the gravity """
-    H_k_acc = 2 * np.array([[-qk2, qk3, -qk0, qk1],
-                            [qk1, qk0, qk3, qk2],
-                            [qk0, -qk1, -qk2, qk3]])
-    acc_diff = norm(rotate_vector(acc[k], qk_) - np.array([0, 0, GRAVITY]))
-    R_acc = R_acc_base + R_acc_diff_coeff * np.array([
-        [acc_diff**2, 0, 0],
-        [0, acc_diff**2, 0],
-        [0, 0, acc_diff**2]])
-    R_acc = R_acc / GRAVITY
-    K_k_acc = P_k_minus @ H_k_acc.T @ np.matrix(H_k_acc @ P_k_minus @ H_k_acc.T + V_acc @ R_acc @ V_acc.T).I
+        h_vid = np.array([sx*(qk0**2 + qk1**2 - qk2**2 - qk3**2) + sy*(-2*qk0*qk3 + 2*qk1*qk2) + sz*(2*qk0*qk2 + 2*qk1*qk3),
+                          sx*(2*qk0*qk3 + 2*qk1*qk2) + sy*(qk0**2 - qk1**2 + qk2**2 - qk3**2) + sz*(-2*qk0*qk1 + 2*qk2*qk3),
+                          sx*(-2*qk0*qk2 + 2*qk1*qk3) + sy*(2*qk0*qk1 + 2*qk2*qk3) + sz*(qk0**2 - qk1**2 - qk2**2 + qk3**2)])
+        z_vid = segment_in_glob[k].T / norm(segment_in_glob[k])
+        q_vid_eps = K_k_vid @ (z_vid - h_vid)
 
-    h_acc = np.array([2*qk1*qk3 - 2*qk0*qk2,
-                      2*qk0*qk1 + 2*qk2*qk3,
-                      qk0**2 - qk1**2 - qk2**2 + qk3**2])
-    z_acc = acc[k].T / norm(acc[k])
-    q_acc_eps = K_k_acc @ (z_acc - h_acc)
-
-    """ correction stage 2, based on vid. Note that the h_vid, z_vid, and R are normalized by the segment length """
-    H_k_vid = np.array([[2*qk0*sx + 2*qk2*sz - 2*qk3*sy, 2*qk1*sx + 2*qk2*sy + 2*qk3*sz, 2*qk0*sz + 2*qk1*sy - 2*qk2*sx, -2*qk0*sy + 2*qk1*sz - 2*qk3*sx],
-                        [2*qk0*sy - 2*qk1*sz + 2*qk3*sx, -2*qk0*sz - 2*qk1*sy + 2*qk2*sx, 2*qk1*sx + 2*qk2*sy + 2*qk3*sz, 2*qk0*sx + 2*qk2*sz - 2*qk3*sy],
-                        [2*qk0*sz + 2*qk1*sy - 2*qk2*sx, 2*qk0*sy - 2*qk1*sz + 2*qk3*sx, -2*qk0*sx - 2*qk2*sz + 2*qk3*sy, 2*qk1*sx + 2*qk2*sy + 2*qk3*sz]])
-    R_vid = R_vid_base / segment_confidence[k] / segment_length     # this could be more innovative
-    K_k_vid = P_k_minus @ H_k_vid.T @ np.matrix(H_k_vid @ P_k_minus @ H_k_vid.T + V_vid @ R_vid @ V_vid.T).I
-
-    h_vid = np.array([sx*(qk0**2 + qk1**2 - qk2**2 - qk3**2) + sy*(-2*qk0*qk3 + 2*qk1*qk2) + sz*(2*qk0*qk2 + 2*qk1*qk3),
-                      sx*(2*qk0*qk3 + 2*qk1*qk2) + sy*(qk0**2 - qk1**2 + qk2**2 - qk3**2) + sz*(-2*qk0*qk1 + 2*qk2*qk3),
-                      sx*(-2*qk0*qk2 + 2*qk1*qk3) + sy*(2*qk0*qk1 + 2*qk2*qk3) + sz*(qk0**2 - qk1**2 - qk2**2 + qk3**2)])
-    z_vid = segment_in_glob[k].T / norm(segment_in_glob[k])
-    q_vid_eps = K_k_vid @ (z_vid - h_vid)
-
-    """ combine """
-    qk = qk_ + q_acc_eps + q_vid_eps
-    q_esti[k] = qk / norm(qk)
-    P[:, :, k] = (np.eye(4) - K_k_vid @ H_k_vid) @ (np.eye(4) - K_k_acc @ H_k_acc) @ P_k_minus
+        """ combine """
+        qk = qk_ + q_acc_eps + q_vid_eps
+        q_esti[k] = qk / norm(qk)
+        P[:, :, k] = (np.eye(4) - K_k_vid @ H_k_vid) @ (np.eye(4) - K_k_acc @ H_k_acc) @ P_k_minus
 
 
 def q_to_knee_angle(q_shank_glob_sens, q_thigh_glob_sens, R_shank_body_sens, R_thigh_body_sens):
@@ -280,7 +283,7 @@ def plot_q_for_debug(trial_data, q_shank_esti, q_thigh_esti):
     q_vicon_thigh, thigh_x, thigh_y, thigh_z = get_vicon_orientation(trial_data, 'R_THIGH')
 
     # acc_global_esti, acc_global_vicon = np.zeros(params_thigh.acc.shape), np.zeros(params_thigh.acc.shape)
-    # for i in range(1, trial_data.shape[0]-1):
+    # for i in range(1, trial_data.shape[0]):
     #     acc_global_esti[i] = rotate_vector(params_thigh.acc[i], params_thigh.q_esti[i])
     #     acc_global_vicon[i] = rotate_vector(params_thigh.acc[i], q_vicon_shank[i])
     # for i_axis in range(3):
@@ -290,3 +293,274 @@ def plot_q_for_debug(trial_data, q_shank_esti, q_thigh_esti):
 
     compare_axes_results(q_vicon_shank, q_shank_esti, ['q0', 'q1', 'q2', 'q3'], title='shank orientation', end=shank_x.shape[0])
     compare_axes_results(q_vicon_thigh, q_thigh_esti, ['q0', 'q1', 'q2', 'q3'], title='thigh orientation', end=thigh_x.shape[0])
+
+# import numpy as np
+# from numpy.linalg import norm
+# import pandas as pd
+# import matplotlib.pyplot as plt
+# import sympy as sym
+# from numpy import cos, sin, arctan2, arcsin
+# import os
+# import glob
+# from const import TREADMILL_MAG_FIELD, DATA_PATH, GRAVITY, TARGETS_LIST
+# from types import SimpleNamespace
+# from transforms3d.quaternions import rotate_vector, qmult, qconjugate
+# from transforms3d.euler import mat2euler
+
+
+class KalmanFilterMagIMU:
+    def __init__(self, subject, segment, trial, init_params):
+        self.subject = subject
+        self.segment = segment
+        self.trial = trial
+        self.t = init_params.t
+        self.params, self.trial_data = self.init_kalman_trial_param(init_params)
+
+    @staticmethod
+    def print_h_mat():
+        qk0, qk1, qk2, qk3, mx, my, mz = sym.symbols('qk0, qk1, qk2, qk3, mx, my, mz', constant=True)
+        R_sens_glob = sym.Matrix([[qk0**2 + qk1**2 - qk2**2 - qk3**2, 2*qk1*qk2+2*qk0*qk3, 2*qk1*qk3-2*qk0*qk2],
+                               [2*qk1*qk2-2*qk0*qk3, qk0**2 - qk1**2 + qk2**2 - qk3**2, 2*qk2*qk3+2*qk0*qk1],
+                               [2*qk1*qk3+2*qk0*qk2, 2*qk2*qk3-2*qk0*qk1, qk0**2 - qk1**2 - qk2**2 + qk3**2]])
+        mag_in_glob = sym.Matrix([mx, my, mz])
+        mag_in_sens = R_sens_glob * mag_in_glob
+        H_k = mag_in_sens.jacobian([qk0, qk1, qk2, qk3])
+        print('For IMU H_k_vid and h_vid')
+        print(mag_in_sens.T)
+        print(H_k)
+
+    def init_kalman_trial_param(self, init_params):
+        subject, trial, segment = self.subject, self.trial, self.segment
+        trial_data_dir = 'D:\Tian\Research\Projects\VideoIMUCombined\experiment_data\KAM\\'\
+                         + subject + '\combined\\' + trial + '.csv'
+        trial_data = pd.read_csv(trial_data_dir, index_col=False)
+        data_len = trial_data.shape[0]
+
+        params = SimpleNamespace()
+        params.q_esti = np.zeros([data_len, 4])
+        params.q_esti[0, :] = init_params.quat_init
+        params.P = np.zeros([4, 4, data_len])
+        params.P[:, :, 0] = np.eye(4)
+        params.Q = init_params.gyro_noise * np.eye(4)
+        params.acc = trial_data[['AccelX_R_'+segment, 'AccelY_R_'+segment, 'AccelZ_R_'+segment]].values
+        params.gyr = np.deg2rad(trial_data[['GyroX_R_'+segment, 'GyroY_R_'+segment, 'GyroZ_R_'+segment]].values)
+        params.mag = trial_data[['MagX_R_'+segment, 'MagY_R_'+segment, 'MagZ_R_'+segment]].values
+
+        params.R_acc_diff_coeff = init_params.R_acc_diff_coeff
+        params.R_acc_base = np.eye(3) * init_params.acc_noise
+        params.R_mag_diff_coeff = init_params.R_mag_diff_coeff
+        params.R_mag_base = np.eye(3) * init_params.mag_noise
+        params.V_acc = np.eye(3)               # correlation between the acc noise and angular position
+        params.V_mag = np.eye(3)
+        return params, trial_data
+
+    def update_kalman(self, k):
+        params = self.params
+        gyr, q_esti, acc, P, Q, R_acc_base, R_acc_diff_coeff, V_acc, R_mag_base, R_mag_diff_coeff, V_mag, mag = \
+            params.gyr, params.q_esti, params.acc, params.P, params.Q, params.R_acc_base, params.R_acc_diff_coeff,\
+            params.V_acc, params.R_mag_base, params.R_mag_diff_coeff, params.V_mag, params.mag
+
+        """ a prior system estimation """
+        omega = np.array([[0, -gyr[k, 0], -gyr[k, 1], -gyr[k, 2]],
+                          [gyr[k, 0], 0, gyr[k, 2], -gyr[k, 1]],
+                          [gyr[k, 1], -gyr[k, 2], 0, gyr[k, 0]],
+                          [gyr[k, 2], gyr[k, 1], -gyr[k, 0], 0]])
+        Ak = np.eye(4) + 0.5 * omega * self.t
+        qk_ = Ak @ q_esti[k-1]
+        qk0, qk1, qk2, qk3 = qk_
+
+        P_k_minus = Ak @ P[:, :, k-1] @ Ak.T + Q
+
+        """ correction stage 1, based on acc. Note that the h_mag, z_mag, and R are normalized by the gravity """
+        H_k_acc = 2 * np.array([[-qk2, qk3, -qk0, qk1],
+                                [qk1, qk0, qk3, qk2],
+                                [qk0, -qk1, -qk2, qk3]])
+
+        acc_diff = norm(rotate_vector(acc[k], qk_) - np.array([0, 0, GRAVITY]))
+        R_acc = R_acc_base + R_acc_diff_coeff * np.array([
+            [acc_diff**2, 0, 0],
+            [0, acc_diff**2, 0],
+            [0, 0, acc_diff**2]])
+        R_acc = R_acc / GRAVITY
+        K_k_acc = P_k_minus @ H_k_acc.T @ np.matrix(H_k_acc @ P_k_minus @ H_k_acc.T + V_acc @ R_acc @ V_acc.T).I
+
+        h_acc = np.array([2*qk1*qk3 - 2*qk0*qk2,
+                          2*qk0*qk1 + 2*qk2*qk3,
+                          qk0**2 - qk1**2 - qk2**2 + qk3**2])
+        z_acc = acc[k, :].T / norm(acc[k, :])
+        q_acc_eps = K_k_acc @ (z_acc - h_acc)
+
+        """ correction stage 2, based on mag. Note that the h_mag, z_mag, and R are normalized by the segment length """
+        mx, my, mz = TREADMILL_MAG_FIELD
+        H_k_mag = np.array([[2*mx*qk0 + 2*my*qk3 - 2*mz*qk2, 2*mx*qk1 + 2*my*qk2 + 2*mz*qk3, -2*mx*qk2 + 2*my*qk1 - 2*mz*qk0, -2*mx*qk3 + 2*my*qk0 + 2*mz*qk1],
+                            [-2*mx*qk3 + 2*my*qk0 + 2*mz*qk1, 2*mx*qk2 - 2*my*qk1 + 2*mz*qk0, 2*mx*qk1 + 2*my*qk2 + 2*mz*qk3, -2*mx*qk0 - 2*my*qk3 + 2*mz*qk2],
+                            [2*mx*qk2 - 2*my*qk1 + 2*mz*qk0, 2*mx*qk3 - 2*my*qk0 - 2*mz*qk1, 2*mx*qk0 + 2*my*qk3 - 2*mz*qk2, 2*mx*qk1 + 2*my*qk2 + 2*mz*qk3]])
+        R_mag = R_mag_base
+        K_k_mag = P_k_minus @ H_k_mag.T @ np.matrix(H_k_mag @ P_k_minus @ H_k_mag.T + V_mag @ R_mag @ V_mag.T).I
+
+        h_mag = np.array([mx*(qk0**2 + qk1**2 - qk2**2 - qk3**2) + my*(2*qk0*qk3 + 2*qk1*qk2) + mz*(-2*qk0*qk2 + 2*qk1*qk3),
+                          mx*(-2*qk0*qk3 + 2*qk1*qk2) + my*(qk0**2 - qk1**2 + qk2**2 - qk3**2) + mz*(2*qk0*qk1 + 2*qk2*qk3),
+                          mx*(2*qk0*qk2 + 2*qk1*qk3) + my*(-2*qk0*qk1 + 2*qk2*qk3) + mz*(qk0**2 - qk1**2 - qk2**2 + qk3**2)])
+        z_mag = mag[k, :].T / norm(mag[k, :])
+        q_mag_eps = K_k_mag @ (z_mag - h_mag)
+
+        """ combine """
+        qk = qk_ + q_acc_eps + q_mag_eps
+        q_esti[k, :] = qk / norm(qk)
+        P[:, :, k] = (np.eye(4) - K_k_mag @ H_k_mag) @ (np.eye(4) - K_k_acc @ H_k_acc) @ P_k_minus
+
+
+class VidOnlyKneeAngle:
+    @staticmethod
+    def get_orientation_from_vectors(segment_z, segment_ml):
+        segment_y = np.cross(segment_z, segment_ml)
+        segment_x = np.cross(segment_y, segment_z)
+        fun_norm_vect = lambda v: v / np.linalg.norm(v)
+        segment_x = np.apply_along_axis(fun_norm_vect, 1, segment_x)
+        segment_y = np.apply_along_axis(fun_norm_vect, 1, segment_y)
+        segment_z = np.apply_along_axis(fun_norm_vect, 1, segment_z)
+
+        R_body_glob = np.array([segment_x, segment_y, segment_z])
+        R_body_glob = np.swapaxes(R_body_glob, 0, 1)
+        R_glob_body = np.swapaxes(R_body_glob, 1, 2)
+
+        def temp_fun(R):
+            if np.isnan(R).any():
+                return np.array([1, 0, 0, 0])
+            else:
+                quat = mat2quat(R)
+                if quat[3] < 0:
+                    quat = - quat
+                return quat / np.linalg.norm(quat)
+
+        q_glob_body = np.array(list(map(temp_fun, R_glob_body)))
+        return q_glob_body
+
+    @staticmethod
+    def angle_between_vectors(subject, trial):
+        vid_data = pd.read_csv(os.path.join(DATA_PATH, subject, 'triangulated', trial + '.csv'), index_col=0)
+        joint_col = [joint + '_3d_' + axis for joint in ['RHip', 'RKnee', 'RAnkle'] for axis in ['x', 'y', 'z']]
+        joint_hip, joint_knee, joint_ankle = [vid_data[joint_col[3 * i:3 * (i + 1)]].values for i in range(3)]
+        shank_y, shank_ml = joint_knee - joint_ankle, [1, 0, 0]
+        q_shank_glob_body = VidOnlyKneeAngle.get_orientation_from_vectors(shank_y, shank_ml)
+        thigh_y, thigh_ml = joint_hip - joint_knee, [1, 0, 0]
+        q_thigh_glob_body = VidOnlyKneeAngle.get_orientation_from_vectors(thigh_y, thigh_ml)
+        knee_angles_esti = q_to_knee_angle(q_shank_glob_body, q_thigh_glob_body, np.eye(3), np.eye(3))
+        return knee_angles_esti, q_shank_glob_body, q_thigh_glob_body
+
+
+class MadgwickAHRS:
+    def __init__(self, init_params):
+        """
+        Initialize the class with the given parameters.
+        :param sampleperiod: The sample period
+        :param quaternion: Initial quaternion
+        :param beta: Algorithm gain beta
+        :return:
+        """
+        self.samplePeriod = init_params.T
+        self.quat = init_params.quat_init
+        self.beta = init_params.beta
+
+    def update(self, gyroscope, accelerometer, magnetometer):
+        """
+        Perform one update step with data from a AHRS sensor array
+        :param gyroscope: A three-element array containing the gyroscope data in radians per second.
+        :param accelerometer: A three-element array containing the accelerometer data. Can be any unit since a normalized value is used.
+        :param magnetometer: A three-element array containing the magnetometer data. Can be any unit since a normalized value is used.
+        :return:
+        """
+        q = self.quat
+
+        gyroscope = np.array(gyroscope, dtype=float).flatten()
+        accelerometer = np.array(accelerometer, dtype=float).flatten()
+        magnetometer = np.array(magnetometer, dtype=float).flatten()
+
+        accelerometer /= norm(accelerometer)
+        magnetometer /= norm(magnetometer)
+
+        h = qmult(q, qmult((0, magnetometer[0], magnetometer[1], magnetometer[2]), qconjugate(q)))      # !!! if bug, check
+        b = np.array([0, norm(h[1:3]), 0, h[3]])
+
+        # Gradient descent algorithm corrective step
+        f = np.array([
+            2*(q[1]*q[3] - q[0]*q[2]) - accelerometer[0],
+            2*(q[0]*q[1] + q[2]*q[3]) - accelerometer[1],
+            2*(0.5 - q[1]**2 - q[2]**2) - accelerometer[2],
+            2*b[1]*(0.5 - q[2]**2 - q[3]**2) + 2*b[3]*(q[1]*q[3] - q[0]*q[2]) - magnetometer[0],
+            2*b[1]*(q[1]*q[2] - q[0]*q[3]) + 2*b[3]*(q[0]*q[1] + q[2]*q[3]) - magnetometer[1],
+            2*b[1]*(q[0]*q[2] + q[1]*q[3]) + 2*b[3]*(0.5 - q[1]**2 - q[2]**2) - magnetometer[2]
+        ])
+        j = np.array([
+            [-2*q[2],                  2*q[3],                  -2*q[0],                  2*q[1]],
+            [2*q[1],                   2*q[0],                  2*q[3],                   2*q[2]],
+            [0,                        -4*q[1],                 -4*q[2],                  0],
+            [-2*b[3]*q[2],             2*b[3]*q[3],             -4*b[1]*q[2]-2*b[3]*q[0], -4*b[1]*q[3]+2*b[3]*q[1]],
+            [-2*b[1]*q[3]+2*b[3]*q[1], 2*b[1]*q[2]+2*b[3]*q[0], 2*b[1]*q[1]+2*b[3]*q[3],  -2*b[1]*q[0]+2*b[3]*q[2]],
+            [2*b[1]*q[2],              2*b[1]*q[3]-4*b[3]*q[1], 2*b[1]*q[0]-4*b[3]*q[2],  2*b[1]*q[1]]
+        ])
+        step = j.T.dot(f)
+        step /= norm(step)  # normalise step magnitude
+
+        # Compute rate of change of quaternion
+        qdot = qmult(q, (0, gyroscope[0], gyroscope[1], gyroscope[2])) * 0.5 - self.beta * step.T       # !!! if bug, check
+
+        # Integrate to yield quaternion
+        q += qdot * self.samplePeriod
+        self.quat = q / norm(q)  # normalise quaternion
+
+    # def update_imu(self, gyroscope, accelerometer):
+    #     """
+    #     Perform one update step with data from a IMU sensor array
+    #     :param gyroscope: A three-element array containing the gyroscope data in radians per second.
+    #     :param accelerometer: A three-element array containing the accelerometer data. Can be any unit since a normalized value is used.
+    #     """
+    #     q = self.quat
+    #
+    #     gyroscope = np.array(gyroscope, dtype=float).flatten()
+    #     accelerometer = np.array(accelerometer, dtype=float).flatten()
+    #
+    #     accelerometer /= norm(accelerometer)
+    #
+    #     # Gradient descent algorithm corrective step
+    #     f = np.array([
+    #         2*(q[1]*q[3] - q[0]*q[2]) - accelerometer[0],
+    #         2*(q[0]*q[1] + q[2]*q[3]) - accelerometer[1],
+    #         2*(0.5 - q[1]**2 - q[2]**2) - accelerometer[2]
+    #     ])
+    #     j = np.array([
+    #         [-2*q[2], 2*q[3], -2*q[0], 2*q[1]],
+    #         [2*q[1], 2*q[0], 2*q[3], 2*q[2]],
+    #         [0, -4*q[1], -4*q[2], 0]
+    #     ])
+    #     step = j.T.dot(f)
+    #     step /= norm(step)  # normalise step magnitude
+    #
+    #     # Compute rate of change of quaternion
+    #     qdot = (q * Quaternion(0, gyroscope[0], gyroscope[1], gyroscope[2])) * 0.5 - self.beta * step.T
+    #
+    #     # Integrate to yield quaternion
+    #     q += qdot * self.samplePeriod
+    #     self.quat = q / norm(q)  # normalise quaternion
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
