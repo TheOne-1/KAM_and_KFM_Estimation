@@ -9,7 +9,7 @@ from triangulation.triangulation_toolkit import compare_axes_results
 from const import DATA_PATH, GRAVITY, TARGETS_LIST, TREADMILL_MAG_FIELD
 from sklearn.metrics import mean_squared_error as mse
 from types import SimpleNamespace
-from transforms3d.quaternions import rotate_vector, mat2quat, quat2mat
+from transforms3d.quaternions import rotate_vector, mat2quat, quat2mat, qmult, qconjugate
 from transforms3d.euler import mat2euler
 
 
@@ -125,6 +125,55 @@ def get_vicon_orientation(data_df, segment):
         return q_vicon, segment_x, segment_y, segment_z
 
 
+def q_to_knee_angle(q_shank_glob_sens, q_thigh_glob_sens, R_shank_body_sens, R_thigh_body_sens):
+    data_len = q_shank_glob_sens.shape[0]
+    R_shankbody_thighbody = np.zeros([data_len, 3, 3])
+    knee_angles = np.zeros([data_len, 3])
+    for k in range(data_len):
+        R_shank_glob_body = quat2mat(q_shank_glob_sens[k]) @ R_shank_body_sens.T
+        R_thigh_glob_body = quat2mat(q_thigh_glob_sens[k]) @ R_thigh_body_sens.T
+        R_shankbody_thighbody[k] = R_shank_glob_body.T @ R_thigh_glob_body
+        knee_angles[k] = mat2euler(R_shankbody_thighbody[k]) * np.array([1, -1, 1])
+
+    return np.rad2deg(knee_angles)
+
+
+def figure_for_FE_AA_angles(vicon_data, esti_data, axes=['X', 'Y', 'Z'], start=0, end=1000, title=''):
+    print('{:10}'.format(title), end='')
+    [print('{:5.1f}\t'.format(np.sqrt(mse(vicon_data[:, i_axis], esti_data[:, i_axis]))), end='')
+     for i_axis, axis in enumerate(axes)]
+    print()
+
+    colors = plt.rcParams['axes.prop_cycle'].by_key()['color']
+    for i_axis, axis in enumerate(axes):      # 'Medio-lateral', 'Anterior-posterior', 'Vertical'
+        plt.figure(figsize=(6, 3.5))
+        line, = plt.plot(vicon_data[start:end, i_axis], label=axis + ' - Mocap', color=colors[i_axis])
+        plt.plot(esti_data[start:end, i_axis], '--', color=line.get_color(), label=axis + ' - Smartphone')
+        plt.legend()
+        plt.grid()
+        plt.title(title)
+        plt.ylabel(axis + ' angle (°)')
+        plt.xlabel('sample')
+        plt.tight_layout()
+
+
+def plot_q_for_debug(trial_data, q_shank_esti, q_thigh_esti):
+    q_vicon_shank, shank_x, shank_y, shank_z = get_vicon_orientation(trial_data, 'R_SHANK')
+    q_vicon_thigh, thigh_x, thigh_y, thigh_z = get_vicon_orientation(trial_data, 'R_THIGH')
+
+    # acc_global_esti, acc_global_vicon = np.zeros(params_thigh.acc.shape), np.zeros(params_thigh.acc.shape)
+    # for i in range(1, trial_data.shape[0]):
+    #     acc_global_esti[i] = rotate_vector(params_thigh.acc[i], params_thigh.q_esti[i])
+    #     acc_global_vicon[i] = rotate_vector(params_thigh.acc[i], q_vicon_shank[i])
+    # for i_axis in range(3):
+    #     plt.figure()
+    #     plt.plot(acc_global_esti[:, i_axis])
+    #     plt.plot(acc_global_vicon[:, i_axis])
+
+    compare_axes_results(q_vicon_shank, q_shank_esti, ['q0', 'q1', 'q2', 'q3'], title='shank orientation', end=shank_x.shape[0])
+    compare_axes_results(q_vicon_thigh, q_thigh_esti, ['q0', 'q1', 'q2', 'q3'], title='thigh orientation', end=thigh_x.shape[0])
+
+
 class KalmanFilterVidIMU:
     def __init__(self, subject, segment, trial, init_params):
         self.subject = subject
@@ -138,7 +187,7 @@ class KalmanFilterVidIMU:
         else:
             raise ValueError('Incorrect segment name')
         self.params_static, self.knee_angles_vicon_static = self.init_kalman_static_param()
-        self.params, self.trial_data, self.knee_angles_vicon = self.init_kalman_trial_param(init_params)
+        self.params, self.trial_data, self.knee_angles_vicon = self._init_trial_param(init_params)
         self.R_body_sens = np.eye(3) @ self.params_static.R_glob_sens_static
 
     def init_kalman_static_param(self):
@@ -159,7 +208,7 @@ class KalmanFilterVidIMU:
         print('{} vector in sensor frame: {}'.format(segment, params_static.segment_in_sens))
         return params_static, knee_angles_vicon_static
 
-    def init_kalman_trial_param(self, init_params):
+    def _init_trial_param(self, init_params):
         subject, trial, segment = self.subject, self.trial, self.segment
         upper_joint, lower_joint = self.upper_joint, self.lower_joint
         trial_data = pd.read_csv(os.path.join(DATA_PATH, subject, 'combined', trial+'.csv'), index_col=False)
@@ -189,7 +238,7 @@ class KalmanFilterVidIMU:
         params.V_vid = np.eye(3)
         return params, trial_data, knee_angles_vicon
 
-    def update_kalman(self, k):
+    def update(self, k):
         params = self.params
         gyr, q_esti, acc, P, Q, R_acc_base, R_acc_diff_coeff, V_acc, R_vid_base, V_vid, segment_confidence, segment_in_glob = \
             params.gyr, params.q_esti, params.acc, params.P, params.Q, params.R_acc_base, params.R_acc_diff_coeff,\
@@ -246,75 +295,14 @@ class KalmanFilterVidIMU:
         P[:, :, k] = (np.eye(4) - K_k_vid @ H_k_vid) @ (np.eye(4) - K_k_acc @ H_k_acc) @ P_k_minus
 
 
-def q_to_knee_angle(q_shank_glob_sens, q_thigh_glob_sens, R_shank_body_sens, R_thigh_body_sens):
-    data_len = q_shank_glob_sens.shape[0]
-    R_shankbody_thighbody = np.zeros([data_len, 3, 3])
-    knee_angles = np.zeros([data_len, 3])
-    for k in range(data_len):
-        R_shank_glob_body = quat2mat(q_shank_glob_sens[k]) @ R_shank_body_sens.T
-        R_thigh_glob_body = quat2mat(q_thigh_glob_sens[k]) @ R_thigh_body_sens.T
-        R_shankbody_thighbody[k] = R_shank_glob_body.T @ R_thigh_glob_body
-        knee_angles[k] = mat2euler(R_shankbody_thighbody[k]) * np.array([1, -1, 1])
-
-    return np.rad2deg(knee_angles)
-
-
-def figure_for_FE_AA_angles(vicon_data, esti_data, axes=['X', 'Y', 'Z'], start=0, end=1000, title=''):
-    print('{:10}'.format(title), end='')
-    [print('{:5.1f}\t'.format(np.sqrt(mse(vicon_data[:, i_axis], esti_data[:, i_axis]))), end='')
-     for i_axis, axis in enumerate(axes)]
-    print()
-
-    colors = plt.rcParams['axes.prop_cycle'].by_key()['color']
-    for i_axis, axis in enumerate(axes):      # 'Medio-lateral', 'Anterior-posterior', 'Vertical'
-        plt.figure(figsize=(6, 3.5))
-        line, = plt.plot(vicon_data[start:end, i_axis], label=axis + ' - Mocap', color=colors[i_axis])
-        plt.plot(esti_data[start:end, i_axis], '--', color=line.get_color(), label=axis + ' - Smartphone')
-        plt.legend()
-        plt.grid()
-        plt.title(title)
-        plt.ylabel(axis + ' angle (°)')
-        plt.xlabel('sample')
-        plt.tight_layout()
-
-
-def plot_q_for_debug(trial_data, q_shank_esti, q_thigh_esti):
-    q_vicon_shank, shank_x, shank_y, shank_z = get_vicon_orientation(trial_data, 'R_SHANK')
-    q_vicon_thigh, thigh_x, thigh_y, thigh_z = get_vicon_orientation(trial_data, 'R_THIGH')
-
-    # acc_global_esti, acc_global_vicon = np.zeros(params_thigh.acc.shape), np.zeros(params_thigh.acc.shape)
-    # for i in range(1, trial_data.shape[0]):
-    #     acc_global_esti[i] = rotate_vector(params_thigh.acc[i], params_thigh.q_esti[i])
-    #     acc_global_vicon[i] = rotate_vector(params_thigh.acc[i], q_vicon_shank[i])
-    # for i_axis in range(3):
-    #     plt.figure()
-    #     plt.plot(acc_global_esti[:, i_axis])
-    #     plt.plot(acc_global_vicon[:, i_axis])
-
-    compare_axes_results(q_vicon_shank, q_shank_esti, ['q0', 'q1', 'q2', 'q3'], title='shank orientation', end=shank_x.shape[0])
-    compare_axes_results(q_vicon_thigh, q_thigh_esti, ['q0', 'q1', 'q2', 'q3'], title='thigh orientation', end=thigh_x.shape[0])
-
-# import numpy as np
-# from numpy.linalg import norm
-# import pandas as pd
-# import matplotlib.pyplot as plt
-# import sympy as sym
-# from numpy import cos, sin, arctan2, arcsin
-# import os
-# import glob
-# from const import TREADMILL_MAG_FIELD, DATA_PATH, GRAVITY, TARGETS_LIST
-# from types import SimpleNamespace
-# from transforms3d.quaternions import rotate_vector, qmult, qconjugate
-# from transforms3d.euler import mat2euler
-
-
 class KalmanFilterMagIMU:
+    # 3. use the madgwick earth magnetic field compensation method
     def __init__(self, subject, segment, trial, init_params):
         self.subject = subject
         self.segment = segment
         self.trial = trial
         self.t = init_params.t
-        self.params, self.trial_data = self.init_kalman_trial_param(init_params)
+        self.params, self.trial_data = self._init_trial_param(init_params)
 
     @staticmethod
     def print_h_mat():
@@ -329,11 +317,9 @@ class KalmanFilterMagIMU:
         print(mag_in_sens.T)
         print(H_k)
 
-    def init_kalman_trial_param(self, init_params):
+    def _init_trial_param(self, init_params):
         subject, trial, segment = self.subject, self.trial, self.segment
-        trial_data_dir = 'D:\Tian\Research\Projects\VideoIMUCombined\experiment_data\KAM\\'\
-                         + subject + '\combined\\' + trial + '.csv'
-        trial_data = pd.read_csv(trial_data_dir, index_col=False)
+        trial_data = pd.read_csv(os.path.join(DATA_PATH, subject, 'combined', trial + '.csv'), index_col=0)
         data_len = trial_data.shape[0]
 
         params = SimpleNamespace()
@@ -354,7 +340,7 @@ class KalmanFilterMagIMU:
         params.V_mag = np.eye(3)
         return params, trial_data
 
-    def update_kalman(self, k):
+    def update(self, k):
         params = self.params
         gyr, q_esti, acc, P, Q, R_acc_base, R_acc_diff_coeff, V_acc, R_mag_base, R_mag_diff_coeff, V_mag, mag = \
             params.gyr, params.q_esti, params.acc, params.P, params.Q, params.R_acc_base, params.R_acc_diff_coeff,\
@@ -449,47 +435,43 @@ class VidOnlyKneeAngle:
         return knee_angles_esti, q_shank_glob_body, q_thigh_glob_body
 
 
-class MadgwickAHRS:
-    def __init__(self, init_params):
-        """
-        Initialize the class with the given parameters.
-        :param sampleperiod: The sample period
-        :param quaternion: Initial quaternion
-        :param beta: Algorithm gain beta
-        :return:
-        """
-        self.samplePeriod = init_params.T
-        self.quat = init_params.quat_init
-        self.beta = init_params.beta
+class MadgwickMagIMU:
+    def __init__(self, subject, segment, trial, init_params):
+        self.subject = subject
+        self.segment = segment
+        self.trial = trial
+        self.t = init_params.t
+        self.beta = 0.1
+        self.params, self.trial_data = self._init_trial_param(init_params)
 
-    def update(self, gyroscope, accelerometer, magnetometer):
-        """
-        Perform one update step with data from a AHRS sensor array
-        :param gyroscope: A three-element array containing the gyroscope data in radians per second.
-        :param accelerometer: A three-element array containing the accelerometer data. Can be any unit since a normalized value is used.
-        :param magnetometer: A three-element array containing the magnetometer data. Can be any unit since a normalized value is used.
-        :return:
-        """
-        q = self.quat
+    def _init_trial_param(self, init_params):
+        subject, trial, segment = self.subject, self.trial, self.segment
+        trial_data = pd.read_csv(os.path.join(DATA_PATH, subject, 'combined', trial + '.csv'), index_col=0)
+        data_len = trial_data.shape[0]
+        params = SimpleNamespace()
+        params.q_esti = np.zeros([data_len, 4])
+        params.q_esti[0, :] = init_params.quat_init
+        params.acc = trial_data[['AccelX_R_'+segment, 'AccelY_R_'+segment, 'AccelZ_R_'+segment]].values
+        params.gyr = np.deg2rad(trial_data[['GyroX_R_'+segment, 'GyroY_R_'+segment, 'GyroZ_R_'+segment]].values)
+        params.mag = trial_data[['MagX_R_'+segment, 'MagY_R_'+segment, 'MagZ_R_'+segment]].values
+        return params, trial_data
 
-        gyroscope = np.array(gyroscope, dtype=float).flatten()
-        accelerometer = np.array(accelerometer, dtype=float).flatten()
-        magnetometer = np.array(magnetometer, dtype=float).flatten()
+    def update(self, k):
+        q, acc, gyr, mag = self.params.q_esti[k-1], self.params.acc[k], self.params.gyr[k], self.params.mag[k]
+        acc /= norm(acc)
+        mag /= norm(mag)
 
-        accelerometer /= norm(accelerometer)
-        magnetometer /= norm(magnetometer)
+        # h = qmult(q, qmult((0, mag[0], mag[1], mag[2]), qconjugate(q)))
+        # b = np.array([0, norm(h[1:3]), 0, h[3]])
+        b = np.concatenate([[0], TREADMILL_MAG_FIELD]) # !!!
 
-        h = qmult(q, qmult((0, magnetometer[0], magnetometer[1], magnetometer[2]), qconjugate(q)))      # !!! if bug, check
-        b = np.array([0, norm(h[1:3]), 0, h[3]])
-
-        # Gradient descent algorithm corrective step
         f = np.array([
-            2*(q[1]*q[3] - q[0]*q[2]) - accelerometer[0],
-            2*(q[0]*q[1] + q[2]*q[3]) - accelerometer[1],
-            2*(0.5 - q[1]**2 - q[2]**2) - accelerometer[2],
-            2*b[1]*(0.5 - q[2]**2 - q[3]**2) + 2*b[3]*(q[1]*q[3] - q[0]*q[2]) - magnetometer[0],
-            2*b[1]*(q[1]*q[2] - q[0]*q[3]) + 2*b[3]*(q[0]*q[1] + q[2]*q[3]) - magnetometer[1],
-            2*b[1]*(q[0]*q[2] + q[1]*q[3]) + 2*b[3]*(0.5 - q[1]**2 - q[2]**2) - magnetometer[2]
+            2*(q[1]*q[3] - q[0]*q[2]) - acc[0],
+            2*(q[0]*q[1] + q[2]*q[3]) - acc[1],
+            2*(0.5 - q[1]**2 - q[2]**2) - acc[2],
+            2*b[1]*(0.5 - q[2]**2 - q[3]**2) + 2*b[3]*(q[1]*q[3] - q[0]*q[2]) - mag[0],
+            2*b[1]*(q[1]*q[2] - q[0]*q[3]) + 2*b[3]*(q[0]*q[1] + q[2]*q[3]) - mag[1],
+            2*b[1]*(q[0]*q[2] + q[1]*q[3]) + 2*b[3]*(0.5 - q[1]**2 - q[2]**2) - mag[2]
         ])
         j = np.array([
             [-2*q[2],                  2*q[3],                  -2*q[0],                  2*q[1]],
@@ -500,48 +482,11 @@ class MadgwickAHRS:
             [2*b[1]*q[2],              2*b[1]*q[3]-4*b[3]*q[1], 2*b[1]*q[0]-4*b[3]*q[2],  2*b[1]*q[1]]
         ])
         step = j.T.dot(f)
-        step /= norm(step)  # normalise step magnitude
+        step /= norm(step)
+        qdot = qmult(q, (0, gyr[0], gyr[1], gyr[2])) * 0.5 - self.beta * step.T
+        q += qdot * self.t
+        self.params.q_esti[k] = q / norm(q)
 
-        # Compute rate of change of quaternion
-        qdot = qmult(q, (0, gyroscope[0], gyroscope[1], gyroscope[2])) * 0.5 - self.beta * step.T       # !!! if bug, check
-
-        # Integrate to yield quaternion
-        q += qdot * self.samplePeriod
-        self.quat = q / norm(q)  # normalise quaternion
-
-    # def update_imu(self, gyroscope, accelerometer):
-    #     """
-    #     Perform one update step with data from a IMU sensor array
-    #     :param gyroscope: A three-element array containing the gyroscope data in radians per second.
-    #     :param accelerometer: A three-element array containing the accelerometer data. Can be any unit since a normalized value is used.
-    #     """
-    #     q = self.quat
-    #
-    #     gyroscope = np.array(gyroscope, dtype=float).flatten()
-    #     accelerometer = np.array(accelerometer, dtype=float).flatten()
-    #
-    #     accelerometer /= norm(accelerometer)
-    #
-    #     # Gradient descent algorithm corrective step
-    #     f = np.array([
-    #         2*(q[1]*q[3] - q[0]*q[2]) - accelerometer[0],
-    #         2*(q[0]*q[1] + q[2]*q[3]) - accelerometer[1],
-    #         2*(0.5 - q[1]**2 - q[2]**2) - accelerometer[2]
-    #     ])
-    #     j = np.array([
-    #         [-2*q[2], 2*q[3], -2*q[0], 2*q[1]],
-    #         [2*q[1], 2*q[0], 2*q[3], 2*q[2]],
-    #         [0, -4*q[1], -4*q[2], 0]
-    #     ])
-    #     step = j.T.dot(f)
-    #     step /= norm(step)  # normalise step magnitude
-    #
-    #     # Compute rate of change of quaternion
-    #     qdot = (q * Quaternion(0, gyroscope[0], gyroscope[1], gyroscope[2])) * 0.5 - self.beta * step.T
-    #
-    #     # Integrate to yield quaternion
-    #     q += qdot * self.samplePeriod
-    #     self.quat = q / norm(q)  # normalise quaternion
 
 
 
