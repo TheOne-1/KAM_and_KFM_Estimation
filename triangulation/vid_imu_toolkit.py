@@ -63,20 +63,6 @@ def print_orientation_cali_mat():
     return R_glob_sens
 
 
-def print_h_mat():
-    qk0, qk1, qk2, qk3, sx, sy, sz = sym.symbols('qk0, qk1, qk2, qk3, sx, sy, sz', constant=True)
-    R_sens_glob = sym.Matrix([[qk0**2 + qk1**2 - qk2**2 - qk3**2, 2*qk1*qk2+2*qk0*qk3, 2*qk1*qk3-2*qk0*qk2],
-                              [2*qk1*qk2-2*qk0*qk3, qk0**2 - qk1**2 + qk2**2 - qk3**2, 2*qk2*qk3+2*qk0*qk1],
-                              [2*qk1*qk3+2*qk0*qk2, 2*qk2*qk3-2*qk0*qk1, qk0**2 - qk1**2 - qk2**2 + qk3**2]])
-    R_glob_sens = R_sens_glob.T
-    segment_in_sens = sym.Matrix([sx, sy, sz])
-    segment_in_glob = R_glob_sens * segment_in_sens
-    H_k = segment_in_glob.jacobian([qk0, qk1, qk2, qk3])
-    print('For IMU H_k_vid and h_vid')
-    print(segment_in_glob.T)
-    print(H_k)
-
-
 def get_vicon_orientation(data_df, segment):
         if segment == 'R_SHANK':
             knee_l, knee_r = data_df[['RFME_X', 'RFME_Y', 'RFME_Z']].values, data_df[['RFLE_X', 'RFLE_Y', 'RFLE_Z']].values
@@ -189,6 +175,21 @@ class KalmanFilterVidIMU:
         self.params_static, self.knee_angles_vicon_static = self.init_kalman_static_param()
         self.params, self.trial_data, self.knee_angles_vicon = self._init_trial_param(init_params)
         self.R_body_sens = np.eye(3) @ self.params_static.R_glob_sens_static
+
+    @staticmethod
+    def print_h_mat():
+        qk0, qk1, qk2, qk3, sx, sy, sz = sym.symbols('qk0, qk1, qk2, qk3, sx, sy, sz', constant=True)
+        R_sens_glob = sym.Matrix(
+            [[qk0 ** 2 + qk1 ** 2 - qk2 ** 2 - qk3 ** 2, 2 * qk1 * qk2 + 2 * qk0 * qk3, 2 * qk1 * qk3 - 2 * qk0 * qk2],
+             [2 * qk1 * qk2 - 2 * qk0 * qk3, qk0 ** 2 - qk1 ** 2 + qk2 ** 2 - qk3 ** 2, 2 * qk2 * qk3 + 2 * qk0 * qk1],
+             [2 * qk1 * qk3 + 2 * qk0 * qk2, 2 * qk2 * qk3 - 2 * qk0 * qk1, qk0 ** 2 - qk1 ** 2 - qk2 ** 2 + qk3 ** 2]])
+        R_glob_sens = R_sens_glob.T
+        segment_in_sens = sym.Matrix([sx, sy, sz])
+        segment_in_glob = R_glob_sens * segment_in_sens
+        H_k = segment_in_glob.jacobian([qk0, qk1, qk2, qk3])
+        print('For IMU H_k_vid and h_vid')
+        print(segment_in_glob.T)
+        print(H_k)
 
     def init_kalman_static_param(self):
         subject, segment = self.subject, self.segment
@@ -488,6 +489,83 @@ class MadgwickMagIMU:
         self.params.q_esti[k] = q / norm(q)
 
 
+class MadgwickVidIMU:
+    def __init__(self, subject, segment, trial, init_params):
+        self.subject = subject
+        self.segment = segment
+        self.trial = trial
+        self.t = init_params.t
+        # self.beta_acc = 0.1     # make it related to acc magnitude
+        # self.beta_vid = 0.01
+        self.beta = 0.01
+        if segment == 'SHANK':
+            self.upper_joint, self.lower_joint = 'RKnee', 'RAnkle'
+        elif segment == 'THIGH':
+            self.upper_joint, self.lower_joint = 'RHip', 'RKnee'
+        else:
+            raise ValueError('Incorrect segment name')
+        self.params, self.trial_data, self.knee_angles_vicon, self.knee_angles_vicon_static = self._init_trial_param(init_params)
+        self.R_body_sens = np.eye(3) @ self.params.R_glob_sens_static
+
+    def _init_trial_param(self, init_params):
+        subject, trial, segment = self.subject, self.trial, self.segment
+        trial_data = pd.read_csv(os.path.join(DATA_PATH, subject, 'combined', trial + '.csv'), index_col=0)
+        data_len = trial_data.shape[0]
+        knee_angles_vicon = trial_data[TARGETS_LIST[:3]].values
+        params = SimpleNamespace()
+        params.q_esti = np.zeros([data_len, 4])
+        params.q_esti[0, :] = init_params.quat_init
+        params.acc = trial_data[['AccelX_R_'+segment, 'AccelY_R_'+segment, 'AccelZ_R_'+segment]].values
+        params.gyr = np.deg2rad(trial_data[['GyroX_R_'+segment, 'GyroY_R_'+segment, 'GyroZ_R_'+segment]].values)
+        params.mag = trial_data[['MagX_R_'+segment, 'MagY_R_'+segment, 'MagZ_R_'+segment]].values
+
+        trial_static_data = pd.read_csv(os.path.join(DATA_PATH, subject, 'combined', 'static_back.csv'), index_col=0)
+        vid_data_static = pd.read_csv(os.path.join(DATA_PATH, subject, 'triangulated', 'static_back.csv'), index_col=0)
+        upper_joint_col = [self.upper_joint + '_3d_' + axis for axis in ['x', 'y', 'z']]
+        lower_joint_col = [self.lower_joint + '_3d_' + axis for axis in ['x', 'y', 'z']]
+        segment_in_glob_static = np.mean(
+            vid_data_static[upper_joint_col].values - vid_data_static[lower_joint_col].values, axis=0)
+        segment_in_glob_static = segment_in_glob_static / norm(segment_in_glob_static)
+        params.R_glob_sens_static = calibrate_segment_in_sensor_frame(
+            trial_static_data[['AccelX_R_'+segment, 'AccelY_R_'+segment, 'AccelZ_R_'+segment]].values)
+        R_sens_glob_static = params.R_glob_sens_static.T
+        params.segment_in_sens = calibrate_segment_in_global_frame(segment_in_glob_static, R_sens_glob_static)
+        knee_angles_vicon_static = trial_static_data[TARGETS_LIST[:3]].values
+
+        vid_data = pd.read_csv(os.path.join(DATA_PATH, subject, 'triangulated', trial+'.csv'), index_col=0)
+        upper_joint_col = [self.upper_joint + '_3d_' + axis for axis in ['x', 'y', 'z']]
+        lower_joint_col = [self.lower_joint + '_3d_' + axis for axis in ['x', 'y', 'z']]
+        segment_in_glob = vid_data[upper_joint_col].values - vid_data[lower_joint_col].values
+        params.segment_in_glob = segment_in_glob / norm(segment_in_glob, axis=1).reshape([-1, 1])
+        return params, trial_data, knee_angles_vicon, knee_angles_vicon_static
+
+    def update(self, k):
+        q, acc, gyr, mag = self.params.q_esti[k-1], self.params.acc[k], self.params.gyr[k], self.params.mag[k]
+        sx, sy, sz = self.params.segment_in_sens
+        s_glob_x, s_glob_y, s_glob_z = self.params.segment_in_glob[k]
+        acc /= norm(acc)
+        mag /= norm(mag)
+
+        f = np.array([
+            2*(q[1]*q[3] - q[0]*q[2]) - acc[0],
+            2*(q[0]*q[1] + q[2]*q[3]) - acc[1],
+            2*(0.5 - q[1]**2 - q[2]**2) - acc[2],
+            sx*(q[0]**2 + q[1]**2 - q[2]**2 - q[3]**2) + sy*(-2*q[0]*q[3] + 2*q[1]*q[2]) + sz*(2*q[0]*q[2] + 2*q[1]*q[3]) - s_glob_x,
+            sx*(2*q[0]*q[3] + 2*q[1]*q[2]) + sy*(q[0]**2 - q[1]**2 + q[2]**2 - q[3]**2) + sz*(-2*q[0]*q[1] + 2*q[2]*q[3]) - s_glob_y,
+            sx*(-2*q[0]*q[2] + 2*q[1]*q[3]) + sy*(2*q[0]*q[1] + 2*q[2]*q[3]) + sz*(q[0]**2 - q[1]**2 - q[2]**2 + q[3]**2) - s_glob_z])
+        j = np.array([
+            [-2*q[2],                  2*q[3],                  -2*q[0],                  2*q[1]],
+            [2*q[1],                   2*q[0],                  2*q[3],                   2*q[2]],
+            [0,                        -4*q[1],                 -4*q[2],                  0],
+            [2*q[0]*sx + 2*q[2]*sz - 2*q[3]*sy, 2*q[1]*sx + 2*q[2]*sy + 2*q[3]*sz, 2*q[0]*sz + 2*q[1]*sy - 2*q[2]*sx, -2*q[0]*sy + 2*q[1]*sz - 2*q[3]*sx],
+            [2*q[0]*sy - 2*q[1]*sz + 2*q[3]*sx, -2*q[0]*sz - 2*q[1]*sy + 2*q[2]*sx, 2*q[1]*sx + 2*q[2]*sy + 2*q[3]*sz, 2*q[0]*sx + 2*q[2]*sz - 2*q[3]*sy],
+            [2*q[0]*sz + 2*q[1]*sy - 2*q[2]*sx, 2*q[0]*sy - 2*q[1]*sz + 2*q[3]*sx, -2*q[0]*sx - 2*q[2]*sz + 2*q[3]*sy, 2*q[1]*sx + 2*q[2]*sy + 2*q[3]*sz]
+        ])
+        step = j.T.dot(f)
+        step /= norm(step)
+        qdot = qmult(q, (0, gyr[0], gyr[1], gyr[2])) * 0.5 - self.beta * step.T
+        q += qdot * self.t
+        self.params.q_esti[k] = q / norm(q)
 
 
 

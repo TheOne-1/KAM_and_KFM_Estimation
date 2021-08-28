@@ -34,9 +34,8 @@ def on_click_top(event, x, y, flags, param):
         print(x, y)
 
 
-subject = SUBJECTS[5]
-
-step = 5
+subject = SUBJECTS[8]
+step = 2
 
 """step 1, extract images from slow-motion video, only do once"""
 if step == 1:
@@ -51,7 +50,7 @@ if step == 1:
 """step 2, get 2d points from baseline trial pic"""
 if step == 2:
     print(subject)
-    camera_ = '90'
+    camera_ = '180'
     angle = camera_ + '.MOV'
     vid_dir = 'D:\Tian\Research\Projects\VideoIMUCombined\experiment_data\\video\\' + subject + '\\baseline_' + angle
     img = extract_a_vid_frame(vid_dir, 1000)
