@@ -1,7 +1,7 @@
 import numpy as np
 from const import SUBJECTS, GRAVITY, TRIALS
 from triangulation.vid_imu_toolkit import KalmanFilterVidIMU, KalmanFilterMagIMU, VidOnlyKneeAngle, q_to_knee_angle, \
-    MadgwickVidIMU, MadgwickMagIMU, compare_three_methods, compare_axes_results, plot_q_for_debug
+    MadgwickVidIMU, MadgwickMagIMU, compare_three_methods, compare_axes_results, plot_q_for_debug, plot_euler_angle_for_debug
 from wearable_toolkit import data_filter
 import matplotlib.pyplot as plt
 from types import SimpleNamespace
@@ -23,7 +23,7 @@ for subject in SUBJECTS[1:6]:
     tb = pt.PrettyTable()
     tb.field_names = ['Trial'] + [axis + ' - ' + method for axis in angles_to_check for method in ['Vid_IMU', 'Mag_IMU', 'Video']]
 
-    for trial in TRIALS[:1]:            # TRIALS STATIC_TRIALS
+    for trial in TRIALS[0:1]:            # TRIALS STATIC_TRIALS
         """ vid-IMU """
         shank_vid_imu = MadgwickVidIMU(subject, 'SHANK', trial, SimpleNamespace(**init_params_vid_imu))
         thigh_vid_imu = MadgwickVidIMU(subject, 'THIGH', trial, SimpleNamespace(**init_params_vid_imu))
@@ -34,6 +34,8 @@ for subject in SUBJECTS[1:6]:
         knee_angles_vid_imu_esti = q_to_knee_angle(shank_vid_imu.params.q_esti, thigh_vid_imu.params.q_esti,
                                                    R_shank_body_sens, R_thigh_body_sens)
         knee_angles_vicon = shank_vid_imu.knee_angles_vicon - np.mean(shank_vid_imu.knee_angles_vicon_static, axis=0)
+        # plot_euler_angle_for_debug(shank_vid_imu.trial_data, shank_vid_imu.params.q_esti, thigh_vid_imu.params.q_esti)
+        # plt.show()
 
         """ magneto-IMU """
         shank_mag_imu = MadgwickMagIMU(subject, 'SHANK', trial, SimpleNamespace(**init_params_mag_imu))
@@ -43,8 +45,8 @@ for subject in SUBJECTS[1:6]:
             thigh_mag_imu.update(k)
         knee_angles_mag_imu_esti = q_to_knee_angle(shank_mag_imu.params.q_esti, thigh_mag_imu.params.q_esti,
                                                    R_shank_body_sens, R_thigh_body_sens)
-        plot_q_for_debug(shank_mag_imu.trial_data, shank_mag_imu.params.q_esti, thigh_mag_imu.params.q_esti)
-        plt.show()
+        # plot_q_for_debug(shank_mag_imu.trial_data, shank_mag_imu.params.q_esti, thigh_mag_imu.params.q_esti)
+        # plt.show()
 
         """ vid only """
         knee_angles_vid_esti, _, _ = VidOnlyKneeAngle.angle_between_vectors(subject, trial)

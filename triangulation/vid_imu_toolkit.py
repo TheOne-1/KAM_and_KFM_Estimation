@@ -10,7 +10,7 @@ from const import DATA_PATH, GRAVITY, TARGETS_LIST, TREADMILL_MAG_FIELD
 from sklearn.metrics import mean_squared_error as mse
 from types import SimpleNamespace
 from transforms3d.quaternions import rotate_vector, mat2quat, quat2mat, qmult, qconjugate
-from transforms3d.euler import mat2euler
+from transforms3d.euler import mat2euler, quat2euler
 
 
 def compare_three_methods(vicon_data, vid_imu, mag_imu, vid_only, axes, tb, trial, start=5000, end=5500):
@@ -158,6 +158,20 @@ def plot_q_for_debug(trial_data, q_shank_esti, q_thigh_esti):
 
     compare_axes_results(q_vicon_shank, q_shank_esti, ['q0', 'q1', 'q2', 'q3'], title='shank orientation', end=shank_x.shape[0])
     compare_axes_results(q_vicon_thigh, q_thigh_esti, ['q0', 'q1', 'q2', 'q3'], title='thigh orientation', end=thigh_x.shape[0])
+
+
+def plot_euler_angle_for_debug(trial_data, q_shank_esti, q_thigh_esti):
+    def apply_fun(q):
+        a = np.rad2deg(quat2euler(q))
+        if a[2] < -100:
+            a[2] += 360
+        return a
+    q_vicon_shank, shank_x, shank_y, shank_z = get_vicon_orientation(trial_data, 'R_SHANK')
+    q_vicon_thigh, thigh_x, thigh_y, thigh_z = get_vicon_orientation(trial_data, 'R_THIGH')
+    a1, a2 = np.apply_along_axis(apply_fun, 1, q_vicon_shank), np.apply_along_axis(apply_fun, 1, q_shank_esti)
+    a3, a4 = np.apply_along_axis(apply_fun, 1, q_vicon_thigh), np.apply_along_axis(apply_fun, 1, q_thigh_esti)
+    compare_axes_results(a1, a2, ['r', 'p', 'y'], title='shank orientation', end=shank_x.shape[0])
+    compare_axes_results(a3, a4, ['r', 'p', 'y'], title='thigh orientation', end=thigh_x.shape[0])
 
 
 class KalmanFilterVidIMU:
@@ -495,9 +509,8 @@ class MadgwickVidIMU:
         self.segment = segment
         self.trial = trial
         self.t = init_params.t
-        # self.beta_acc = 0.1     # make it related to acc magnitude
-        # self.beta_vid = 0.01
-        self.beta = 0.01
+        self.beta_acc_coeff = 0.1     # !!! seems unnecessary?!
+        self.beta_vid_coeff = 0.1
         if segment == 'SHANK':
             self.upper_joint, self.lower_joint = 'RKnee', 'RAnkle'
         elif segment == 'THIGH':
@@ -517,7 +530,6 @@ class MadgwickVidIMU:
         params.q_esti[0, :] = init_params.quat_init
         params.acc = trial_data[['AccelX_R_'+segment, 'AccelY_R_'+segment, 'AccelZ_R_'+segment]].values
         params.gyr = np.deg2rad(trial_data[['GyroX_R_'+segment, 'GyroY_R_'+segment, 'GyroZ_R_'+segment]].values)
-        params.mag = trial_data[['MagX_R_'+segment, 'MagY_R_'+segment, 'MagZ_R_'+segment]].values
 
         trial_static_data = pd.read_csv(os.path.join(DATA_PATH, subject, 'combined', 'static_back.csv'), index_col=0)
         vid_data_static = pd.read_csv(os.path.join(DATA_PATH, subject, 'triangulated', 'static_back.csv'), index_col=0)
@@ -540,30 +552,41 @@ class MadgwickVidIMU:
         return params, trial_data, knee_angles_vicon, knee_angles_vicon_static
 
     def update(self, k):
-        q, acc, gyr, mag = self.params.q_esti[k-1], self.params.acc[k], self.params.gyr[k], self.params.mag[k]
+        q, acc, gyr = self.params.q_esti[k-1], self.params.acc[k], self.params.gyr[k]
         sx, sy, sz = self.params.segment_in_sens
         s_glob_x, s_glob_y, s_glob_z = self.params.segment_in_glob[k]
-        acc /= norm(acc)
-        mag /= norm(mag)
+        acc_normed = acc / norm(acc)
 
-        f = np.array([
-            2*(q[1]*q[3] - q[0]*q[2]) - acc[0],
-            2*(q[0]*q[1] + q[2]*q[3]) - acc[1],
-            2*(0.5 - q[1]**2 - q[2]**2) - acc[2],
+        f_acc = np.array([
+            2*(q[1]*q[3] - q[0]*q[2]) - acc_normed[0],
+            2*(q[0]*q[1] + q[2]*q[3]) - acc_normed[1],
+            2*(0.5 - q[1]**2 - q[2]**2) - acc_normed[2]])
+        J_acc = np.array([
+            [-2*q[2],                  2*q[3],                  -2*q[0],                  2*q[1]],
+            [2*q[1],                   2*q[0],                  2*q[3],                   2*q[2]],
+            [0,                        -4*q[1],                 -4*q[2],                  0]])
+        gradient_dir_acc = np.dot(J_acc.T, f_acc)
+        gradient_dir_acc /= norm(gradient_dir_acc).T
+        if abs(norm(acc) - GRAVITY) > 2:
+            beta_acc = 0
+        else:
+            beta_acc = self.beta_acc_coeff
+        # beta_acc = self.beta_acc_coeff / (1 + norm(rotate_vector(acc, q) - np.array([0, 0, 1]))**2)
+
+        f_vid = np.array([
             sx*(q[0]**2 + q[1]**2 - q[2]**2 - q[3]**2) + sy*(-2*q[0]*q[3] + 2*q[1]*q[2]) + sz*(2*q[0]*q[2] + 2*q[1]*q[3]) - s_glob_x,
             sx*(2*q[0]*q[3] + 2*q[1]*q[2]) + sy*(q[0]**2 - q[1]**2 + q[2]**2 - q[3]**2) + sz*(-2*q[0]*q[1] + 2*q[2]*q[3]) - s_glob_y,
             sx*(-2*q[0]*q[2] + 2*q[1]*q[3]) + sy*(2*q[0]*q[1] + 2*q[2]*q[3]) + sz*(q[0]**2 - q[1]**2 - q[2]**2 + q[3]**2) - s_glob_z])
-        j = np.array([
-            [-2*q[2],                  2*q[3],                  -2*q[0],                  2*q[1]],
-            [2*q[1],                   2*q[0],                  2*q[3],                   2*q[2]],
-            [0,                        -4*q[1],                 -4*q[2],                  0],
+        J_vid = np.array([
             [2*q[0]*sx + 2*q[2]*sz - 2*q[3]*sy, 2*q[1]*sx + 2*q[2]*sy + 2*q[3]*sz, 2*q[0]*sz + 2*q[1]*sy - 2*q[2]*sx, -2*q[0]*sy + 2*q[1]*sz - 2*q[3]*sx],
             [2*q[0]*sy - 2*q[1]*sz + 2*q[3]*sx, -2*q[0]*sz - 2*q[1]*sy + 2*q[2]*sx, 2*q[1]*sx + 2*q[2]*sy + 2*q[3]*sz, 2*q[0]*sx + 2*q[2]*sz - 2*q[3]*sy],
-            [2*q[0]*sz + 2*q[1]*sy - 2*q[2]*sx, 2*q[0]*sy - 2*q[1]*sz + 2*q[3]*sx, -2*q[0]*sx - 2*q[2]*sz + 2*q[3]*sy, 2*q[1]*sx + 2*q[2]*sy + 2*q[3]*sz]
-        ])
-        step = j.T.dot(f)
-        step /= norm(step)
-        qdot = qmult(q, (0, gyr[0], gyr[1], gyr[2])) * 0.5 - self.beta * step.T
+            [2*q[0]*sz + 2*q[1]*sy - 2*q[2]*sx, 2*q[0]*sy - 2*q[1]*sz + 2*q[3]*sx, -2*q[0]*sx - 2*q[2]*sz + 2*q[3]*sy, 2*q[1]*sx + 2*q[2]*sy + 2*q[3]*sz]])
+
+        gradient_dir_vid = np.dot(J_vid.T, f_vid)
+        gradient_dir_vid /= norm(gradient_dir_vid).T
+        beta_vid = self.beta_vid_coeff
+
+        qdot = qmult(q, (0, gyr[0], gyr[1], gyr[2])) * 0.5 - beta_acc * gradient_dir_acc - beta_vid * gradient_dir_vid
         q += qdot * self.t
         self.params.q_esti[k] = q / norm(q)
 
