@@ -36,12 +36,12 @@ def calibrate_segment_in_global_frame(segment_in_glob_static, R_sens_glob):
     return segment_in_sens / np.linalg.norm(segment_in_sens)        # this is a const
 
 
-def calibrate_segment_in_sensor_frame(acc_static):
+def calibrate_segment_in_sensor_frame(acc_static, segment):
     ax, ay, az = np.mean(acc_static, axis=0)
     r = arctan2(ax, ay)
     p = arctan2(-az, cos(r)*ay + sin(r)*ax)
-    print('IMU sensor calibration, roll = {:5.2f} deg, pitch = {:5.2f} deg'.
-          format(np.rad2deg(r), np.rad2deg(p)))     # to check, r and p should be small
+    print('{} IMU calibration, roll = {:5.2f} deg, pitch = {:5.2f} deg'.
+          format(segment, np.rad2deg(r), np.rad2deg(p)))     # to check, r and p should be small
     Cr, Sr, Cp, Sp = sym.symbols('Cr, Sr, Cp, Sp', constant=True)
     R_glob_sens = print_orientation_cali_mat()
     R_glob_sens = np.array(R_glob_sens.subs({Cr: cos(r), Sr: sin(r), Cp: cos(p), Sp: sin(p)})).astype(np.float64)
@@ -216,7 +216,7 @@ class KalmanFilterVidIMU:
         segment_in_glob_static = np.mean(vid_data_static[upper_joint_col].values - vid_data_static[lower_joint_col].values, axis=0)
         params_static = SimpleNamespace()
         params_static.R_glob_sens_static = calibrate_segment_in_sensor_frame(
-            trial_static_data[['AccelX_R_'+segment, 'AccelY_R_'+segment, 'AccelZ_R_'+segment]].values)
+            trial_static_data[['AccelX_R_'+segment, 'AccelY_R_'+segment, 'AccelZ_R_'+segment]].values, segment)
         params_static.segment_length = norm(segment_in_glob_static)
         R_sens_glob_static = params_static.R_glob_sens_static.T
         params_static.segment_in_sens = calibrate_segment_in_global_frame(segment_in_glob_static, R_sens_glob_static)
@@ -539,7 +539,7 @@ class MadgwickVidIMU:
             vid_data_static[upper_joint_col].values - vid_data_static[lower_joint_col].values, axis=0)
         segment_in_glob_static = segment_in_glob_static / norm(segment_in_glob_static)
         params.R_glob_sens_static = calibrate_segment_in_sensor_frame(
-            trial_static_data[['AccelX_R_'+segment, 'AccelY_R_'+segment, 'AccelZ_R_'+segment]].values)
+            trial_static_data[['AccelX_R_'+segment, 'AccelY_R_'+segment, 'AccelZ_R_'+segment]].values, segment)
         R_sens_glob_static = params.R_glob_sens_static.T
         params.segment_in_sens = calibrate_segment_in_global_frame(segment_in_glob_static, R_sens_glob_static)
         knee_angles_vicon_static = trial_static_data[TARGETS_LIST[:3]].values
