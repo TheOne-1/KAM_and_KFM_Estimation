@@ -2,7 +2,7 @@ import os
 import numpy as np
 
 GRAVITY = 9.81
-VIDEO_PATH = os.environ.get('VIDEO_DATA_PATH')
+VIDEO_PATH = os.environ.get('VIDEO_PATH')
 OPENPOSE_MODEL_PATH = os.environ.get('OPENPOSE_MODEL_PATH')
 VIDEO_ORIGINAL_SAMPLE_RATE = 119.99014859206962
 DATA_PATH = os.environ.get('KAM_DATA_PATH')
@@ -346,8 +346,7 @@ camera_pairs_all_sub_180 = {
 TREADMILL_MAG_FIELD = np.array([0.042, -0.529, -1.45])        # from another xsens
 TREADMILL_MAG_FIELD = TREADMILL_MAG_FIELD / np.linalg.norm(TREADMILL_MAG_FIELD)
 
-
-
+ALPHAPOSE_DETECTOR = os.environ.get('ALPHAPOSE_DETECTOR')
 
 
 

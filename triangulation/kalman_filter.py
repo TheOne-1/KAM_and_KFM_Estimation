@@ -18,7 +18,7 @@ init_params_mag_imu.update(init_params)
 
 angles_to_check = ['FE', 'AA', 'IE']
 
-for subject in SUBJECTS[1:6]:
+for subject in SUBJECTS[3:6]:
     print('\n' + subject)
     tb = pt.PrettyTable()
     tb.field_names = ['Trial'] + [axis + ' - ' + method for axis in angles_to_check for method in ['Vid_IMU', 'Mag_IMU', 'Video']]

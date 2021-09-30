@@ -509,7 +509,7 @@ class MadgwickVidIMU:
         self.segment = segment
         self.trial = trial
         self.t = init_params.t
-        self.beta_acc_coeff = 0.1     # !!! seems unnecessary?!
+        self.beta_acc_coeff = 1     # !!! seems unnecessary?!
         self.beta_vid_coeff = 0.1
         if segment == 'SHANK':
             self.upper_joint, self.lower_joint = 'RKnee', 'RAnkle'
