@@ -136,10 +136,7 @@ class BaseFramework:
             x_validation = self._get_raw_data_dict(validation_data, self._x_fields)
             y_validation = self._get_raw_data_dict(validation_data, self._y_fields)
             validation_weight = self._get_raw_data_dict(validation_data, self._weights)
-            x_validation, y_validation, validation_weight = self.preprocess_validation_test_data(x_validation,
-                                                                                                 y_validation,
-                                                                                                 validation_weight)
-
+            x_validation, y_validation, validation_weight = self.preprocess_validation_test_data(x_validation, y_validation, validation_weight)
         model = self.train_model(x_train, y_train, x_validation, y_validation, validation_weight)
         return model
 
@@ -174,7 +171,7 @@ class BaseFramework:
             field_index = self._y_fields[output].index(field)
             arr1 = sub_y_true[output][:, :, field_index]
             arr2 = sub_y_pred[output][:, :, field_index]
-            title = "{}, {}, {}, r_rmse".format(subject, output, field, 'r_rmse')
+            title = "{}, {}".format(subject, field)
             self.representative_profile_curves(arr1, arr2, title, r_rmse)
 
     @staticmethod

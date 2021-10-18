@@ -1,4 +1,4 @@
-""" This file is used to train models and validate their performances """
+""" This file records the code for the first submission to TII """
 import copy
 import os
 import random

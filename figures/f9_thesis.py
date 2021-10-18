@@ -120,7 +120,7 @@ def finalize_f9(fig):
 
 
 if __name__ == "__main__":
-    data_path = 'D:\Tian\Research\Projects\VideoIMUCombined\experiment_data\KAM\\'
+    data_path = 'J:\Projects\VideoIMUCombined\experiment_data\KAM\\'
     result_date = 'results/0326'
     with h5py.File(result_date + 'KAM/8IMU_2camera/results.h5', 'r') as hf:
         kam_data_all_sub = {subject: subject_data[:] for subject, subject_data in hf.items()}

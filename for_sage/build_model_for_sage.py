@@ -1,7 +1,7 @@
 from torch.nn.utils.rnn import pack_padded_sequence, pad_packed_sequence
 import torch.nn as nn
-from alan_framework import AlanFramework, combine_imu_vid_fields
-from alan_framework import input_imu_8_all, input_imu_3_all, input_imu_1_all
+from alan_framework_original import AlanFramework, combine_imu_vid_fields
+from alan_framework_original import input_imu_8_all, input_imu_3_all, input_imu_1_all
 from const import FORCE_PHASE, DATA_PATH, SEGMENT_MASS_PERCENT, TRIALS, SUBJECT_ID, TRIAL_ID, STATIC_DATA
 import copy
 import torch

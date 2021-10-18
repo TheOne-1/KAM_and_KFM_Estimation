@@ -14,7 +14,6 @@ SUBJECTS = ['s002_wangdianxin', 's004_ouyangjue', 's005_tangansheng', 's006_xuse
             's015_weihuan', 's017_tantian', 's018_wangmian', 's019_chenhongyuan', 's020_houjikang'
             # , 's003_linyuan', 's001_tantian', 's016_houjikang'
             ]
-# HYPER_PARAM_SUBJECT = ['s003_linyuan']
 STEP_TYPES = STANCE, STANCE_SWING = range(2)
 STEP_TYPE = STANCE
 SEGMENT_DEFINITIONS = {
@@ -128,7 +127,7 @@ EXAMPLE_DATA_FIELDS = [
     'RTAM_Z', 'RFAL_Z', 'RSK_Z', 'RTT_Z', 'LFME_Z', 'LFLE_Z', 'LTH_Z', 'LFT_Z', 'RFME_Z', 'RFLE_Z', 'RTH_Z', 'RFT_Z',
     'LIPS_Z', 'RIPS_Z', 'LIAS_Z', 'RIAS_Z', 'MAI_Z', 'SXS_Z', 'SJN_Z', 'CV7_Z', 'LAC_Z', 'RAC_Z']
 
-CAMERA_CALI_DATA_PATH = 'D:\Tian\Research\Projects\VideoIMUCombined\experiment_data\camera cali'
+CAMERA_CALI_DATA_PATH = 'J:\Projects\VideoIMUCombined\experiment_data\camera cali'
 IMSHOW_OFFSET = 1300
 
 

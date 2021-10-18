@@ -67,7 +67,7 @@ def get_rmse_sample(data, columns):
 
 
 if __name__ == "__main__":
-    data_path = 'D:\Tian\Research\Projects\VideoIMUCombined\experiment_data\KAM\\'
+    data_path = 'J:\Projects\VideoIMUCombined\experiment_data\KAM\\'
     params = get_gait_params(data_path + '40samples+stance.h5', data_path + 'gait_parameters.h5')
     result_date = 'results/0326'
     with h5py.File(result_date + 'KAM/8IMU_2camera/results.h5', 'r') as hf:

@@ -87,7 +87,7 @@ def sync_and_crop_data_frame(subject, trial):
 
 
 def get_combined_data():
-    for subject in SUBJECTS[:1]:
+    for subject in SUBJECTS[:]:
         for trial in TRIALS:
             print("Subject {}, Trial {}".format(subject, trial))
             sync_and_crop_data_frame(subject, trial)

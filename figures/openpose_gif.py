@@ -6,7 +6,7 @@ import imageio
 import pyopenpose as op
 from PIL import Image
 
-VIDEO_PATH = 'D:\Tian\Research\Projects\VideoIMUCombined\experiment_data\\video'
+VIDEO_PATH = 'J:\Projects\VideoIMUCombined\experiment_data\\video'
 OPENPOSE_MODEL_PATH = 'E:\ProgramFiles\openpose-master\models'
 
 

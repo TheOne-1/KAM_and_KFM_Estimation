@@ -113,7 +113,7 @@ def finalize_f9(fig):
 
 
 if __name__ == "__main__":
-    data_path = 'D:\Tian\Research\Projects\VideoIMUCombined\experiment_data\KAM\\'
+    data_path = 'J:\Projects\VideoIMUCombined\experiment_data\KAM\\'
     color_0, color_1 = np.array([90, 140, 20]) / 255, np.array([0, 103, 137]) / 255       # [255, 166, 0]
     result_date = 'results/0326'
     with h5py.File(result_date + 'KAM/8IMU_2camera/results.h5', 'r') as hf:
