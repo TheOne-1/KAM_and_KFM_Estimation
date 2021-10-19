@@ -48,10 +48,10 @@ class VideoNet(InertialNet):
     pass
 
 
-class FusionNet(nn.Module):
+class LmfNet(nn.Module):
     """ Implemented based on the paper "Efficient low-rank multimodal fusion with modality-specific factors" """
     def __init__(self, acc_subnet, gyr_subnet, vid_subnet):
-        super(FusionNet, self).__init__()
+        super(LmfNet, self).__init__()
         self.acc_subnet = acc_subnet
         self.gyr_subnet = gyr_subnet
         self.vid_subnet = vid_subnet
@@ -288,7 +288,7 @@ class AlanFramework(BaseFramework):
         acc_subnet = InertialNet(x_train['input_acc'].shape[2], 'acc net', seed=0).cuda()
         gyr_subnet = InertialNet(x_train['input_gyr'].shape[2], 'gyr net', seed=0).cuda()
         vid_subnet = VideoNet(x_train['input_vid'].shape[2], 'vid net', seed=1).cuda()
-        model = FusionNet(acc_subnet, gyr_subnet, vid_subnet).cuda()
+        model = LmfNet(acc_subnet, gyr_subnet, vid_subnet).cuda()
         self.log_weight_bias_mean_std(model)
 
         hyper_param = {'epoch': globals()['epoch'], 'batch_size': globals()['batch_size'], 'lr': globals()['lr'],
