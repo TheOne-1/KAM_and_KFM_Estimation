@@ -31,13 +31,8 @@ class InertialNet(nn.Module):
         torch.manual_seed(seed)
         self.rnn_layer = nn.LSTM(x_dim, globals()['lstm_unit'], nlayer, batch_first=True, bidirectional=True)
         for name, param in self.rnn_layer.named_parameters():
-            # if 'bias' in name:
-            #     nn.init.constant_(param, 0.0)
             if 'weight' in name:
                 nn.init.xavier_normal_(param)
-        # self.linear_1 = nn.Linear(2 * globals()['lstm_unit'], globals()['fcnn_unit'], bias=True)
-        # for layer in [self.linear_1]:
-        #     nn.init.xavier_normal_(layer.weight)
 
     def __str__(self):
         return self.net_name
@@ -46,7 +41,6 @@ class InertialNet(nn.Module):
         sequence = pack_padded_sequence(sequence, lens, batch_first=True, enforce_sorted=False)
         sequence, _ = self.rnn_layer(sequence)
         sequence, _ = pad_packed_sequence(sequence, batch_first=True, total_length=152)
-        # sequence = self.linear_1(sequence)
         return sequence
 
 
@@ -56,7 +50,7 @@ class VideoNet(InertialNet):
 
 class FusionNet(nn.Module):
     """ Implemented based on the paper "Efficient low-rank multimodal fusion with modality-specific factors" """
-    def __init__(self, acc_subnet, gyr_subnet, vid_subnet, nlayer=1):
+    def __init__(self, acc_subnet, gyr_subnet, vid_subnet):
         super(FusionNet, self).__init__()
         self.acc_subnet = acc_subnet
         self.gyr_subnet = gyr_subnet
@@ -77,20 +71,12 @@ class FusionNet(nn.Module):
         nn.init.xavier_normal_(self.fusion_weights)
         self.fusion_bias.data.fill_(0)
 
-        # additional LSTM layers
-        # self.rnn_layer = nn.LSTM(self.fused_dim, globals()['lstm_unit'], nlayer, batch_first=True, bidirectional=True)
         self.linear_1 = nn.Linear(self.fused_dim, globals()['fcnn_unit'], bias=True)
         self.linear_2 = nn.Linear(globals()['fcnn_unit'], 2, bias=True)
         self.relu = nn.ReLU()
-        # for name, param in self.rnn_layer.named_parameters():
-        #     # if 'bias' in name:
-        #     #     nn.init.constant_(param, 0.0)
-        #     if 'weight' in name:
-        #         nn.init.xavier_normal_(param)
+
         for layer in [self.linear_1, self.linear_2]:
             nn.init.xavier_normal_(layer.weight)
-            # if layer.bias is not None:
-            #     nn.init.normal_(layer.bias, std=0.05)
 
     def __str__(self):
         return 'fusion net'
@@ -100,10 +86,6 @@ class FusionNet(nn.Module):
         gyr_h = self.gyr_subnet(gyr_x, lens)
         vid_h = self.vid_subnet(vid_x, lens)
         batch_size = acc_h.data.shape[0]
-
-        # next we perform low-rank multimodal fusion
-        # here is a more efficient implementation than the one the paper describes
-        # basically swapping the order of summation and elementwise product
         data_type = torch.cuda.FloatTensor
 
         _acc_h = torch.cat((torch.autograd.Variable(torch.ones(batch_size, acc_h.shape[1], 1).type(data_type), requires_grad=False), acc_h), dim=2)
@@ -117,10 +99,6 @@ class FusionNet(nn.Module):
 
         # permute to make batch first
         sequence = torch.matmul(self.fusion_weights, fusion_zy.permute(1, 2, 0, 3)).squeeze(dim=2) + self.fusion_bias
-
-        # sequence = pack_padded_sequence(sequence, lens, batch_first=True, enforce_sorted=False)
-        # lstm_out, _ = self.rnn_after_fusion_layer(sequence)
-        # lstm_out, _ = pad_packed_sequence(lstm_out, batch_first=True, total_length=152)
 
         sequence = self.linear_1(sequence)
         sequence = self.relu(sequence)
