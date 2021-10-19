@@ -38,7 +38,7 @@ class BaseFramework:
             self._evaluate_fields = evaluate_fields
         os.makedirs(os.path.join(self.result_dir, 'sub_figs'), exist_ok=True)
         os.makedirs(os.path.join(self.result_dir, 'sub_models'), exist_ok=True)
-        add_file_handler(logging, os.path.join(self.result_dir, 'training_log'))
+        add_file_handler(logging, os.path.join(self.result_dir, 'training_log.txt'))
         logging.info("Current commit is {}".format(execute_cmd("git rev-parse HEAD")))
         logging.info("Load data from h5 file {}".format(data_path))
         logging.info("Load data with input fields {}, output fields {}".format(x_fields, y_fields))
@@ -90,7 +90,7 @@ class BaseFramework:
                 test_sub_ids = sub_ids[test_set_sub_num * i_folder:]    # make use of all the left subjects
             train_sub_ids = list(np.setdiff1d(sub_ids, test_sub_ids))
 
-            random.seed(0)
+            random.seed(3)
             hyper_vali_sub_ids = random.sample(train_sub_ids, test_set_sub_num)
             hyper_train_sub_ids = list(np.setdiff1d(train_sub_ids, hyper_vali_sub_ids))
             self.hyperparam_tuning(hyper_train_sub_ids, hyper_vali_sub_ids)
@@ -229,6 +229,24 @@ class BaseFramework:
     @staticmethod
     def predict(model, x_test):
         raise RuntimeError('Method not implemented')
+
+    @staticmethod
+    def log_weight_bias_mean_std(model):
+        for net1 in [model.acc_subnet, model.gyr_subnet, model.vid_subnet]:
+            logging.info(net1)
+            for name, param in net1.rnn_layer.named_parameters():
+                if 'bias' in name:
+                    logging.info('LSTM bias:\t{:8.4f}{:8.4f}'.format(param.mean(), param.std()))
+                elif 'weight' in name:
+                    logging.info('LSTM weight:\t{:8.4f}{:8.4f}'.format(param.mean(), param.std()))
+
+        logging.info('acc factor:\t{:8.4f}{:8.4f}'.format(model.acc_factor.mean(), model.acc_factor.std()))
+        logging.info('gyr factor:\t{:8.4f}{:8.4f}'.format(model.gyr_factor.mean(), model.gyr_factor.std()))
+        logging.info('vid factor:\t{:8.4f}{:8.4f}'.format(model.vid_factor.mean(), model.vid_factor.std()))
+        for layer in [model.linear_1, model.linear_2]:
+            logging.info('linear weight:\t{:8.4f}{:8.4f}'.format(layer.weight.mean(), layer.weight.std()))
+            if layer.bias is not None:
+                logging.info('linear bias:\t{:8.4f}{:8.4f}'.format(layer.bias.mean(), layer.bias.std()))
 
     def hyperparam_tuning(self, model, x_test):
         raise RuntimeError('Method not implemented')

@@ -48,13 +48,6 @@ class VideoCsvReader:
         self.data_frame = self.data_frame.interpolate(method='linear', axis=0)
 
     def low_pass_filtering(self, cut_off_fre, sampling_fre, filter_order):
-
-        # plt.figure()
-        # plt.plot(self.data_frame['RKnee_x'])
-        # plt.plot(data_filter(self.data_frame['RKnee_x'], 15, 100, 2))
-        # plt.plot(data_filter(self.data_frame['RKnee_x'], 10, 100, 2))
-        # plt.show()
-
         self.data_frame.loc[:, :] = data_filter(self.data_frame.values, cut_off_fre, sampling_fre, filter_order)
 
     def resample_to_100hz(self):
@@ -132,7 +125,7 @@ class ViconCsvReader:
         # filter and resample force data
         force_names_ori = ['Imported Bertec Force Plate #' + plate_num + ' - ' + data_type for plate_num in ['1', '2']
                            for data_type in ['Force', 'CoP']]
-        filtered_force_array = np.concatenate([data_filter(self.data[force_name], 50, 1000)
+        filtered_force_array = np.concatenate([data_filter(self.data[force_name], 15, 1000)
                                                for force_name in force_names_ori], axis=1)
         filtered_force_array = filtered_force_array[::10, :]
         filtered_force_df = pd.DataFrame(filtered_force_array, columns=FORCE_DATA_FIELDS)
@@ -207,7 +200,9 @@ class ViconCsvReader:
                        self.data_frame[['RFLE_X', 'RFLE_Y', 'RFLE_Z']].values) / 2
         r = force_cop - knee_origin
         force_data = -self.data_frame[['plate_2_force_x', 'plate_2_force_y', 'plate_2_force_z']].values
-        knee_moment = pd.DataFrame(np.cross(r, force_data), columns=EXT_KNEE_MOMENT)
+        knee_moment_np = np.cross(r, force_data)
+        knee_moment_np[:, 0] = - knee_moment_np[:, 0]
+        knee_moment = pd.DataFrame(knee_moment_np, columns=EXT_KNEE_MOMENT)
         knee_moment /= (sub_height * sub_weight * 1000.)
         return knee_moment
 

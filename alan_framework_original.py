@@ -530,7 +530,7 @@ input_imu_1_all = {'force_x': ACC_GYR_1, 'force_y': ACC_GYR_1, 'force_z': ACC_GY
 
 if __name__ == "__main__":
     """ Use all the IMU channels """
-    result_date = '0326'
+    result_date = '0327'
     run_kam(input_imu=input_imu_8_all, input_vid=input_vid_2, result_dir=result_date + 'KAM/8IMU_2camera')
     run_kam(input_imu=input_imu_8_all, input_vid={}, result_dir=result_date + 'KAM/8IMU')
     run_kam(input_imu={}, input_vid=input_vid_2, result_dir=result_date + 'KAM/2camera')

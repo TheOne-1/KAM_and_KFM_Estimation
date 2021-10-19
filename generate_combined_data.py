@@ -125,5 +125,5 @@ def get_static_combined_data():
 
 
 if __name__ == "__main__":
-    get_static_combined_data()
     get_combined_data()
+    get_static_combined_data()

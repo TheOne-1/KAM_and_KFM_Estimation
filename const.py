@@ -38,6 +38,7 @@ extract_video_fields = lambda videos, angles: [video + "_" + position + "_" + an
                                                for position in ["x", "y"] for angle in angles]
 VIDEO_LIST = ["LShoulder", "RShoulder", "MidHip", "RHip", "LHip", "RKnee", "LKnee", "RAnkle", "LAnkle", "RHeel",
               "LHeel"]
+USED_KEYPOINTS = ["LShoulder", "RShoulder", "RKnee", "LKnee", "RAnkle", "LAnkle"]
 VIDEO_ANGLES = ["90", "180"]
 
 VIDEO_DATA_FIELDS = extract_video_fields(VIDEO_LIST, VIDEO_ANGLES)
