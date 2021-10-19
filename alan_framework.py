@@ -289,14 +289,27 @@ class AlanFramework(BaseFramework):
         gyr_subnet = InertialNet(x_train['input_gyr'].shape[2], 'gyr net', seed=0).cuda()
         vid_subnet = VideoNet(x_train['input_vid'].shape[2], 'vid net', seed=1).cuda()
         model = LmfNet(acc_subnet, gyr_subnet, vid_subnet).cuda()
-        self.log_weight_bias_mean_std(model)
+        # self.log_weight_bias_mean_std(model)
 
         hyper_param = {'epoch': globals()['epoch'], 'batch_size': globals()['batch_size'], 'lr': globals()['lr'],
-                       'weight_decay': 0, 'use_ratio': 100, 'target_name': 'main_output', 'fields': ['EXT_KM_X', 'EXT_KM_Y']}
+                       'use_ratio': 100, 'target_name': 'main_output', 'fields': ['EXT_KM_X', 'EXT_KM_Y']}
         params = SimpleNamespace(**hyper_param)
         train_dl, vali_from_train_dl, vali_from_test_dl, test_dl = prepare_data(
             self.train_step_lens, self.validation_step_lens, int(params.batch_size))
-        optimizer = torch.optim.Adam(model.parameters(), lr=params.lr, weight_decay=params.weight_decay)
+        """ Phase I training """
+        optimizer = torch.optim.Adam(model.parameters(), lr=params.lr)
+        logging.info('\tEpoch | Validation_set_Loss | Test_set_Loss | Duration\t\t')
+        epoch_end_time = time.time()
+        for i_epoch in range(params.epoch):
+            eval_during_training(model, vali_from_train_dl, vali_from_test_dl, loss_fn, epoch_end_time, i_epoch)
+            epoch_end_time = time.time()
+            train(model, train_dl, optimizer, loss_fn, params)
+        eval_after_training(model, test_dl, y_validation, validation_weight, params)
+
+        """ Phase II training """
+        params.lr = params.lr / 10
+        params.batch_size = params.batch_size * 10
+        optimizer = torch.optim.Adam(model.parameters(), lr=params.lr)
         logging.info('\tEpoch | Validation_set_Loss | Test_set_Loss | Duration\t\t')
         epoch_end_time = time.time()
         for i_epoch in range(params.epoch):
@@ -305,7 +318,7 @@ class AlanFramework(BaseFramework):
             train(model, train_dl, optimizer, loss_fn, params)
         eval_after_training(model, test_dl, y_validation, validation_weight, params)
         built_models = {'model': model}
-        self.log_weight_bias_mean_std(model)
+        # self.log_weight_bias_mean_std(model)
         return built_models
 
     def predict(self, model, x_test):
@@ -386,8 +399,8 @@ class AlanFramework(BaseFramework):
 
         logging.disabled = False
         globals().update(best_param)
-        best_param = {param: globals()[param] for param in ['epoch', 'lr', 'batch_size', 'weight_decay_1',
-                                                            'lstm_unit', 'fcnn_unit'] if param in globals()}
+        best_param = {param: globals()[param] for param in ['epoch', 'lr', 'batch_size', 'lstm_unit', 'fcnn_unit']
+                      if param in globals()}
         logging.info("Best hyper parameters: " + str(best_param))
 
 
