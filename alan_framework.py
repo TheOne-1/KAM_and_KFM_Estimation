@@ -332,23 +332,13 @@ class AlanFramework(BaseFramework):
             self._data_all_sub[sub_name] = sub_data
 
     def preprocess_train_data(self, x, y, weight):
-        self._x_fields_loc_and_mode = {}
         for k in set(list(x.keys())) - set(['anthro']):
-            acc_loc = [self._x_fields[k].index(field) for field in self._x_fields[k] if 'Acc' in field]
-            other_loc = [self._x_fields[k].index(field) for field in self._x_fields[k] if 'Acc' not in field]
-            self._x_fields_loc_and_mode[k] = ([acc_loc, other_loc], ['_acc', '_other'], ['by_all_columns', 'by_each_column'])
-            for loc, loc_name, mode in zip(*self._x_fields_loc_and_mode[k]):
-                if len(loc) > 0:
-                    x[k][:, :, loc] = self.normalize_array_separately(
-                        x[k][:, :, loc], k+loc_name, 'fit_transform', scalar_mode=mode)
+            x[k] = self.normalize_array_separately(x[k], k, 'fit_transform')
         return x, y, weight
 
     def preprocess_validation_test_data(self, x, y, weight):
         for k in set(list(x.keys())) - set(['anthro']):
-            for loc, loc_name, mode in zip(*self._x_fields_loc_and_mode[k]):
-                if len(loc) > 0:
-                    x[k][:, :, loc] = self.normalize_array_separately(
-                        x[k][:, :, loc], k+loc_name, 'transform', scalar_mode=mode)
+            x[k] = self.normalize_array_separately(x[k], k, 'transform')
         return x, y, weight
 
     def normalize_array_separately(self, data, name, method, scalar_mode='by_each_column'):
@@ -446,7 +436,6 @@ class AlanFramework(BaseFramework):
             return loss
 
         self.train_step_lens, self.validation_step_lens = self._get_step_len(x_train), self._get_step_len(x_validation)
-
         model = self.model().cuda()
         # self.log_weight_bias_mean_std(model)
 
@@ -534,6 +523,18 @@ class AlanFramework(BaseFramework):
         zero_loc = data_the_feature == 0.
         data_len = np.sum(~zero_loc, axis=1)
         return data_len
+
+    @staticmethod
+    def _append_stance_phase_feature(data, step_len):
+        keys = list(set(list(data.keys())) - set(['anthro']))
+        step_num = data[keys[0]].shape[0]
+        max_len = data[keys[0]].shape[1]
+        step_phase = np.zeros([step_num, max_len, 1])
+        for i in range(0, step_num):
+            step_phase[i, :step_len[i], 0] = np.linspace(0., 1., step_len[i])
+        for k in keys:
+            data[k] = np.concatenate([data[k], step_phase], 2)
+        return data
 
     def hyperparam_tuning(self, hyper_train_sub_ids, hyper_vali_sub_ids):
         logging.info('Searching best hyper parameters, subjects for validation: {}'.format(hyper_vali_sub_ids))
