@@ -22,6 +22,7 @@ import warnings
 import torch.nn as nn
 from torch.nn.utils.rnn import pack_padded_sequence, pad_packed_sequence
 from torch.nn.parameter import Parameter
+# from sklearn.ensemble import boos
 
 
 class ChaabanLinear(nn.Module):
@@ -106,6 +107,7 @@ class InertialNet(nn.Module):
         self.net_name = net_name
         torch.manual_seed(seed)
         self.rnn_layer = nn.LSTM(x_dim, globals()['lstm_unit'], nlayer, batch_first=True, bidirectional=True)
+        self.dropout = nn.Dropout(0.2)
         for name, param in self.rnn_layer.named_parameters():
             if 'weight' in name:
                 nn.init.xavier_normal_(param)
@@ -117,6 +119,7 @@ class InertialNet(nn.Module):
         sequence = pack_padded_sequence(sequence, lens, batch_first=True, enforce_sorted=False)
         sequence, _ = self.rnn_layer(sequence)
         sequence, _ = pad_packed_sequence(sequence, batch_first=True, total_length=152)
+        sequence = self.dropout(sequence)
         return sequence
 
 
@@ -274,7 +277,7 @@ class AlanFramework(BaseFramework):
         self.vid_static_cali()
         self.make_vid_relative_to_midhip()
         self.normalize_vid_by_size_of_subject_in_static_trial()
-        self.get_body_weighted_imu()
+        # self.get_body_weighted_imu()
 
     def vid_static_cali(self):
         vid_y_90_col_loc = [self._data_fields.index(marker + '_y_90') for marker in VIDEO_LIST]
@@ -393,6 +396,7 @@ class AlanFramework(BaseFramework):
             return train_dl, vali_from_train_dl, vali_from_test_dl, test_dl
 
         def train(model, train_dl, optimizer, loss_fn, params):
+            model.train()
             for i_batch, (xb_acc, xb_gyr, xb_vid, xb_anthro, yb, lens) in enumerate(train_dl):
                 n = random.randint(1, 100)
                 if n > params.use_ratio:
@@ -403,6 +407,7 @@ class AlanFramework(BaseFramework):
                 optimizer.step()
 
         def eval_after_training(model, test_dl, y_validation, validation_weight, params, show_plots=False):
+            model.eval()
             with torch.no_grad():
                 y_pred_list = []
                 for i_batch, (xb_acc, xb_gyr, xb_vid, xb_anthro, yb, lens) in enumerate(test_dl):
@@ -419,6 +424,7 @@ class AlanFramework(BaseFramework):
             return y_pred
 
         def eval_during_training(model, vali_from_train_dl, vali_from_test_dl, loss_fn, epoch_end_time, i_epoch):
+            model.eval()
             def vali_set_loss(nn_model, validation_dl, loss_fn):
                 validation_loss = []
                 for xb_acc, xb_gyr, xb_vid, xb_anthro, yb, lens in validation_dl:
@@ -479,6 +485,7 @@ class AlanFramework(BaseFramework):
         x_gyr = torch.from_numpy(x_test['input_gyr']).float().cuda()
         x_vid = torch.from_numpy(x_test['input_vid']).float().cuda()
         x_anthro = torch.from_numpy(x_test['anthro']).float().cuda()
+        nn_model.eval()
         with torch.no_grad():
             test_ds = TensorDataset(x_acc, x_gyr, x_vid, x_anthro, torch.from_numpy(self.test_step_lens))
             test_dl = DataLoader(test_ds, batch_size=20)
@@ -620,6 +627,7 @@ GYR_ALL = [field + '_' + sensor for sensor in SENSOR_LIST for field in IMU_FIELD
 if __name__ == "__main__":
     """ Use all the IMU channels """
     result_date = '1018'
+    # run(model=Xgboost, input_acc=ACC_ALL, input_gyr=GYR_ALL, input_vid=VID_ALL, result_dir=result_date+'/Xgboost')
     run(model=LmfNet, input_acc=ACC_ALL, input_gyr=GYR_ALL, input_vid=VID_ALL, result_dir=result_date+'/LmfNet')
     run(model=TfnNet, input_acc=ACC_ALL, input_gyr=GYR_ALL, input_vid=VID_ALL, result_dir=result_date+'/TfnNet')
     run(model=DirectNet, input_acc=ACC_ALL, input_gyr=GYR_ALL, input_vid=VID_ALL, result_dir=result_date+'/DirectNet')

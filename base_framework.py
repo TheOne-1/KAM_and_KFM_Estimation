@@ -79,7 +79,7 @@ class BaseFramework:
         return test_results
 
     def cross_validation(self, sub_ids: List[str], test_set_sub_num=1):
-        sub_ids = shuffle(sub_ids, random_state=1)
+        sub_ids = shuffle(sub_ids, random_state=0)
         logging.info('Cross validation with subject ids: {}'.format(sub_ids))
         folder_num = int(np.floor(len(sub_ids) / test_set_sub_num))  # the number of cross validation times
         results = []
@@ -193,14 +193,10 @@ class BaseFramework:
 
     def preprocess_train_data(self, x, y, weight):
         x = self.normalize_data(x, self._data_scalar, 'fit_transform')
-        for output_name, fields in self._y_fields.items():
-            y[output_name], weight[output_name] = self.keep_stance_then_resample(y[output_name], weight[output_name])
         return x, y, weight
 
     def preprocess_validation_test_data(self, x, y, weight):
         x = self.normalize_data(x, self._data_scalar, 'transform')
-        for output_name, fields in self._y_fields.items():
-            y[output_name], weight[output_name] = self.keep_stance_then_resample(y[output_name], weight[output_name])
         return x, y, weight
 
     @staticmethod
