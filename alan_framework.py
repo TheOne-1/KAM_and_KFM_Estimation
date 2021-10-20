@@ -24,6 +24,82 @@ from torch.nn.utils.rnn import pack_padded_sequence, pad_packed_sequence
 from torch.nn.parameter import Parameter
 
 
+class ChaabanLinear(nn.Module):
+    def __init__(self):
+        super(ChaabanLinear, self).__init__()
+        self.linear_1 = nn.Linear(24*3, 2)
+        self.relu = nn.ReLU()
+
+    def forward(self, acc_x, gyr_x, vid_x, _, __):
+        output = torch.cat([acc_x, gyr_x, vid_x], dim=2)
+        output = self.linear_1(output)
+        return output
+
+
+class StetterMLP(nn.Module):
+    def __init__(self):
+        super(StetterMLP, self).__init__()
+        self.linear_1 = nn.Linear(24*3, 100)
+        self.linear_2 = nn.Linear(100, 20)
+        self.linear_3 = nn.Linear(20, 2)
+        self.tanh = nn.Tanh()
+
+    def forward(self, acc_x, gyr_x, vid_x, _, __):
+        output = torch.cat([acc_x, gyr_x, vid_x], dim=2)
+        output = self.tanh(self.linear_1(output))
+        output = self.tanh(self.linear_2(output))
+        output = self.linear_3(output)
+        return output
+
+
+class DorschkyCNN(nn.Module):
+    def __init__(self):
+        super(DorschkyCNN, self).__init__()
+        self.conv_1 = nn.Conv2d(1, 64, (5, 3))
+        self.pooling = nn.MaxPool2d((2, 2))
+        self.conv_2 = nn.Conv2d(64, 128, (5, 3))
+        self.linear_1 = nn.Linear(45056, 100)
+        self.linear_2 = nn.Linear(100, 2 * 152)
+        self.relu = nn.ReLU()
+
+    def forward(self, acc_x, gyr_x, vid_x, _, __):
+        output = torch.cat([acc_x, gyr_x, vid_x], dim=2)
+        output = output[:, :100, :]
+        output = output.unsqueeze(dim=1)
+        output = self.relu(self.conv_1(output))
+        output = self.pooling(output)
+        output = self.relu(self.conv_2(output))
+        output = self.pooling(output)
+        output = output.view(-1, 45056)
+        output = self.relu(self.linear_1(output))
+        output = self.linear_2(output).view(-1, 152, 2)
+        return output
+
+
+class MundtCNN(nn.Module):
+    def __init__(self):
+        super(MundtCNN, self).__init__()
+        self.conv_1 = nn.Conv2d(1, 64, (5, 3))
+        self.pooling = nn.MaxPool2d((2, 2))
+        self.conv_2 = nn.Conv2d(64, 128, (5, 3))
+        self.linear_1 = nn.Linear(45056, 100)
+        self.linear_2 = nn.Linear(100, 2 * 152)
+        self.relu = nn.ReLU()
+
+    def forward(self, acc_x, gyr_x, vid_x, _, __):
+        output = torch.cat([acc_x, gyr_x, vid_x], dim=2)
+        output = output[:, :100, :]
+        output = output.unsqueeze(dim=1)
+        output = self.relu(self.conv_1(output))
+        output = self.pooling(output)
+        output = self.relu(self.conv_2(output))
+        output = self.pooling(output)
+        output = output.view(-1, 45056)
+        output = self.relu(self.linear_1(output))
+        output = self.linear_2(output).view(-1, 152, 2)
+        return output
+
+
 class InertialNet(nn.Module):
     def __init__(self, x_dim, net_name, seed=0, nlayer=1):
         super(InertialNet, self).__init__()
@@ -48,13 +124,94 @@ class VideoNet(InertialNet):
     pass
 
 
+class DirectNet(nn.Module):
+    """ Implemented based on the paper "Efficient low-rank multimodal fusion with modality-specific factors" """
+
+    def __init__(self):
+        super(DirectNet, self).__init__()
+        self.acc_subnet = InertialNet(24, 'acc net', seed=0)
+        self.gyr_subnet = InertialNet(24, 'gyr net', seed=0)
+        self.vid_subnet = VideoNet(24, 'vid net', seed=0)
+
+        self.linear_1 = nn.Linear(6 * globals()['lstm_unit'], globals()['fcnn_unit'], bias=True)
+        self.linear_2 = nn.Linear(globals()['fcnn_unit'], 2, bias=True)
+        self.relu = nn.ReLU()
+
+        for layer in [self.linear_1, self.linear_2]:
+            nn.init.xavier_normal_(layer.weight)
+
+    def __str__(self):
+        return 'Direct fusion net'
+
+    def forward(self, acc_x, gyr_x, vid_x, anthro, lens):
+        acc_h = self.acc_subnet(acc_x, lens)
+        gyr_h = self.gyr_subnet(gyr_x, lens)
+        vid_h = self.vid_subnet(vid_x, lens)
+        fusion_zy = torch.cat([acc_h, gyr_h, vid_h], dim=2)
+        sequence = self.linear_1(fusion_zy)
+        sequence = self.relu(sequence)
+        sequence = self.linear_2(sequence)
+        weight = anthro[:, 0, 0].unsqueeze(1).unsqueeze(2)
+        height = anthro[:, 0, 1].unsqueeze(1).unsqueeze(2)
+        sequence = torch.div(sequence, weight * height / 10)
+        return sequence
+
+
+class TfnNet(nn.Module):
+    """ Implemented based on the paper "Efficient low-rank multimodal fusion with modality-specific factors" """
+    def __init__(self):
+        super(TfnNet, self).__init__()
+        self.acc_subnet = InertialNet(24, 'acc net', seed=0)
+        self.gyr_subnet = InertialNet(24, 'gyr net', seed=0)
+        self.vid_subnet = VideoNet(24, 'vid net', seed=0)
+
+        self.fusion_dim = 10
+        self.linear_acc = nn.Linear(2*globals()['lstm_unit'], self.fusion_dim, bias=False)
+        self.linear_gyr = nn.Linear(2*globals()['lstm_unit'], self.fusion_dim, bias=False)
+        self.linear_vid = nn.Linear(2*globals()['lstm_unit'], self.fusion_dim, bias=False)
+
+        self.linear_1 = nn.Linear((self.fusion_dim+1)**3, globals()['fcnn_unit'], bias=True)
+        self.linear_2 = nn.Linear(globals()['fcnn_unit'], 2, bias=True)
+        self.relu = nn.ReLU()
+
+        for layer in [self.linear_1, self.linear_2]:
+            nn.init.xavier_normal_(layer.weight)
+
+    def __str__(self):
+        return 'TFN fusion net'
+
+    def forward(self, acc_x, gyr_x, vid_x, anthro, lens):
+        acc_h = self.linear_acc(self.acc_subnet(acc_x, lens))
+        gyr_h = self.linear_gyr(self.gyr_subnet(gyr_x, lens))
+        vid_h = self.linear_vid(self.vid_subnet(vid_x, lens))
+        batch_size = acc_h.data.shape[0]
+        data_type = torch.cuda.FloatTensor
+
+        _acc_h = torch.cat((torch.autograd.Variable(torch.ones(batch_size, acc_h.shape[1], 1).type(data_type), requires_grad=False), acc_h), dim=2)
+        _gyr_h = torch.cat((torch.autograd.Variable(torch.ones(batch_size, gyr_h.shape[1], 1).type(data_type), requires_grad=False), gyr_h), dim=2)
+        _vid_h = torch.cat((torch.autograd.Variable(torch.ones(batch_size, vid_x.shape[1], 1).type(data_type), requires_grad=False), vid_h), dim=2)
+
+        fusion_tensor = torch.matmul(_acc_h.unsqueeze(3), _gyr_h.unsqueeze(2))
+        fusion_tensor = fusion_tensor.view(acc_h.shape[0], acc_h.shape[1], (self.fusion_dim + 1) * (self.fusion_dim + 1), 1)
+        fusion_tensor = torch.matmul(fusion_tensor, _vid_h.unsqueeze(2)).view(acc_h.shape[0], acc_h.shape[1], -1)
+
+        sequence = self.linear_1(fusion_tensor)
+        sequence = self.relu(sequence)
+        sequence = self.linear_2(sequence)
+
+        weight = anthro[:, 0, 0].unsqueeze(1).unsqueeze(2)
+        height = anthro[:, 0, 1].unsqueeze(1).unsqueeze(2)
+        sequence = torch.div(sequence, weight * height / 10)
+        return sequence
+
+
 class LmfNet(nn.Module):
     """ Implemented based on the paper "Efficient low-rank multimodal fusion with modality-specific factors" """
-    def __init__(self, acc_subnet, gyr_subnet, vid_subnet):
+    def __init__(self):
         super(LmfNet, self).__init__()
-        self.acc_subnet = acc_subnet
-        self.gyr_subnet = gyr_subnet
-        self.vid_subnet = vid_subnet
+        self.acc_subnet = InertialNet(24, 'acc net', seed=0)
+        self.gyr_subnet = InertialNet(24, 'gyr net', seed=0)
+        self.vid_subnet = VideoNet(24, 'vid net', seed=0)
         self.rank = 10
         self.fused_dim = 40
 
@@ -79,7 +236,7 @@ class LmfNet(nn.Module):
             nn.init.xavier_normal_(layer.weight)
 
     def __str__(self):
-        return 'fusion net'
+        return 'LMF fusion net'
 
     def forward(self, acc_x, gyr_x, vid_x, anthro, lens):
         acc_h = self.acc_subnet(acc_x, lens)
@@ -214,7 +371,7 @@ class AlanFramework(BaseFramework):
             y_train_ = torch.from_numpy(y_train['main_output']).float().cuda()
             train_step_lens = torch.from_numpy(train_step_lens)
             train_ds = TensorDataset(x_train_acc, x_train_gyr, x_train_vid, x_anthro, y_train_, train_step_lens)
-            train_size = int(0.9 * len(train_ds))
+            train_size = int(0.96 * len(train_ds))
             vali_from_train_size = len(train_ds) - train_size
             train_ds, vali_from_train_ds = torch.utils.data.dataset.random_split(train_ds, [train_size, vali_from_train_size])
             train_dl = DataLoader(train_ds, batch_size=batch_size)
@@ -242,8 +399,7 @@ class AlanFramework(BaseFramework):
                     continue  # increase the speed of epoch
                 optimizer.zero_grad()
                 y_pred = model(xb_acc, xb_gyr, xb_vid, xb_anthro, lens)
-                train_loss = loss_fn(y_pred, yb)
-                train_loss.backward()
+                loss_fn(y_pred, yb).backward()
                 optimizer.step()
 
         def eval_after_training(model, test_dl, y_validation, validation_weight, params, show_plots=False):
@@ -285,10 +441,7 @@ class AlanFramework(BaseFramework):
 
         self.train_step_lens, self.validation_step_lens = self._get_step_len(x_train), self._get_step_len(x_validation)
 
-        acc_subnet = InertialNet(x_train['input_acc'].shape[2], 'acc net', seed=0).cuda()
-        gyr_subnet = InertialNet(x_train['input_gyr'].shape[2], 'gyr net', seed=0).cuda()
-        vid_subnet = VideoNet(x_train['input_vid'].shape[2], 'vid net', seed=1).cuda()
-        model = LmfNet(acc_subnet, gyr_subnet, vid_subnet).cuda()
+        model = self.model().cuda()
         # self.log_weight_bias_mean_std(model)
 
         hyper_param = {'epoch': globals()['epoch'], 'batch_size': globals()['batch_size'], 'lr': globals()['lr'],
@@ -317,9 +470,7 @@ class AlanFramework(BaseFramework):
             epoch_end_time = time.time()
             train(model, train_dl, optimizer, loss_fn, params)
         eval_after_training(model, test_dl, y_validation, validation_weight, params)
-        built_models = {'model': model}
-        # self.log_weight_bias_mean_std(model)
-        return built_models
+        return {'model': model}
 
     def predict(self, model, x_test):
         nn_model = model['model']
@@ -336,6 +487,7 @@ class AlanFramework(BaseFramework):
                 y_pred_list.append(nn_model(xb_acc, xb_gyr, xb_vid, xb_anthro, lens).detach().cpu())
             y_pred = torch.cat(y_pred_list)
         y_pred = y_pred.detach().cpu().numpy()
+        torch.cuda.empty_cache()
         return {'main_output': y_pred}
 
     def save_model_and_results(self, test_sub_y, pred_sub_y, test_sub_weight, models, test_sub_name):
@@ -440,7 +592,7 @@ def objective_for_hyper_search(args):
     return rmse_all / len(hyper_search_results)
 
 
-def run(input_acc, input_gyr, input_vid, result_dir):
+def run(model, input_acc, input_gyr, input_vid, result_dir):
     x_fields = {'input_acc': input_acc, 'input_gyr': input_gyr, 'input_vid': input_vid}
     x_fields['anthro'] = STATIC_DATA
     y_fields = {
@@ -450,8 +602,8 @@ def run(input_acc, input_gyr, input_vid, result_dir):
     weights = {key: [FORCE_PHASE] * len(y_fields[key]) for key in y_fields.keys()}
     evaluate_fields = {'main_output': y_fields['main_output']}
 
-    model_builder = AlanFramework(data_path, x_fields, y_fields, TRIALS[:], weights, evaluate_fields,
-                                  lambda: MinMaxScaler(feature_range=(-3, 3)), result_dir=result_dir)
+    model_builder = AlanFramework(data_path, model, x_fields, y_fields, TRIALS, weights, evaluate_fields,
+                                  result_dir=result_dir)
     subjects = model_builder.get_all_subjects()
     # model_builder.preprocess_train_evaluation(subjects[:13], subjects[13:], subjects[13:])
     model_builder.cross_validation(subjects, 3)
@@ -460,6 +612,7 @@ def run(input_acc, input_gyr, input_vid, result_dir):
 data_path = DATA_PATH + '/40samples+stance.h5'
 VID_90_FIELDS = [loc + axis + '_90' for loc in USED_KEYPOINTS for axis in ['_x', '_y']]
 VID_180_FIELDS = [loc + axis + '_180' for loc in USED_KEYPOINTS for axis in ['_x', '_y']]
+VID_ALL = VID_90_FIELDS + VID_180_FIELDS
 
 ACC_ALL = [field + '_' + sensor for sensor in SENSOR_LIST for field in IMU_FIELDS[:3]]
 GYR_ALL = [field + '_' + sensor for sensor in SENSOR_LIST for field in IMU_FIELDS[3:6]]
@@ -467,6 +620,9 @@ GYR_ALL = [field + '_' + sensor for sensor in SENSOR_LIST for field in IMU_FIELD
 if __name__ == "__main__":
     """ Use all the IMU channels """
     result_date = '1018'
-    run(input_acc=ACC_ALL, input_gyr=GYR_ALL, input_vid=VID_90_FIELDS + VID_180_FIELDS, result_dir=result_date + '_8IMU_2camera')
-
-
+    run(model=LmfNet, input_acc=ACC_ALL, input_gyr=GYR_ALL, input_vid=VID_ALL, result_dir=result_date+'/LmfNet')
+    run(model=TfnNet, input_acc=ACC_ALL, input_gyr=GYR_ALL, input_vid=VID_ALL, result_dir=result_date+'/TfnNet')
+    run(model=DirectNet, input_acc=ACC_ALL, input_gyr=GYR_ALL, input_vid=VID_ALL, result_dir=result_date+'/DirectNet')
+    run(model=DorschkyCNN, input_acc=ACC_ALL, input_gyr=GYR_ALL, input_vid=VID_ALL, result_dir=result_date+'/DorschkyCNN')
+    run(model=StetterMLP, input_acc=ACC_ALL, input_gyr=GYR_ALL, input_vid=VID_ALL, result_dir=result_date+'/StetterMLP')
+    run(model=ChaabanLinear, input_acc=ACC_ALL, input_gyr=GYR_ALL, input_vid=VID_ALL, result_dir=result_date+'/ChaabanLinear')

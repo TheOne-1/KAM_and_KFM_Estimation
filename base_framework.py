@@ -21,7 +21,7 @@ def execute_cmd(cmd):
 
 
 class BaseFramework:
-    def __init__(self, data_path, x_fields, y_fields, specify_trials=None, weights=None, evaluate_fields=None,
+    def __init__(self, data_path, model, x_fields, y_fields, specify_trials=None, weights=None, evaluate_fields=None,
                  base_scalar=MinMaxScaler, result_dir=None):
         """
         x_fileds: a dict contains input names and input fields
@@ -42,6 +42,7 @@ class BaseFramework:
         logging.info("Current commit is {}".format(execute_cmd("git rev-parse HEAD")))
         logging.info("Load data from h5 file {}".format(data_path))
         logging.info("Load data with input fields {}, output fields {}".format(x_fields, y_fields))
+        self.model = model
         self._x_fields = x_fields
         self._y_fields = y_fields
         self._weights = {} if weights is None else weights
@@ -78,7 +79,7 @@ class BaseFramework:
         return test_results
 
     def cross_validation(self, sub_ids: List[str], test_set_sub_num=1):
-        sub_ids = shuffle(sub_ids, random_state=0)
+        sub_ids = shuffle(sub_ids, random_state=1)
         logging.info('Cross validation with subject ids: {}'.format(sub_ids))
         folder_num = int(np.floor(len(sub_ids) / test_set_sub_num))  # the number of cross validation times
         results = []
