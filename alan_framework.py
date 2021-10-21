@@ -127,6 +127,25 @@ class VideoNet(InertialNet):
     pass
 
 
+class OutNet(nn.Module):
+    def __init__(self, input_dim):
+        super(OutNet, self).__init__()
+        self.linear_1 = nn.Linear(input_dim, globals()['fcnn_unit'], bias=True)
+        self.linear_2 = nn.Linear(globals()['fcnn_unit'], 2, bias=True)
+        self.relu = nn.ReLU()
+        for layer in [self.linear_1, self.linear_2]:
+            nn.init.xavier_normal_(layer.weight)
+
+    def forward(self, sequence, anthro):
+        sequence = self.linear_1(sequence)
+        sequence = self.relu(sequence)
+        sequence = self.linear_2(sequence)
+        weight = anthro[:, 0, 0].unsqueeze(1).unsqueeze(2)
+        height = anthro[:, 0, 1].unsqueeze(1).unsqueeze(2)
+        sequence = torch.div(sequence, weight * height / 10)
+        return sequence
+
+
 class DirectNet(nn.Module):
     """ Implemented based on the paper "Efficient low-rank multimodal fusion with modality-specific factors" """
 
@@ -135,13 +154,7 @@ class DirectNet(nn.Module):
         self.acc_subnet = InertialNet(24, 'acc net', seed=0)
         self.gyr_subnet = InertialNet(24, 'gyr net', seed=0)
         self.vid_subnet = VideoNet(24, 'vid net', seed=0)
-
-        self.linear_1 = nn.Linear(6 * globals()['lstm_unit'], globals()['fcnn_unit'], bias=True)
-        self.linear_2 = nn.Linear(globals()['fcnn_unit'], 2, bias=True)
-        self.relu = nn.ReLU()
-
-        for layer in [self.linear_1, self.linear_2]:
-            nn.init.xavier_normal_(layer.weight)
+        self.out_net = OutNet(6 * globals()['lstm_unit'])
 
     def __str__(self):
         return 'Direct fusion net'
@@ -150,13 +163,8 @@ class DirectNet(nn.Module):
         acc_h = self.acc_subnet(acc_x, lens)
         gyr_h = self.gyr_subnet(gyr_x, lens)
         vid_h = self.vid_subnet(vid_x, lens)
-        fusion_zy = torch.cat([acc_h, gyr_h, vid_h], dim=2)
-        sequence = self.linear_1(fusion_zy)
-        sequence = self.relu(sequence)
-        sequence = self.linear_2(sequence)
-        weight = anthro[:, 0, 0].unsqueeze(1).unsqueeze(2)
-        height = anthro[:, 0, 1].unsqueeze(1).unsqueeze(2)
-        sequence = torch.div(sequence, weight * height / 10)
+        sequence = torch.cat([acc_h, gyr_h, vid_h], dim=2)
+        sequence = self.out_net(sequence, anthro)
         return sequence
 
 
@@ -173,12 +181,7 @@ class TfnNet(nn.Module):
         self.linear_gyr = nn.Linear(2*globals()['lstm_unit'], self.fusion_dim, bias=False)
         self.linear_vid = nn.Linear(2*globals()['lstm_unit'], self.fusion_dim, bias=False)
 
-        self.linear_1 = nn.Linear((self.fusion_dim+1)**3, globals()['fcnn_unit'], bias=True)
-        self.linear_2 = nn.Linear(globals()['fcnn_unit'], 2, bias=True)
-        self.relu = nn.ReLU()
-
-        for layer in [self.linear_1, self.linear_2]:
-            nn.init.xavier_normal_(layer.weight)
+        self.out_net = OutNet((self.fusion_dim+1)**3)
 
     def __str__(self):
         return 'TFN fusion net'
@@ -196,15 +199,9 @@ class TfnNet(nn.Module):
 
         fusion_tensor = torch.matmul(_acc_h.unsqueeze(3), _gyr_h.unsqueeze(2))
         fusion_tensor = fusion_tensor.view(acc_h.shape[0], acc_h.shape[1], (self.fusion_dim + 1) * (self.fusion_dim + 1), 1)
-        fusion_tensor = torch.matmul(fusion_tensor, _vid_h.unsqueeze(2)).view(acc_h.shape[0], acc_h.shape[1], -1)
+        sequence = torch.matmul(fusion_tensor, _vid_h.unsqueeze(2)).view(acc_h.shape[0], acc_h.shape[1], -1)
 
-        sequence = self.linear_1(fusion_tensor)
-        sequence = self.relu(sequence)
-        sequence = self.linear_2(sequence)
-
-        weight = anthro[:, 0, 0].unsqueeze(1).unsqueeze(2)
-        height = anthro[:, 0, 1].unsqueeze(1).unsqueeze(2)
-        sequence = torch.div(sequence, weight * height / 10)
+        sequence = self.out_net(sequence, anthro)
         return sequence
 
 
@@ -231,12 +228,7 @@ class LmfNet(nn.Module):
         nn.init.xavier_normal_(self.fusion_weights)
         self.fusion_bias.data.fill_(0)
 
-        self.linear_1 = nn.Linear(self.fused_dim, globals()['fcnn_unit'], bias=True)
-        self.linear_2 = nn.Linear(globals()['fcnn_unit'], 2, bias=True)
-        self.relu = nn.ReLU()
-
-        for layer in [self.linear_1, self.linear_2]:
-            nn.init.xavier_normal_(layer.weight)
+        self.out_net = OutNet(self.fused_dim)
 
     def __str__(self):
         return 'LMF fusion net'
@@ -259,14 +251,7 @@ class LmfNet(nn.Module):
 
         # permute to make batch first
         sequence = torch.matmul(self.fusion_weights, fusion_zy.permute(1, 2, 0, 3)).squeeze(dim=2) + self.fusion_bias
-
-        sequence = self.linear_1(sequence)
-        sequence = self.relu(sequence)
-        sequence = self.linear_2(sequence)
-
-        weight = anthro[:, 0, 0].unsqueeze(1).unsqueeze(2)
-        height = anthro[:, 0, 1].unsqueeze(1).unsqueeze(2)
-        sequence = torch.div(sequence, weight * height / 10)
+        sequence = self.out_net(sequence, anthro)
         return sequence
 
 
