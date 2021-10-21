@@ -61,13 +61,13 @@ FORCE_DATA_FIELDS = ['plate_' + num + '_' + data_type + '_' + axis for num in ['
                      for data_type in ['force', 'cop'] for axis in ['x', 'y', 'z']]
 
 STATIC_DATA = SUBJECT_WEIGHT, SUBJECT_HEIGHT = ['body weight', 'body height']
-
+HIGH_LEVEL_FEATURE = ['fpa_imu', 'step_trunk_sway_angle', 'strike_ankle_width']
 PHASE_LIST = [EVENT_COLUMN, KAM_PHASE, FORCE_PHASE, STEP_PHASE, SUBJECT_ID, TRIAL_ID] = [
     'Event', 'kam_phase', 'force_phase', 'step_phase', 'subject_id', 'trial_id']
 # all the fields of combined data
 CONTINUOUS_FIELDS = TARGETS_LIST + EXT_KNEE_MOMENT + IMU_DATA_FIELDS + VIDEO_DATA_FIELDS + FORCE_DATA_FIELDS +\
                     JOINT_LIST + SEGMENT_DATA_FIELDS
-DISCRETE_FIELDS = STATIC_DATA + PHASE_LIST
+DISCRETE_FIELDS = STATIC_DATA + HIGH_LEVEL_FEATURE + PHASE_LIST
 ALL_FIELDS = DISCRETE_FIELDS + CONTINUOUS_FIELDS
 
 RKNEE_MARKER_FIELDS = [marker + axis for marker in ['RFME', 'RFLE'] for axis in ['_X', '_Y', '_Z']]

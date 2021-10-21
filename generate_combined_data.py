@@ -23,6 +23,7 @@ def sync_and_crop_data_frame(subject, trial):
     video_90_data = wearable_toolkit.VideoCsvReader(video_90_data_path)
     video_180_data = wearable_toolkit.VideoCsvReader(video_180_data_path)
     imu_data = wearable_toolkit.SageCsvReader(imu_data_path)
+    imu_data.create_fpa_imu_column(0)
     V3d_data = wearable_toolkit.Visual3dCsvReader(v3d_data_path)
 
     # interpolate low probability data
@@ -79,6 +80,8 @@ def sync_and_crop_data_frame(subject, trial):
         [imu_data.data_frame, video_90_data.data_frame, video_180_data.data_frame, V3d_data.data_frame,
          vicon_data.data_frame], axis=1)
     middle_data = middle_data.loc[:min_length-1]
+    gait_extractor = wearable_toolkit.GaitParameterExtractor(middle_data)
+    middle_data['trunk_sway_angle'] = gait_extractor.get_trunk_sway_angle()
     middle_data[SUBJECT_HEIGHT] = subject_info[SUBJECT_HEIGHT]
     middle_data[SUBJECT_WEIGHT] = subject_info[SUBJECT_WEIGHT]
     middle_data[SUBJECT_ID] = SUBJECTS.index(subject)

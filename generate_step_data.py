@@ -3,7 +3,6 @@ import pandas as pd
 import numpy as np
 import h5py
 import json
-from scipy.interpolate import interp1d
 from customized_logger import logger as logging
 from const import TRIALS, SUBJECTS, ALL_FIELDS, KAM_PHASE, FORCE_PHASE, STEP_PHASE
 from const import SAMPLES_BEFORE_STEP, SAMPLES_AFTER_STEP, DATA_PATH, L_PLATE_FORCE_Z, FORCE_DATA_FIELDS
@@ -79,14 +78,31 @@ def append_kam_phase(one_step):
     return one_step
 
 
+def append_max_trunk_sway_of_step(one_step):
+    one_step['step_trunk_sway_angle'] = max(one_step['trunk_sway_angle']) - min(one_step['trunk_sway_angle'])
+    return one_step
+
+
+def append_ankle_width(one_step):
+    midstance = int(one_step.shape[0] / 2)
+    one_step['strike_ankle_width'] = one_step['RAnkle_x_180'][midstance] - one_step['LAnkle_x_180'][midstance]
+    return one_step
+
+
+def make_sure_only_one_fpa_in_each_step(one_step):
+    midstance = int(one_step.shape[0] / 2)
+    one_step['fpa_imu'] = one_step['fpa_imu'][midstance]
+    return one_step
+
+
+def set_append_zeros_as_zeros(one_step):
+    zero_loc = np.where(one_step['RKnee_probability_90'].values == 0.)[0]
+    one_step.iloc[zero_loc, :] = 0
+    return one_step
+
+
 def is_step_data_corrupted(one_step):
     return (one_step[EVENT_COLUMN] >= 0.).all()
-
-
-def is_openpose_rknee_invalid(one_step):
-    vid_90 = (one_step['RKnee_y_90'][one_step['RKnee_y_90'] > 0.] > 1150).all()
-    vid_180 = (one_step['RKnee_y_180'][one_step['RKnee_y_180'] > 0.] > 1150).all()
-    return vid_90 and vid_180
 
 
 def is_foot_on_right_plate_alone(one_step_array):
@@ -104,14 +120,6 @@ def is_kam_positive(one_step):
 
 def is_kam_length_reasonable(one_step):
     return np.ptp(np.where(one_step[KAM_PHASE] == 1.)) > 30
-
-
-def resample_to_100_sample(one_step):
-    x = np.linspace(0., 1., one_step.shape[0])
-    new_x = np.linspace(0., 1., 100)
-    f = interp1d(x, one_step[CONTINUOUS_FIELDS], axis=0, kind=3)
-    g = interp1d(x, one_step[DISCRETE_FIELDS], axis=0, kind='nearest')
-    return pd.DataFrame(np.concatenate([f(new_x), g(new_x)], axis=1), columns=ALL_FIELDS)
 
 
 def generate_step_data(export_path, processes):
@@ -142,6 +150,9 @@ if __name__ == "__main__":
         lambda step_data_list: map(append_force_phase, step_data_list),
         lambda step_data_list: map(fill_invalid_cop, step_data_list),
         lambda step_data_list: map(append_kam_phase, step_data_list),
+        lambda step_data_list: map(append_max_trunk_sway_of_step, step_data_list),
+        lambda step_data_list: map(append_ankle_width, step_data_list),
+        lambda step_data_list: map(set_append_zeros_as_zeros, step_data_list),
         lambda step_data_list: filter(is_step_data_corrupted, step_data_list),
         lambda step_data_list: filter(is_foot_on_right_plate_alone, step_data_list),
         lambda step_data_list: filter(is_kam_positive, step_data_list),

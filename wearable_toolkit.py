@@ -22,6 +22,11 @@ from const import SENSOR_LIST, IMU_FIELDS, FORCE_DATA_FIELDS, EXT_KNEE_MOMENT, T
     EVENT_COLUMN
 from const import SUBJECT_WEIGHT, STANCE, STANCE_SWING, STEP_TYPE, VIDEO_ORIGINAL_SAMPLE_RATE
 import wearable_math
+import copy
+from numpy import cos, sin, tan
+from numpy.linalg import norm
+from scipy.signal import filtfilt, butter
+from transforms3d.euler import euler2mat
 
 
 class VideoCsvReader:
@@ -320,6 +325,29 @@ class ViconCsvReader:
         pass
 
 
+class GaitParameterExtractor:
+    def __init__(self, middle_data):
+        self.middle_data = middle_data
+
+    def get_trunk_sway_angle(self):
+        mid_shoulder = (self.middle_data[['LShoulder_x_180', 'LShoulder_y_180']].values +
+                        self.middle_data[['RShoulder_x_180', 'RShoulder_y_180']].values) / 2
+        mid_hip = (self.middle_data[['LHip_x_180', 'LHip_y_180']].values +
+                   self.middle_data[['RHip_x_180', 'RHip_y_180']].values) / 2
+        vid_vector = mid_hip - mid_shoulder
+        vid_angle = np.arctan2(vid_vector[:, 0], vid_vector[:, 1]) / np.pi * 180
+        delta_t = 1 / 100
+        base_correction_coeff = 5e-2
+        trunk_gyr_z = - self.middle_data['GyroZ_CHEST'].values
+        trunk_angle_z = np.zeros(trunk_gyr_z.shape)
+        for i_sample in range(len(trunk_gyr_z) - 1):
+            trunk_angle_z[i_sample+1] = trunk_angle_z[i_sample] + delta_t * trunk_gyr_z[i_sample]
+
+            trunk_angle_z[i_sample + 1] = trunk_angle_z[i_sample+1] + base_correction_coeff * \
+                                          np.sign(vid_angle[i_sample+1] - trunk_angle_z[i_sample+1])
+        return trunk_angle_z
+
+
 class SageCsvReader:
     """
     Read the csv file exported from sage systems
@@ -507,6 +535,165 @@ class SageCsvReader:
             self.data_frame.loc[self.missing_data_index, EVENT_COLUMN] *= -1  # mark the missing IMU data as minus event
         if verbose:
             plt.show()
+
+    def create_fpa_imu_column(self, placement_diff_between_shoe_and_sensor_in_degree):
+        offset_rad = - np.deg2rad(placement_diff_between_shoe_and_sensor_in_degree)
+        placement_R_foot_sensor = np.array([
+            [cos(offset_rad), sin(offset_rad), 0],
+            [-sin(offset_rad), cos(offset_rad), 0],
+            [0, 0, 1]])
+        estimated_strikes, estimated_offs = self.get_walking_strike_off(0, 0, 'R_FOOT', 10, verbose=False)
+        data_df = self.data_frame[[axis + '_R_FOOT' for axis in ['AccelX', 'AccelY', 'AccelZ', 'GyroX', 'GyroY', 'GyroZ']]]
+        data_df.columns = ['acc_x', 'acc_y', 'acc_z', 'gyr_x', 'gyr_y', 'gyr_z']
+        steps, stance_phase_flag = self.initalize_steps_and_stance_phase(data_df, estimated_strikes, estimated_offs)
+        euler_angles_esti = self.get_euler_angles_gradient_decent(data_df, stance_phase_flag, [steps[:-1]])
+        acc_IMU_rotated = self.get_rotated_acc(placement_R_foot_sensor, data_df, euler_angles_esti)
+        FPA_tnsre = self.get_FPA_via_max_acc(acc_IMU_rotated, steps, start_percent=0.6, end_percent=1.2)
+        self.data_frame.insert(0, 'fpa_imu', FPA_tnsre)
+        return FPA_tnsre
+
+    @staticmethod
+    def get_euler_angles_gradient_decent(gait_data_df, stance_phase_flag, steps_of_trials_list,
+                                         base_correction_coeff=1e-3):
+        imu_sample_rate = 100
+        delta_t = 1 / imu_sample_rate
+        acc_IMU = gait_data_df[['acc_x', 'acc_y', 'acc_z']].values
+        gyr_IMU = np.deg2rad(gait_data_df[['gyr_x', 'gyr_y', 'gyr_z']].values)
+        data_len = gait_data_df.shape[0]
+        gyr_value = gyr_IMU * delta_t
+        euler_angles_esti = np.zeros([data_len, 3])
+        for steps_of_the_trial in steps_of_trials_list:
+            trial_start, trial_end = steps_of_the_trial[0][0] - 100, min(steps_of_the_trial[-1][1] + 100, data_len)
+            last_stance_end = trial_start  # the end of gyr integration
+            for i_sample in range(trial_start, trial_end):
+                """1. initialize at the end of stance phase"""
+                if stance_phase_flag[i_sample] and not stance_phase_flag[i_sample + 1]:
+                    gravity_vector = acc_IMU[i_sample, :]
+                    euler_angles_esti[i_sample, 0] = np.arctan2(gravity_vector[1], gravity_vector[2])  # axis 0
+                    euler_angles_esti[i_sample, 1] = np.arctan2(-gravity_vector[0], np.sqrt(
+                        gravity_vector[1] ** 2 + gravity_vector[2] ** 2))  # axis 1
+
+                    """2. Gyr integration"""
+                    for j_sample in range(i_sample - 1, last_stance_end, -1):
+                        roll, pitch, yaw = euler_angles_esti[j_sample + 1, :]
+                        transfer_mat = np.mat([[1, sin(roll) * tan(pitch), cos(roll) * tan(pitch)],
+                                               [0, cos(roll), -sin(roll)],
+                                               [0, sin(roll) / cos(pitch), cos(roll) / cos(pitch)]])
+                        angle_augment = np.matmul(transfer_mat, gyr_value[j_sample + 1, :].T)
+                        euler_angles_esti[j_sample, :] = euler_angles_esti[j_sample + 1, :] - angle_augment
+
+                        """3. If j_sample is still stance phase"""
+                        if stance_phase_flag[j_sample]:
+                            acc_IMU_unified = acc_IMU[j_sample, :] / norm(acc_IMU[j_sample, :])
+                            r = euler_angles_esti[j_sample, 0]
+                            p = euler_angles_esti[j_sample, 1]
+                            jacob = np.array([[0, -cos(p)],
+                                              [cos(r) * cos(p), -sin(r) * sin(p)],
+                                              [-sin(r) * cos(p), -cos(r) * sin(p)]])
+                            f = np.array([[-sin(p) - acc_IMU_unified[0]],
+                                          [sin(r) * cos(p) - acc_IMU_unified[1]],
+                                          [cos(r) * cos(p) - acc_IMU_unified[2]]])
+                            delta_f = np.matmul(jacob.T, f)
+                            delta_f_normed = delta_f / norm(delta_f)
+                            euler_angles_esti[j_sample, :2] = euler_angles_esti[j_sample,
+                                                              :2] - base_correction_coeff * delta_f_normed.T
+                    last_stance_end = i_sample
+        return euler_angles_esti
+
+    @staticmethod
+    def get_rotated_acc(placement_R_foot_sensor, data_df, euler_angles, acc_cut_off_fre=None):
+        acc_IMU = data_df[['acc_x', 'acc_y', 'acc_z']].values
+        imu_sample_rate = 100
+        if acc_cut_off_fre is not None:
+            acc_IMU = data_filter(acc_IMU, acc_cut_off_fre, imu_sample_rate)
+
+        acc_IMU_rotated = np.zeros(acc_IMU.shape)
+        data_len = acc_IMU.shape[0]
+
+        for i_sample in range(data_len):
+            dcm_mat = euler2mat(euler_angles[i_sample, 0], euler_angles[i_sample, 1], 0)
+            acc_IMU_rotated[i_sample, :] = np.matmul(placement_R_foot_sensor, acc_IMU[i_sample, :].T)
+            acc_IMU_rotated[i_sample, :] = np.matmul(dcm_mat, acc_IMU_rotated[i_sample, :].T)
+
+        return acc_IMU_rotated
+
+    @staticmethod
+    def smooth(x, window_len, window='hanning'):
+        if window == 'flat':  # moving average
+            w = np.ones(window_len, 'd')
+        else:
+            w = eval('np.' + window + '(window_len)')
+
+        y = np.convolve(w / w.sum(), x, mode='same')
+        return y
+
+    @staticmethod
+    def initalize_steps_and_stance_phase(data_df, strike_list, off_list, sample_after_thd=10):
+        """The name "stance phase" is not accurate. It starts from gyr < thd + sample_after_thd sample,
+         ends in the middle of the stance"""
+
+        gyr_all = np.deg2rad(data_df[['gyr_x', 'gyr_y', 'gyr_z']])
+        gyr_magnitude = norm(gyr_all, axis=1)
+
+        imu_sample_rate = 100
+        stance_phase_sample_thd_lower = 0.3 * imu_sample_rate
+        stance_phase_sample_thd_higher = 1 * imu_sample_rate
+        # get stance phase
+        data_len = data_df.shape[0]
+        strike_array, off_array = np.array(strike_list), np.array(off_list)
+        strike_num = len(strike_array)
+        steps = []
+        stance_phase_flag = np.zeros([data_len], dtype=bool)
+        abandoned_step_num = 0
+        last_off = 0
+        for i_strike in range(strike_num):
+            strike = strike_array[i_strike]
+            offs_near_strike = off_array[max(0, i_strike - 70): i_strike + 70]
+            off = offs_near_strike[offs_near_strike > strike + stance_phase_sample_thd_lower]
+            off = off[off < strike + stance_phase_sample_thd_higher]
+            if len(off) == 1:  # stance phase detected
+                if strike < last_off:
+                    continue
+                off = off[0]
+                steps.append([int(strike), int(off)])
+                flag_start = strike + 20
+                flag_end = int(round((strike + off) / 2))
+                # flag_end = max(int(round((strike + off) / 2)) - 10, flag_start + 1)
+                for i_sample in range(strike, off):
+                    if all(gyr_magnitude[i_sample:i_sample + 5] < 1.7):
+                        flag_start = i_sample + sample_after_thd
+                        break
+                stance_phase_flag[flag_start:flag_end] = True
+                last_off = off
+            else:
+                abandoned_step_num += 1
+        return steps, stance_phase_flag
+
+    @staticmethod
+    def get_FPA_via_max_acc(acc_IMU_rotated, steps, start_percent, end_percent, span=29):
+        """Use the ratio of axis acceleration at the peak norm acc"""
+        data_len = acc_IMU_rotated.shape[0]
+        FPA_tnsre = np.zeros([data_len])
+        acc_IMU_smoothed = copy.deepcopy(acc_IMU_rotated)
+        for i_axis in range(2):
+            acc_IMU_smoothed[:, i_axis] = SageCsvReader.smooth(acc_IMU_rotated[:, i_axis], span, 'hanning')
+        planar_acc_norm = norm(acc_IMU_smoothed[:, :2], axis=1)
+
+        for i_step in range(len(steps) - 1):
+            last_step, current_step = steps[i_step], steps[i_step + 1]
+            swing_phase_len = current_step[0] - last_step[1]
+            start_sample = int(round(swing_phase_len * start_percent))
+            end_sample = int(round(swing_phase_len * end_percent))
+            acc_clip = acc_IMU_smoothed[last_step[1] + start_sample:last_step[1] + end_sample, 0:2]
+            acc_norm_clip = planar_acc_norm[last_step[1] + start_sample:last_step[1] + end_sample]
+            acc_norm_max_arg = np.argmax(acc_norm_clip)
+
+            acc_max_x = acc_clip[acc_norm_max_arg, 0]
+            acc_max_y = acc_clip[acc_norm_max_arg, 1]
+            the_FPA_esti = np.arctan2(acc_max_x, acc_max_y) * 180 / np.pi
+            FPA_tnsre[current_step[0]-21:current_step[1]+21] = - the_FPA_esti
+
+        return FPA_tnsre
 
 
 class DivideMaxScalar(MinMaxScaler):

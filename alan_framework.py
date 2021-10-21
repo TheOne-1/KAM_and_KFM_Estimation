@@ -13,7 +13,7 @@ import json
 import h5py
 from const import IMU_FIELDS, SENSOR_LIST, DATA_PATH, VIDEO_LIST, SUBJECT_WEIGHT, FORCE_PHASE, RKNEE_MARKER_FIELDS, \
     FORCE_DATA_FIELDS, STATIC_DATA, SEGMENT_MASS_PERCENT, SUBJECT_ID, TRIAL_ID, LEVER_ARM_FIELDS, TRIALS, \
-    SUBJECT_HEIGHT, USED_KEYPOINTS
+    SUBJECT_HEIGHT, USED_KEYPOINTS, HIGH_LEVEL_FEATURE
 from sklearn.preprocessing import MinMaxScaler, StandardScaler
 from types import SimpleNamespace
 import pandas as pd
@@ -130,18 +130,19 @@ class VideoNet(InertialNet):
 class OutNet(nn.Module):
     def __init__(self, input_dim):
         super(OutNet, self).__init__()
-        self.linear_1 = nn.Linear(input_dim, globals()['fcnn_unit'], bias=True)
+        self.linear_1 = nn.Linear(input_dim+3, globals()['fcnn_unit'], bias=True)
         self.linear_2 = nn.Linear(globals()['fcnn_unit'], 2, bias=True)
         self.relu = nn.ReLU()
         for layer in [self.linear_1, self.linear_2]:
             nn.init.xavier_normal_(layer.weight)
 
-    def forward(self, sequence, anthro):
+    def forward(self, sequence, others):
+        sequence = torch.cat((sequence, others[:, :, 2:]), dim=2)
         sequence = self.linear_1(sequence)
         sequence = self.relu(sequence)
         sequence = self.linear_2(sequence)
-        weight = anthro[:, 0, 0].unsqueeze(1).unsqueeze(2)
-        height = anthro[:, 0, 1].unsqueeze(1).unsqueeze(2)
+        weight = others[:, 0, WEIGHT].unsqueeze(1).unsqueeze(2)
+        height = others[:, 0, HEIGHT].unsqueeze(1).unsqueeze(2)
         sequence = torch.div(sequence, weight * height / 10)
         return sequence
 
@@ -159,12 +160,12 @@ class DirectNet(nn.Module):
     def __str__(self):
         return 'Direct fusion net'
 
-    def forward(self, acc_x, gyr_x, vid_x, anthro, lens):
+    def forward(self, acc_x, gyr_x, vid_x, others, lens):
         acc_h = self.acc_subnet(acc_x, lens)
         gyr_h = self.gyr_subnet(gyr_x, lens)
         vid_h = self.vid_subnet(vid_x, lens)
         sequence = torch.cat([acc_h, gyr_h, vid_h], dim=2)
-        sequence = self.out_net(sequence, anthro)
+        sequence = self.out_net(sequence, others)
         return sequence
 
 
@@ -186,7 +187,7 @@ class TfnNet(nn.Module):
     def __str__(self):
         return 'TFN fusion net'
 
-    def forward(self, acc_x, gyr_x, vid_x, anthro, lens):
+    def forward(self, acc_x, gyr_x, vid_x, others, lens):
         acc_h = self.linear_acc(self.acc_subnet(acc_x, lens))
         gyr_h = self.linear_gyr(self.gyr_subnet(gyr_x, lens))
         vid_h = self.linear_vid(self.vid_subnet(vid_x, lens))
@@ -201,7 +202,7 @@ class TfnNet(nn.Module):
         fusion_tensor = fusion_tensor.view(acc_h.shape[0], acc_h.shape[1], (self.fusion_dim + 1) * (self.fusion_dim + 1), 1)
         sequence = torch.matmul(fusion_tensor, _vid_h.unsqueeze(2)).view(acc_h.shape[0], acc_h.shape[1], -1)
 
-        sequence = self.out_net(sequence, anthro)
+        sequence = self.out_net(sequence, others)
         return sequence
 
 
@@ -233,7 +234,7 @@ class LmfNet(nn.Module):
     def __str__(self):
         return 'LMF fusion net'
 
-    def forward(self, acc_x, gyr_x, vid_x, anthro, lens):
+    def forward(self, acc_x, gyr_x, vid_x, others, lens):
         acc_h = self.acc_subnet(acc_x, lens)
         gyr_h = self.gyr_subnet(gyr_x, lens)
         vid_h = self.vid_subnet(vid_x, lens)
@@ -251,7 +252,7 @@ class LmfNet(nn.Module):
 
         # permute to make batch first
         sequence = torch.matmul(self.fusion_weights, fusion_zy.permute(1, 2, 0, 3)).squeeze(dim=2) + self.fusion_bias
-        sequence = self.out_net(sequence, anthro)
+        sequence = self.out_net(sequence, others)
         return sequence
 
 
@@ -345,10 +346,11 @@ class AlanFramework(BaseFramework):
             x_train_acc = torch.from_numpy(x_train['input_acc']).float().cuda()
             x_train_gyr = torch.from_numpy(x_train['input_gyr']).float().cuda()
             x_train_vid = torch.from_numpy(x_train['input_vid']).float().cuda()
-            x_anthro = torch.from_numpy(x_train['anthro']).float().cuda()
+            x_train_others = np.concatenate([x_train['anthro'], x_train['high_level']], axis=2)
+            x_train_others = torch.from_numpy(x_train_others).float().cuda()
             y_train_ = torch.from_numpy(y_train['main_output']).float().cuda()
             train_step_lens = torch.from_numpy(train_step_lens)
-            train_ds = TensorDataset(x_train_acc, x_train_gyr, x_train_vid, x_anthro, y_train_, train_step_lens)
+            train_ds = TensorDataset(x_train_acc, x_train_gyr, x_train_vid, x_train_others, y_train_, train_step_lens)
             train_size = int(0.96 * len(train_ds))
             vali_from_train_size = len(train_ds) - train_size
             train_ds, vali_from_train_ds = torch.utils.data.dataset.random_split(train_ds, [train_size, vali_from_train_size])
@@ -358,12 +360,13 @@ class AlanFramework(BaseFramework):
             x_validation_acc = torch.from_numpy(x_validation['input_acc']).float().cuda()
             x_validation_gyr = torch.from_numpy(x_validation['input_gyr']).float().cuda()
             x_validation_vid = torch.from_numpy(x_validation['input_vid']).float().cuda()
-            x_anthro = torch.from_numpy(x_validation['anthro']).float().cuda()
+            x_vali_others = np.concatenate([x_validation['anthro'], x_validation['high_level']], axis=2)
+            x_vali_others = torch.from_numpy(x_vali_others).float().cuda()
             y_validation_ = torch.from_numpy(y_validation['main_output']).float().cuda()
             validation_step_lens = torch.from_numpy(validation_step_lens)
-            test_ds = TensorDataset(x_validation_acc, x_validation_gyr, x_validation_vid, x_anthro, y_validation_, validation_step_lens)
+            test_ds = TensorDataset(x_validation_acc, x_validation_gyr, x_validation_vid, x_vali_others, y_validation_, validation_step_lens)
             test_dl = DataLoader(test_ds, batch_size=batch_size)
-            vali_from_test_ds = TensorDataset(x_validation_acc, x_validation_gyr, x_validation_vid, x_anthro, y_validation_, validation_step_lens)
+            vali_from_test_ds = TensorDataset(x_validation_acc, x_validation_gyr, x_validation_vid, x_vali_others, y_validation_, validation_step_lens)
             num_of_step_for_peek = int(0.3 * len(y_validation_))
             vali_from_test_ds, _ = torch.utils.data.dataset.random_split(vali_from_test_ds, [num_of_step_for_peek, len(
                 y_validation_) - num_of_step_for_peek])
@@ -372,12 +375,12 @@ class AlanFramework(BaseFramework):
 
         def train(model, train_dl, optimizer, loss_fn, params):
             model.train()
-            for i_batch, (xb_acc, xb_gyr, xb_vid, xb_anthro, yb, lens) in enumerate(train_dl):
+            for i_batch, (xb_acc, xb_gyr, xb_vid, xb_others, yb, lens) in enumerate(train_dl):
                 n = random.randint(1, 100)
                 if n > params.use_ratio:
                     continue  # increase the speed of epoch
                 optimizer.zero_grad()
-                y_pred = model(xb_acc, xb_gyr, xb_vid, xb_anthro, lens)
+                y_pred = model(xb_acc, xb_gyr, xb_vid, xb_others, lens)
                 loss_fn(y_pred, yb).backward()
                 optimizer.step()
 
@@ -385,8 +388,8 @@ class AlanFramework(BaseFramework):
             model.eval()
             with torch.no_grad():
                 y_pred_list = []
-                for i_batch, (xb_acc, xb_gyr, xb_vid, xb_anthro, yb, lens) in enumerate(test_dl):
-                    y_pred_list.append(model(xb_acc, xb_gyr, xb_vid, xb_anthro, lens).detach().cpu())
+                for i_batch, (xb_acc, xb_gyr, xb_vid, xb_others, yb, lens) in enumerate(test_dl):
+                    y_pred_list.append(model(xb_acc, xb_gyr, xb_vid, xb_others, lens).detach().cpu())
                 y_pred = torch.cat(y_pred_list)
             y_pred = {params.target_name: y_pred.detach().cpu().numpy()}
             all_scores = BaseFramework.get_all_scores(y_validation, y_pred, {params.target_name: params.fields},
@@ -402,9 +405,9 @@ class AlanFramework(BaseFramework):
             model.eval()
             def vali_set_loss(nn_model, validation_dl, loss_fn):
                 validation_loss = []
-                for xb_acc, xb_gyr, xb_vid, xb_anthro, yb, lens in validation_dl:
+                for xb_acc, xb_gyr, xb_vid, xb_others, yb, lens in validation_dl:
                     with torch.no_grad():
-                        yb_pred = nn_model(xb_acc, xb_gyr, xb_vid, xb_anthro, lens)
+                        yb_pred = nn_model(xb_acc, xb_gyr, xb_vid, xb_others, lens)
                         validation_loss.append(loss_fn(yb_pred, yb).item() / xb_acc.shape[0])
                 return np.mean(validation_loss)
 
@@ -458,14 +461,15 @@ class AlanFramework(BaseFramework):
         x_acc = torch.from_numpy(x_test['input_acc']).float().cuda()
         x_gyr = torch.from_numpy(x_test['input_gyr']).float().cuda()
         x_vid = torch.from_numpy(x_test['input_vid']).float().cuda()
-        x_anthro = torch.from_numpy(x_test['anthro']).float().cuda()
+        x_others = np.concatenate([x_test['anthro'], x_test['high_level']], axis=2)
+        x_others = torch.from_numpy(x_others).float().cuda()
         nn_model.eval()
         with torch.no_grad():
-            test_ds = TensorDataset(x_acc, x_gyr, x_vid, x_anthro, torch.from_numpy(self.test_step_lens))
+            test_ds = TensorDataset(x_acc, x_gyr, x_vid, x_others, torch.from_numpy(self.test_step_lens))
             test_dl = DataLoader(test_ds, batch_size=20)
             y_pred_list = []
-            for i_batch, (xb_acc, xb_gyr, xb_vid, xb_anthro, lens) in enumerate(test_dl):
-                y_pred_list.append(nn_model(xb_acc, xb_gyr, xb_vid, xb_anthro, lens).detach().cpu())
+            for i_batch, (xb_acc, xb_gyr, xb_vid, xb_others, lens) in enumerate(test_dl):
+                y_pred_list.append(nn_model(xb_acc, xb_gyr, xb_vid, xb_others, lens).detach().cpu())
             y_pred = torch.cat(y_pred_list)
         y_pred = y_pred.detach().cpu().numpy()
         torch.cuda.empty_cache()
@@ -588,6 +592,7 @@ def objective_for_hyper_search(args):
 def run(model, input_acc, input_gyr, input_vid, result_dir):
     x_fields = {'input_acc': input_acc, 'input_gyr': input_gyr, 'input_vid': input_vid}
     x_fields['anthro'] = STATIC_DATA
+    x_fields['high_level'] = HIGH_LEVEL_FEATURE
     y_fields = {
         'main_output': ['EXT_KM_X', 'EXT_KM_Y'],
         'auxiliary_info': [SUBJECT_ID, TRIAL_ID, FORCE_PHASE]
@@ -602,6 +607,7 @@ def run(model, input_acc, input_gyr, input_vid, result_dir):
     model_builder.cross_validation(subjects, 3)
     plt.close('all')
 
+FEATURES_OTHERS = [WEIGHT, HEIGHT, FPA, TRUNK_SWAY, ANKLE_WIDTH] = range(5)
 data_path = DATA_PATH + '/40samples+stance.h5'
 VID_90_FIELDS = [loc + axis + '_90' for loc in USED_KEYPOINTS for axis in ['_x', '_y']]
 VID_180_FIELDS = [loc + axis + '_180' for loc in USED_KEYPOINTS for axis in ['_x', '_y']]
