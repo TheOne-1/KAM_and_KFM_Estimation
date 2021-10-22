@@ -22,7 +22,7 @@ import warnings
 import torch.nn as nn
 from torch.nn.utils.rnn import pack_padded_sequence, pad_packed_sequence
 from torch.nn.parameter import Parameter
-# from sklearn.ensemble import boos
+from sklearn.ensemble import GradientBoostingRegressor
 
 
 class ChaabanLinear(nn.Module):
@@ -484,16 +484,14 @@ class AlanFramework(BaseFramework):
 
         results, columns = [], []
         for category, fields in self._y_fields.items():
-            if len(fields) > 1:
-                y_true_columns = fields
-            else:
-                y_true_columns = ['true_' + category]
+            y_true_columns = fields
             columns += y_true_columns
             results.append(test_sub_y[category])
         for category, fields_data in pred_sub_y.items():
-            y_pred_columns = ['pred_' + category]
-            columns += y_pred_columns
-            results.append(fields_data)
+            if category == 'main_output':
+                y_pred_columns = ['pred_' + field for field in self._y_fields['main_output']]
+                columns += y_pred_columns
+                results.append(fields_data)
         results = np.concatenate(results, axis=2)
         with h5py.File(os.path.join(self.result_dir, 'results.h5'), 'a') as hf:
             hf.require_dataset(test_sub_name, shape=results.shape, data=results, dtype='float32')
@@ -553,6 +551,46 @@ class AlanFramework(BaseFramework):
         logging.info("Best hyper parameters: " + str(best_param))
 
 
+class FrameworkForBoost(AlanFramework):
+    def train_model(self, x_train, y_train, x_validation=None, y_validation=None, validation_weight=None):
+        model_kam = self.model(max_features='sqrt', verbose=1)
+        model_kfm = self.model(max_features='sqrt', verbose=1)
+        x_train_ = np.concatenate([x_train['input_acc'], x_train['input_gyr'], x_train['input_vid']], axis=2)
+        x_train_ = x_train_.reshape([-1, x_train_.shape[2]])
+        y_train_ = y_train['main_output'].reshape([-1, y_train['main_output'].shape[2]])
+        model_kam.fit(x_train_, y_train_[:, 0])
+        model_kfm.fit(x_train_, y_train_[:, 1])
+        return {'model_kam': model_kam, 'model_kfm': model_kfm}
+
+    def predict(self, model, x_test):
+        model_kam, model_kfm = model['model_kam'], model['model_kfm']
+        x_test_ = np.concatenate([x_test['input_acc'], x_test['input_gyr'], x_test['input_vid']], axis=2)
+        x_test_ = x_test_.reshape([-1, x_test_.shape[2]])
+        y_pred = np.zeros([x_test_.shape[0], 2])
+        y_pred[:, 0] = model_kam.predict(x_test_)
+        y_pred[:, 1] = model_kfm.predict(x_test_)
+        y_pred = y_pred.reshape([-1, 152, 2])
+        return {'main_output': y_pred}
+
+    def save_model_and_results(self, test_sub_y, pred_sub_y, test_sub_weight, models, test_sub_name):
+        save_path = os.path.join(self.result_dir, 'sub_models', test_sub_name)
+        os.makedirs(save_path, exist_ok=True)
+        results, columns = [], []
+        for category, fields in self._y_fields.items():
+            y_true_columns = fields
+            columns += y_true_columns
+            results.append(test_sub_y[category])
+        for category, fields_data in pred_sub_y.items():
+            if category == 'main_output':
+                y_pred_columns = ['pred_' + field for field in self._y_fields['main_output']]
+                columns += y_pred_columns
+                results.append(fields_data)
+        results = np.concatenate(results, axis=2)
+        with h5py.File(os.path.join(self.result_dir, 'results.h5'), 'a') as hf:
+            hf.require_dataset(test_sub_name, shape=results.shape, data=results, dtype='float32')
+            hf.attrs['columns'] = json.dumps(columns)
+
+
 def int_params(args):
     for arg_name in ['batch_size', 'epoch', 'fcnn_unit', 'lstm_unit']:
         if arg_name in args.keys():
@@ -600,8 +638,12 @@ def run(model, input_acc, input_gyr, input_vid, result_dir):
     weights = {key: [FORCE_PHASE] * len(y_fields[key]) for key in y_fields.keys()}
     evaluate_fields = {'main_output': y_fields['main_output']}
 
-    model_builder = AlanFramework(data_path, model, x_fields, y_fields, TRIALS, weights, evaluate_fields,
-                                  result_dir=result_dir)
+    if model is GradientBoostingRegressor:
+        model_builder = FrameworkForBoost(data_path, model, x_fields, y_fields, TRIALS, weights, evaluate_fields,
+                                          result_dir=result_dir)
+    else:
+        model_builder = AlanFramework(data_path, model, x_fields, y_fields, TRIALS, weights, evaluate_fields,
+                                      result_dir=result_dir)
     subjects = model_builder.get_all_subjects()
     # model_builder.preprocess_train_evaluation(subjects[:13], subjects[13:], subjects[13:])
     model_builder.cross_validation(subjects, 3)
@@ -619,10 +661,10 @@ GYR_ALL = [field + '_' + sensor for sensor in SENSOR_LIST for field in IMU_FIELD
 if __name__ == "__main__":
     """ Use all the IMU channels """
     result_date = '1018'
-    # run(model=Xgboost, input_acc=ACC_ALL, input_gyr=GYR_ALL, input_vid=VID_ALL, result_dir=result_date+'/Xgboost')
     run(model=LmfNet, input_acc=ACC_ALL, input_gyr=GYR_ALL, input_vid=VID_ALL, result_dir=result_date+'/LmfNet')
     run(model=TfnNet, input_acc=ACC_ALL, input_gyr=GYR_ALL, input_vid=VID_ALL, result_dir=result_date+'/TfnNet')
     run(model=DirectNet, input_acc=ACC_ALL, input_gyr=GYR_ALL, input_vid=VID_ALL, result_dir=result_date+'/DirectNet')
     run(model=DorschkyCNN, input_acc=ACC_ALL, input_gyr=GYR_ALL, input_vid=VID_ALL, result_dir=result_date+'/DorschkyCNN')
     run(model=StetterMLP, input_acc=ACC_ALL, input_gyr=GYR_ALL, input_vid=VID_ALL, result_dir=result_date+'/StetterMLP')
     run(model=ChaabanLinear, input_acc=ACC_ALL, input_gyr=GYR_ALL, input_vid=VID_ALL, result_dir=result_date+'/ChaabanLinear')
+    run(model=GradientBoostingRegressor, input_acc=ACC_ALL, input_gyr=GYR_ALL, input_vid=VID_ALL, result_dir=result_date+'/Xgboost')
