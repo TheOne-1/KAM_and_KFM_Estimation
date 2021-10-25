@@ -19,6 +19,7 @@ from types import SimpleNamespace
 import pandas as pd
 from hyperopt import fmin, tpe, hp, Trials as HP_Trials
 import warnings
+import torch.nn.functional as F
 import torch.nn as nn
 from torch.nn.utils.rnn import pack_padded_sequence, pad_packed_sequence
 from torch.nn.parameter import Parameter
@@ -253,6 +254,105 @@ class LmfNet(nn.Module):
         # permute to make batch first
         sequence = torch.matmul(self.fusion_weights, fusion_zy.permute(1, 2, 0, 3)).squeeze(dim=2) + self.fusion_bias
         sequence = self.out_net(sequence, others)
+        return sequence
+
+
+class MfnNet(nn.Module):
+    def __init__(self):
+        super(MfnNet, self).__init__()
+        total_h_dim = 3 * globals()['lstm_unit']
+        self.mem_dim = 10
+        window_dim = 2
+        # output_dim = 1
+        attInShape = total_h_dim * window_dim
+        gammaInShape = attInShape + self.mem_dim
+        # final_out = total_h_dim + self.mem_dim
+        h_att1 = 10
+        h_att2 = 10
+        h_gamma1 = 10
+        h_gamma2 = 10
+        att1_dropout = 0.2
+        att2_dropout = 0.2
+        gamma1_dropout = 0.2
+        gamma2_dropout = 0.2
+
+        self.lstm_l = nn.LSTMCell(24, globals()['lstm_unit'])
+        self.lstm_a = nn.LSTMCell(24, globals()['lstm_unit'])
+        self.lstm_v = nn.LSTMCell(24, globals()['lstm_unit'])
+
+        self.att1_fc1 = nn.Linear(attInShape, h_att1)
+        self.att1_fc2 = nn.Linear(h_att1, attInShape)
+        self.att1_dropout = nn.Dropout(att1_dropout)
+
+        self.att2_fc1 = nn.Linear(attInShape, h_att2)
+        self.att2_fc2 = nn.Linear(h_att2, self.mem_dim)
+        self.att2_dropout = nn.Dropout(att2_dropout)
+
+        self.gamma1_fc1 = nn.Linear(gammaInShape, h_gamma1)
+        self.gamma1_fc2 = nn.Linear(h_gamma1, self.mem_dim)
+        self.gamma1_dropout = nn.Dropout(gamma1_dropout)
+
+        self.gamma2_fc1 = nn.Linear(gammaInShape, h_gamma2)
+        self.gamma2_fc2 = nn.Linear(h_gamma2, self.mem_dim)
+        self.gamma2_dropout = nn.Dropout(gamma2_dropout)
+
+        # self.out_fc1 = nn.Linear(final_out, h_out)
+        # self.out_fc2 = nn.Linear(h_out, output_dim)
+        # self.out_dropout = nn.Dropout(out_dropout)
+        self.out_net = OutNet(130)
+        self.relu = nn.ReLU()
+
+    # def forward(self, x):
+    def forward(self, acc_x, gyr_x, vid_x, others, lens):
+        x_l = acc_x
+        x_a = gyr_x
+        x_v = vid_x
+        # x is n x t x d
+        n = acc_x.shape[0]
+        t = acc_x.shape[1]
+        self.h_l = torch.zeros(n, globals()['lstm_unit']).cuda()
+        self.h_a = torch.zeros(n, globals()['lstm_unit']).cuda()
+        self.h_v = torch.zeros(n, globals()['lstm_unit']).cuda()
+        self.c_l = torch.zeros(n, globals()['lstm_unit']).cuda()
+        self.c_a = torch.zeros(n, globals()['lstm_unit']).cuda()
+        self.c_v = torch.zeros(n, globals()['lstm_unit']).cuda()
+        self.mem = torch.zeros(n, self.mem_dim).cuda()
+        self.h_l_out = torch.zeros(n, t, globals()['lstm_unit']).cuda()
+        self.h_a_out = torch.zeros(n, t, globals()['lstm_unit']).cuda()
+        self.h_v_out = torch.zeros(n, t, globals()['lstm_unit']).cuda()
+        self.mem_out = torch.zeros(n, t, self.mem_dim).cuda()
+        for i in range(t):
+            # prev time step
+            prev_c_l = self.c_l
+            prev_c_a = self.c_a
+            prev_c_v = self.c_v
+            # curr time step
+            new_h_l, new_c_l = self.lstm_l(x_l[:, i], (self.h_l, self.c_l))
+            new_h_a, new_c_a = self.lstm_a(x_a[:, i], (self.h_a, self.c_a))
+            new_h_v, new_c_v = self.lstm_v(x_v[:, i], (self.h_v, self.c_v))
+            # concatenate
+            prev_cs = torch.cat([prev_c_l, prev_c_a, prev_c_v], dim=1)
+            new_cs = torch.cat([new_c_l, new_c_a, new_c_v], dim=1)
+            cStar = torch.cat([prev_cs, new_cs], dim=1)
+            attention = F.softmax(self.att1_fc2(self.att1_dropout(F.relu(self.att1_fc1(cStar)))), dim=1)
+            attended = attention * cStar
+            cHat = F.tanh(self.att2_fc2(self.att2_dropout(F.relu(self.att2_fc1(attended)))))
+            both = torch.cat([attended, self.mem], dim=1)
+            gamma1 = F.sigmoid(self.gamma1_fc2(self.gamma1_dropout(F.relu(self.gamma1_fc1(both)))))
+            gamma2 = F.sigmoid(self.gamma2_fc2(self.gamma2_dropout(F.relu(self.gamma2_fc1(both)))))
+            self.mem = gamma1 * self.mem + gamma2 * cHat
+            # all_mems.append(self.mem)
+            # update
+            self.h_l, self.c_l = new_h_l, new_c_l
+            self.h_a, self.c_a = new_h_a, new_c_a
+            self.h_v, self.c_v = new_h_v, new_c_v
+
+            self.h_l_out[:, i] = self.h_l
+            self.h_a_out[:, i] = self.h_a
+            self.h_v_out[:, i] = self.h_v
+            self.mem_out[:, i] = self.mem
+        last_hs = torch.cat([self.h_l_out, self.h_a_out, self.h_v_out, self.mem_out], dim=2)
+        sequence = self.out_net(last_hs, others)
         return sequence
 
 
@@ -663,7 +763,7 @@ if __name__ == "__main__":
     result_date = '1018'
     run(model=LmfNet, input_acc=ACC_ALL, input_gyr=GYR_ALL, input_vid=VID_ALL, result_dir=result_date+'/LmfNet')
     run(model=TfnNet, input_acc=ACC_ALL, input_gyr=GYR_ALL, input_vid=VID_ALL, result_dir=result_date+'/TfnNet')
-    run(model=DirectNet, input_acc=ACC_ALL, input_gyr=GYR_ALL, input_vid=VID_ALL, result_dir=result_date+'/DirectNet')
+    run(model=MfnNet, input_acc=ACC_ALL, input_gyr=GYR_ALL, input_vid=VID_ALL, result_dir=result_date+'/MfnNet')
     run(model=DorschkyCNN, input_acc=ACC_ALL, input_gyr=GYR_ALL, input_vid=VID_ALL, result_dir=result_date+'/DorschkyCNN')
     run(model=StetterMLP, input_acc=ACC_ALL, input_gyr=GYR_ALL, input_vid=VID_ALL, result_dir=result_date+'/StetterMLP')
     run(model=ChaabanLinear, input_acc=ACC_ALL, input_gyr=GYR_ALL, input_vid=VID_ALL, result_dir=result_date+'/ChaabanLinear')

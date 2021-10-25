@@ -7,7 +7,7 @@ OPENPOSE_MODEL_PATH = os.environ.get('OPENPOSE_MODEL_PATH')
 VIDEO_ORIGINAL_SAMPLE_RATE = 119.99014859206962
 DATA_PATH = os.environ.get('KAM_DATA_PATH')
 TRIALS = ['baseline', 'fpa', 'step_width', 'trunk_sway']
-TRIALS_PRINT = ['Baseline', 'FPA', 'Step Width', 'Trunk Sway']
+TRIALS_PRINT = ['Baseline', 'Foot Progression Angle', 'Step Width', 'Trunk Sway Angle']
 STATIC_TRIALS = ['static_back', 'static_side']
 SUBJECTS = ['s002_wangdianxin', 's004_ouyangjue', 's005_tangansheng', 's006_xusen', 's007_zuogangao', 's008_liyu',
             's009_sunyubo', 's010_handai', 's011_wuxingze', 's012_likaixiang', 's013_zhangxiaohan', 's014_maqichao',
@@ -85,6 +85,10 @@ LINE_WIDTH_THICK = 3
 
 SENSOR_COMBINATION = ['8IMU_2camera', '8IMU', '3IMU_2camera', '3IMU', '1IMU_2camera', '1IMU', '2camera']
 SENSOR_COMBINATION_SORTED = ['8IMU_2camera', '3IMU_2camera', '8IMU', '1IMU_2camera', '3IMU', '2camera', '1IMU']
+COMPARED_MODELS_FOR_PRINT = {'Xgboost': 'XGBoost', 'ChaabanLinear': 'Linear regression', 'StetterMLP': 'MLP',
+                             'DorschkyCNN': 'CNN', 'MfnNet': 'Our + MFN', 'TfnNet': 'Ours + TFN',
+                             'LmfNet': 'Ours + LMF'}
+COMPARED_MODELS = list(COMPARED_MODELS_FOR_PRINT.keys())
 
 EXAMPLE_DATA_FIELDS = [
     'body weight', 'body height', 'force_phase',
