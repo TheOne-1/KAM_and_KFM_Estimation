@@ -192,10 +192,6 @@ def print_mean_rrmse(mean_values):
         print('{:.1f} \%'.format(value))
 
 
-def save_fig(name, dpi=300):
-    plt.savefig('exports/' + name + '.png', dpi=dpi)
-
-
 if __name__ == "__main__":
     test_name = '0326'
     target_matric = 'RMSE_'

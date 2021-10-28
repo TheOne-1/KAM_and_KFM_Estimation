@@ -1,48 +1,44 @@
 from scikit_posthocs import posthoc_tukey, posthoc_ttest
 import pandas as pd
 import numpy as np
-from const import COMPARED_MODELS_FOR_PRINT, SUBJECTS, COMPARED_MODELS
-from scipy.stats import ttest_1samp, ttest_rel
+from const import TRIALS_PRINT, SUBJECTS, COMPARED_MODELS, TRIALS
+from sklearn.metrics import mean_squared_error as mse
+from figures.PaperFigures import get_peak_of_each_gait_cycle
+import h5py
+import json
+# from figures.f9 import sort_gait_cycles_according_to_param
 
 
 if __name__ == '__main__':
-    result_date = 'results/1018'
-    metrics = ['RMSE', 'rRMSE', 'r']
-    result_df = pd.read_csv(result_date + '/estimation_result_individual.csv')
-    """ print table """
-    to_print = []
-    for model in COMPARED_MODELS:
-        one_row = ''
-        trial_df = result_df[result_df['trial'] == 'all']
-        one_row += '{:22}'.format(COMPARED_MODELS_FOR_PRINT[model])
-        for moment_name in ['KAM', 'KFM']:
-            for metric in metrics:
-                sensor_result = trial_df[metric + '_' + model + '_' + moment_name]
-                if metric == 'rRMSE':
-                    one_row = one_row + '&{:6.1f} ({:3.1f})'.format(np.mean(sensor_result), sensor_result.sem()) + '\t'
-                else:
-                    one_row = one_row + '&{:6.2f} ({:3.2f})'.format(np.mean(sensor_result), sensor_result.sem()) + '\t'
-            if moment_name == 'KAM':
-                one_row = one_row + '&\t'
-        one_row = one_row + '\\\\'
-        to_print.append(one_row)
+    result_date = 'results/1018/'
+    overall_result_df = pd.read_csv(result_date + 'estimation_result_individual.csv')
 
-    for start_index, sign in zip([100, 86, 71, 54, 40, 25], [-1, 1, 1, -1, 1, 1]):
-        numbers = []
-        for one_row in to_print:
-            numbers.append(sign*float(one_row[start_index:start_index+4]))
-            # print(one_row[start_index:start_index+4])
-        bold_rows = np.where(numbers == np.min(numbers))[0]
-        for bold_row in bold_rows:
-            the_row = to_print[bold_row]
-            if ' ' == the_row[start_index:start_index+4][0]:
-                text_index, text_span = start_index + 1, 3
-            else:
-                text_index, text_span = start_index, 4
-            to_print[bold_row] = the_row[: text_index] + '\\textbf{' + the_row[text_index:text_index + text_span] + \
-                                 '}' + the_row[text_index + text_span:]
+    model = 'LmfNet'        # DirectNet LmfNet
+    with h5py.File('results/1018/{}/results.h5'.format(model), 'r') as hf:
+        data_all_sub = {subject: subject_data[:] for subject, subject_data in hf.items()}
+        data_fields = json.loads(hf.attrs['columns'])
 
-    to_print.insert(4, '\cmidrule{1-8}')
-    for row in to_print:
-        print(row)
+    to_print = ''
+    for moment_name in ['KAM', 'KFM']:
+        to_print += '\multirow{4}{*}{' + moment_name + '}'
+        for trial, trial_to_print in zip(TRIALS, TRIALS_PRINT):
+            to_print += ' & ' + trial_to_print + '\t'
+            trial_df = overall_result_df[overall_result_df['trial'] == trial]
+            overall_rmses = trial_df['RMSE_' + model + '_' + moment_name]
+            to_print += '&{:6.2f} ({:3.2f})'.format(np.mean(overall_rmses), overall_rmses.sem()) + '\t'
+
+            # peak results
+            peak_rmses = []
+            for i_subject, subject in enumerate(SUBJECTS):
+                sub_data = data_all_sub[subject]
+                ts_id = TRIALS.index(trial)
+                sub_trial_data = sub_data[sub_data[:, 0, data_fields.index('trial_id')] == ts_id, :, :]
+                true_peak, pred_peak = get_peak_of_each_gait_cycle(np.stack(sub_trial_data), data_fields, moment_name, 0.5)
+                peak_rmses.append(np.sqrt(mse(true_peak, pred_peak)))
+            peak_rmses = pd.Series(peak_rmses)
+            to_print += '&{:6.2f} ({:3.2f})'.format(np.mean(peak_rmses), peak_rmses.sem()) + '\t'
+            to_print += '\\\\\n'
+        if moment_name == 'KAM':
+            to_print += '\cmidrule{1-4}\n'
+    print(to_print)
 
