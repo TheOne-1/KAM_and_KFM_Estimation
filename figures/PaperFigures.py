@@ -36,20 +36,48 @@ def find_peak_max(data_clip, height, width=None, prominence=None):
     return np.max(peak_heights)
 
 
-def get_mean_gait_cycle_then_find_peak(data, columns, search_percent_from_start):
-    mean_std = get_mean_std(data, columns, 'main_output')
+def get_mean_gait_cycle_then_find_peak(data, columns, moment_name, search_percent_from_start):
     search_sample = int(100 * search_percent_from_start)
-    true_peak = find_peak_max(mean_std['true_mean'][:search_sample], 0.1)
-    pred_peak =find_peak_max(mean_std['pred_mean'][:search_sample], 0.1)
-    if true_peak is None:
-        true_peak = 0
+    moment_name = translate_moment_name(moment_name)
+    true_row, pred_row, weight_row = columns.index(moment_name), columns.index('pred_' + moment_name), columns.index('force_phase')
+    true_resampled = BaseFramework.keep_stance_then_resample(data[:, :, true_row:true_row+1], data[:, :, weight_row:weight_row+1])[0][:, :, 0]
+    pred_resampled = BaseFramework.keep_stance_then_resample(data[:, :, pred_row:pred_row+1], data[:, :, weight_row:weight_row+1])[0][:, :, 0]
+    true_average_of_gait_cycles = np.mean(true_resampled, axis=0)
+    pred_average_of_gait_cycles = np.mean(pred_resampled, axis=0)
+    #
+    # plt.figure()
+    # plt.plot(true_average_of_gait_cycles)
+    # plt.plot(pred_average_of_gait_cycles)
+    # plt.show()
+
+    true_peak = np.max(true_average_of_gait_cycles[:search_sample]) / GRAVITY * 100
+    pred_peak = np.max(pred_average_of_gait_cycles[:search_sample]) / GRAVITY * 100
     return true_peak, pred_peak
 
 
-def get_peak_of_each_gait_cycle(data, columns, search_percent_from_start):
+def save_fig(name, dpi=300):
+    plt.savefig('exports/' + name + '.png', dpi=dpi)
+
+
+def translate_moment_name(moment_name):
+    if moment_name == 'KAM':
+        equalvant_name = 'EXT_KM_Y'
+    elif moment_name == 'KFM':
+        equalvant_name = 'EXT_KM_X'
+    elif moment_name == 'EXT_KM_X':
+        equalvant_name = 'KAM'
+    elif moment_name == 'EXT_KM_X':
+        equalvant_name = 'KFM'
+    else:
+        raise RuntimeError('{} is not a valid moment name. Use KAM, KFM, EXT_KM_Y or EXT_KM_X instead'.format(moment_name))
+    return equalvant_name
+
+
+def get_peak_of_each_gait_cycle(data, columns, moment_name, search_percent_from_start):
     step_lens = get_step_len(data)
     search_lens = (search_percent_from_start * step_lens).astype(int)
-    true_row, pred_row = columns.index('true_main_output'), columns.index('pred_main_output')
+    moment_name = translate_moment_name(moment_name)
+    true_row, pred_row = columns.index(moment_name), columns.index('pred_' + moment_name)
     true_peaks, pred_peaks = [], []
     peak_not_found = 0
     for i_step in range(data.shape[0]):
@@ -89,7 +117,7 @@ def hide_axis_add_grid():
 
 
 def get_mean_std(data_array, data_fields, col_name, transfer_to_newton=True):
-    true_index, pred_index = data_fields.index('true_' + col_name), data_fields.index('pred_' + col_name)
+    true_index, pred_index = data_fields.index(col_name), data_fields.index('pred_' + col_name)
     weight_index = data_fields.index(FORCE_PHASE)
 
     true_stance, _ = BaseFramework.keep_stance_then_resample(data_array[:, :, true_index:true_index + 1], data_array[:, :, weight_index:weight_index + 1], 101)

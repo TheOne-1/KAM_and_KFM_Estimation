@@ -25,8 +25,8 @@ for subject in SUBJECTS[3:6]:
 
     for trial in TRIALS[0:1]:            # TRIALS STATIC_TRIALS
         """ vid-IMU """
-        shank_vid_imu = MadgwickVidIMU(subject, 'SHANK', trial, SimpleNamespace(**init_params_vid_imu))
-        thigh_vid_imu = MadgwickVidIMU(subject, 'THIGH', trial, SimpleNamespace(**init_params_vid_imu))
+        shank_vid_imu = KalmanFilterVidIMU(subject, 'SHANK', trial, SimpleNamespace(**init_params_vid_imu))
+        thigh_vid_imu = KalmanFilterVidIMU(subject, 'THIGH', trial, SimpleNamespace(**init_params_vid_imu))
         for k in range(1, shank_vid_imu.trial_data.shape[0]):
             shank_vid_imu.update(k)
             thigh_vid_imu.update(k)
@@ -38,8 +38,8 @@ for subject in SUBJECTS[3:6]:
         # plt.show()
 
         """ magneto-IMU """
-        shank_mag_imu = MadgwickMagIMU(subject, 'SHANK', trial, SimpleNamespace(**init_params_mag_imu))
-        thigh_mag_imu = MadgwickMagIMU(subject, 'THIGH', trial, SimpleNamespace(**init_params_mag_imu))
+        shank_mag_imu = KalmanFilterMagIMU(subject, 'SHANK', trial, SimpleNamespace(**init_params_mag_imu))
+        thigh_mag_imu = KalmanFilterMagIMU(subject, 'THIGH', trial, SimpleNamespace(**init_params_mag_imu))
         for k in range(1, shank_mag_imu.trial_data.shape[0]):
             shank_mag_imu.update(k)
             thigh_mag_imu.update(k)

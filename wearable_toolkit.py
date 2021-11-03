@@ -12,7 +12,8 @@ import csv
 import numpy as np
 import math
 import pandas as pd
-from scipy.signal import find_peaks, butter, filtfilt
+from scipy.signal import find_peaks, butter, filtfilt, medfilt
+from scipy.ndimage.filters import uniform_filter1d
 import matplotlib.pyplot as plt
 from scipy import linalg
 from sklearn.preprocessing import MinMaxScaler
@@ -51,6 +52,7 @@ class VideoCsvReader:
         for x, y, probability in columns_label:
             self.data_frame.loc[self.data_frame[probability] < 0.5, [x, y, probability]] = np.nan
         self.data_frame = self.data_frame.interpolate(method='linear', axis=0)
+        self.data_frame = self.data_frame.fillna(self.data_frame.mean())        # fill nan of the ends
 
     def low_pass_filtering(self, cut_off_fre, sampling_fre, filter_order):
         self.data_frame.loc[:, :] = data_filter(self.data_frame.values, cut_off_fre, sampling_fre, filter_order)

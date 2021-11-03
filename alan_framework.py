@@ -129,16 +129,18 @@ class VideoNet(InertialNet):
 
 
 class OutNet(nn.Module):
-    def __init__(self, input_dim):
+    def __init__(self, input_dim, high_level_locs=[2, 3, 4]):
         super(OutNet, self).__init__()
-        self.linear_1 = nn.Linear(input_dim+3, globals()['fcnn_unit'], bias=True)
+        self.high_level_locs = high_level_locs
+        self.linear_1 = nn.Linear(input_dim + len(high_level_locs), globals()['fcnn_unit'], bias=True)
         self.linear_2 = nn.Linear(globals()['fcnn_unit'], 2, bias=True)
         self.relu = nn.ReLU()
         for layer in [self.linear_1, self.linear_2]:
             nn.init.xavier_normal_(layer.weight)
 
     def forward(self, sequence, others):
-        sequence = torch.cat((sequence, others[:, :, 2:]), dim=2)
+        if len(self.high_level_locs) > 0:
+            sequence = torch.cat((sequence, others[:, :, self.high_level_locs]), dim=2)
         sequence = self.linear_1(sequence)
         sequence = self.relu(sequence)
         sequence = self.linear_2(sequence)
@@ -172,10 +174,10 @@ class DirectNet(nn.Module):
 
 class TfnNet(nn.Module):
     """ Implemented based on the paper "Efficient low-rank multimodal fusion with modality-specific factors" """
-    def __init__(self):
+    def __init__(self, acc_dim, gyr_dim):
         super(TfnNet, self).__init__()
-        self.acc_subnet = InertialNet(24, 'acc net', seed=0)
-        self.gyr_subnet = InertialNet(24, 'gyr net', seed=0)
+        self.acc_subnet = InertialNet(acc_dim, 'acc net', seed=0)
+        self.gyr_subnet = InertialNet(gyr_dim, 'gyr net', seed=0)
         self.vid_subnet = VideoNet(24, 'vid net', seed=0)
 
         self.fusion_dim = 10
@@ -209,10 +211,10 @@ class TfnNet(nn.Module):
 
 class LmfNet(nn.Module):
     """ Implemented based on the paper "Efficient low-rank multimodal fusion with modality-specific factors" """
-    def __init__(self):
+    def __init__(self, acc_dim, gyr_dim):
         super(LmfNet, self).__init__()
-        self.acc_subnet = InertialNet(24, 'acc net', seed=0)
-        self.gyr_subnet = InertialNet(24, 'gyr net', seed=0)
+        self.acc_subnet = InertialNet(acc_dim, 'acc net', seed=0)
+        self.gyr_subnet = InertialNet(gyr_dim, 'gyr net', seed=0)
         self.vid_subnet = VideoNet(24, 'vid net', seed=0)
         self.rank = 10
         self.fused_dim = 40
@@ -251,6 +253,59 @@ class LmfNet(nn.Module):
         fusion_vid = torch.matmul(_vid_h, self.vid_factor)
         fusion_zy = fusion_acc * fusion_gyr * fusion_vid
 
+        # permute to make batch first
+        sequence = torch.matmul(self.fusion_weights, fusion_zy.permute(1, 2, 0, 3)).squeeze(dim=2) + self.fusion_bias
+        sequence = self.out_net(sequence, others)
+        return sequence
+
+
+class LmfImuOnlyNet(LmfNet):
+    """ Implemented based on the paper "Efficient low-rank multimodal fusion with modality-specific factors" """
+    def __init__(self, acc_dim, gyr_dim):
+        super(LmfImuOnlyNet, self).__init__(acc_dim, gyr_dim)
+        if acc_dim <= 3:
+            self.out_net = OutNet(self.fused_dim, [])  # do not use high level features
+        else:
+            self.out_net = OutNet(self.fused_dim, [2])  # only use FPA from high level features
+
+    def __str__(self):
+        return 'LMF IMU only net'
+
+    def forward(self, acc_x, gyr_x, vid_x, others, lens):
+        acc_h = self.acc_subnet(acc_x, lens)
+        gyr_h = self.gyr_subnet(gyr_x, lens)
+        batch_size = acc_h.data.shape[0]
+        data_type = torch.cuda.FloatTensor
+
+        _acc_h = torch.cat((torch.autograd.Variable(torch.ones(batch_size, acc_h.shape[1], 1).type(data_type), requires_grad=False), acc_h), dim=2)
+        _gyr_h = torch.cat((torch.autograd.Variable(torch.ones(batch_size, gyr_h.shape[1], 1).type(data_type), requires_grad=False), gyr_h), dim=2)
+
+        fusion_acc = torch.matmul(_acc_h, self.acc_factor)
+        fusion_gyr = torch.matmul(_gyr_h, self.gyr_factor)
+        fusion_vid = torch.full_like(fusion_acc, 1e4)      # !!!
+        fusion_zy = fusion_acc * fusion_gyr * fusion_vid
+        # permute to make batch first
+        sequence = torch.matmul(self.fusion_weights, fusion_zy.permute(1, 2, 0, 3)).squeeze(dim=2) + self.fusion_bias
+        sequence = self.out_net(sequence, others)
+        return sequence
+
+
+class LmfCameraOnlyNet(LmfNet):
+    """ Implemented based on the paper "Efficient low-rank multimodal fusion with modality-specific factors" """
+    def __init__(self):
+        super(LmfCameraOnlyNet, self).__init__(1, 1)
+        self.out_net = OutNet(self.fused_dim, [4])
+
+    def __str__(self):
+        return 'LMF camera only net'
+
+    def forward(self, acc_x, gyr_x, vid_x, others, lens):
+        vid_h = self.vid_subnet(vid_x, lens)
+        batch_size = vid_h.data.shape[0]
+        data_type = torch.cuda.FloatTensor
+        _vid_h = torch.cat((torch.autograd.Variable(torch.ones(batch_size, vid_x.shape[1], 1).type(data_type), requires_grad=False), vid_h), dim=2)
+        fusion_vid = torch.matmul(_vid_h, self.vid_factor)
+        fusion_zy = fusion_vid
         # permute to make batch first
         sequence = torch.matmul(self.fusion_weights, fusion_zy.permute(1, 2, 0, 3)).squeeze(dim=2) + self.fusion_bias
         sequence = self.out_net(sequence, others)
@@ -336,10 +391,10 @@ class MfnNet(nn.Module):
             cStar = torch.cat([prev_cs, new_cs], dim=1)
             attention = F.softmax(self.att1_fc2(self.att1_dropout(F.relu(self.att1_fc1(cStar)))), dim=1)
             attended = attention * cStar
-            cHat = F.tanh(self.att2_fc2(self.att2_dropout(F.relu(self.att2_fc1(attended)))))
+            cHat = torch.tanh(self.att2_fc2(self.att2_dropout(F.relu(self.att2_fc1(attended)))))
             both = torch.cat([attended, self.mem], dim=1)
-            gamma1 = F.sigmoid(self.gamma1_fc2(self.gamma1_dropout(F.relu(self.gamma1_fc1(both)))))
-            gamma2 = F.sigmoid(self.gamma2_fc2(self.gamma2_dropout(F.relu(self.gamma2_fc1(both)))))
+            gamma1 = torch.sigmoid(self.gamma1_fc2(self.gamma1_dropout(F.relu(self.gamma1_fc1(both)))))
+            gamma2 = torch.sigmoid(self.gamma2_fc2(self.gamma2_dropout(F.relu(self.gamma2_fc1(both)))))
             self.mem = gamma1 * self.mem + gamma2 * cHat
             # all_mems.append(self.mem)
             # update
@@ -351,8 +406,8 @@ class MfnNet(nn.Module):
             self.h_a_out[:, i] = self.h_a
             self.h_v_out[:, i] = self.h_v
             self.mem_out[:, i] = self.mem
-        last_hs = torch.cat([self.h_l_out, self.h_a_out, self.h_v_out, self.mem_out], dim=2)
-        sequence = self.out_net(last_hs, others)
+        sequence = torch.cat([self.h_l_out, self.h_a_out, self.h_v_out, self.mem_out], dim=2)
+        sequence = self.out_net(sequence, others)
         return sequence
 
 
@@ -360,7 +415,6 @@ class AlanFramework(BaseFramework):
     def __init__(self,  *args, **kwargs):
         BaseFramework.__init__(self, *args, **kwargs)
         self.train_step_lens, self.validation_step_lens, self.test_step_lens = [None] * 3
-        self.vid_static_cali()
         self.make_vid_relative_to_midhip()
         self.normalize_vid_by_size_of_subject_in_static_trial()
         # self.get_body_weighted_imu()
@@ -375,36 +429,21 @@ class AlanFramework(BaseFramework):
 
     def make_vid_relative_to_midhip(self):
         midhip_col_loc = [self._data_fields.index('MidHip' + axis + angle) for axis in ['_x', '_y'] for angle in ['_90', '_180']]
-        height_col_loc = self._data_fields.index(SUBJECT_HEIGHT)
         for sub_name, sub_data in self._data_all_sub.items():
             midhip_90_and_180_data = sub_data[:, :, midhip_col_loc]
-            sub_height = sub_data[0, 0, height_col_loc]
             for key_point in USED_KEYPOINTS:
                 key_point_col_loc = [self._data_fields.index(key_point + axis + angle) for axis in ['_x', '_y'] for angle in ['_90', '_180']]
                 sub_data[:, :, key_point_col_loc] = sub_data[:, :, key_point_col_loc] - midhip_90_and_180_data
-                sub_data[:, :, key_point_col_loc] = sub_data[:, :, key_point_col_loc] / sub_height
             self._data_all_sub[sub_name] = sub_data
 
     def normalize_vid_by_size_of_subject_in_static_trial(self):
         for sub_name, sub_data in self._data_all_sub.items():
-            static_side_df = pd.read_csv(DATA_PATH + '/' + sub_name + '/combined/static_back.csv', index_col=0)
+            height_col_loc = self._data_fields.index(SUBJECT_HEIGHT)
+            sub_height = sub_data[0, 0, height_col_loc]
             for camera in ['90', '180']:
-                size_in_vid = (static_side_df['LAnkle_y_'+camera] + static_side_df['RAnkle_y_'+camera] -
-                               static_side_df['LShoulder_y_'+camera] - static_side_df['RShoulder_y_'+camera]) / 2
-                size_in_vid = np.mean(size_in_vid)
                 vid_col_loc = [self._data_fields.index(keypoint + axis + camera) for keypoint in USED_KEYPOINTS for axis in ['_x_', '_y_']]
-                sub_data[:, :, vid_col_loc] = sub_data[:, :, vid_col_loc] / size_in_vid
+                sub_data[:, :, vid_col_loc] = sub_data[:, :, vid_col_loc] / sub_height
             self._data_all_sub[sub_name] = sub_data
-
-    def add_additional_columns(self):
-        marker_rknee_col_loc = [self._data_fields.index(field_name) for field_name in RKNEE_MARKER_FIELDS]
-        force_col_loc = [self._data_fields.index(field_name) for field_name in FORCE_DATA_FIELDS]
-        for sub_name, sub_data in self._data_all_sub.items():
-            marker_data = sub_data[:, :, marker_rknee_col_loc].copy()
-            force_data = sub_data[:, :, force_col_loc].copy()
-            knee_vector = force_data[:, :, 9:12] - (marker_data[:, :, :3] + marker_data[:, :, 3:6]) / 2
-            self._data_all_sub[sub_name] = np.concatenate([sub_data, knee_vector], axis=2)
-        self._data_fields.extend(LEVER_ARM_FIELDS)
 
     def get_body_weighted_imu(self):
         weight_col_loc = self._data_fields.index(SUBJECT_WEIGHT)
@@ -429,7 +468,7 @@ class AlanFramework(BaseFramework):
 
     def normalize_array_separately(self, data, name, method, scalar_mode='by_each_column'):
         if method == 'fit_transform':
-            self._data_scalar[name] = MinMaxScaler(feature_range=(-1, 1))      # MinMaxScaler(feature_range=(-3, 3)) StandardScaler()
+            self._data_scalar[name] = MinMaxScaler(feature_range=(-1, 1))      # MinMaxScaler(feature_range=(-1, 1)) StandardScaler()
         assert (scalar_mode in ['by_each_column', 'by_all_columns'])
         input_data = data.copy()
         original_shape = input_data.shape
@@ -629,16 +668,16 @@ class AlanFramework(BaseFramework):
         global hyper_train_fun, hyper_vali_fun, hyper_train_ids, hyper_vali_ids
         hyper_train_fun, hyper_vali_fun = self.preprocess_and_train, self.model_evaluation
         hyper_train_ids, hyper_vali_ids = hyper_train_sub_ids, hyper_vali_sub_ids
-        # space = {
-        #     'epoch': hp.quniform('epoch', 4, 10, 2),
-        #     'lr': hp.uniform('lr', 10 ** -3, 10 ** -2),
-        #     'batch_size': hp.quniform('batch_size', 10, 40, 10),
-        #     'lstm_unit': hp.qnormal('lstm_unit', 40, 10, 1),
-        #     'fcnn_unit': hp.qnormal('fcnn_unit', 40, 10, 1),
-        # }
+        space = {
+            'epoch': hp.quniform('epoch', 2, 8, 1),
+            'lr': hp.uniform('lr', 10 ** -3, 10 ** -2),
+            'batch_size': hp.quniform('batch_size', 10, 40, 10),
+            'lstm_unit': hp.qnormal('lstm_unit', 40, 10, 1),
+            'fcnn_unit': hp.qnormal('fcnn_unit', 40, 10, 1),
+        }
         # trials = HP_Trials()
         # warnings.filterwarnings("ignore", message="An input array is constant; the correlation coefficent is not defined.")
-        # best_param = fmin(objective_for_hyper_search, space, algo=tpe.suggest, max_evals=10, trials=trials,      # !!!
+        # best_param = fmin(objective_for_hyper_search, space, algo=tpe.suggest, max_evals=5, trials=trials,
         #                   return_argmin=False, rstate=np.random.RandomState(seed=5))
         # show_hyper(trials, self.result_dir)
         best_param = {'epoch': 5, 'lr': 3e-3, 'batch_size': 20, 'lstm_unit': 40, 'fcnn_unit': 40}
@@ -749,6 +788,7 @@ def run(model, input_acc, input_gyr, input_vid, result_dir):
     model_builder.cross_validation(subjects, 3)
     plt.close('all')
 
+NO_INPUT = [FORCE_PHASE]
 FEATURES_OTHERS = [WEIGHT, HEIGHT, FPA, TRUNK_SWAY, ANKLE_WIDTH] = range(5)
 data_path = DATA_PATH + '/40samples+stance.h5'
 VID_90_FIELDS = [loc + axis + '_90' for loc in USED_KEYPOINTS for axis in ['_x', '_y']]
@@ -757,14 +797,25 @@ VID_ALL = VID_90_FIELDS + VID_180_FIELDS
 
 ACC_ALL = [field + '_' + sensor for sensor in SENSOR_LIST for field in IMU_FIELDS[:3]]
 GYR_ALL = [field + '_' + sensor for sensor in SENSOR_LIST for field in IMU_FIELDS[3:6]]
+ACC_3IMU = [field + '_' + sensor for sensor in ['L_FOOT', 'R_FOOT', 'WAIST'] for field in IMU_FIELDS[:3]]
+GYR_3IMU = [field + '_' + sensor for sensor in ['L_FOOT', 'R_FOOT', 'WAIST'] for field in IMU_FIELDS[3:6]]
+ACC_1IMU = [field + '_' + sensor for sensor in ['WAIST'] for field in IMU_FIELDS[:3]]
+GYR_1IMU = [field + '_' + sensor for sensor in ['WAIST'] for field in IMU_FIELDS[3:6]]
 
 if __name__ == "__main__":
     """ Use all the IMU channels """
-    result_date = '1018'
-    run(model=LmfNet, input_acc=ACC_ALL, input_gyr=GYR_ALL, input_vid=VID_ALL, result_dir=result_date+'/LmfNet')
-    run(model=TfnNet, input_acc=ACC_ALL, input_gyr=GYR_ALL, input_vid=VID_ALL, result_dir=result_date+'/TfnNet')
-    run(model=MfnNet, input_acc=ACC_ALL, input_gyr=GYR_ALL, input_vid=VID_ALL, result_dir=result_date+'/MfnNet')
-    run(model=DorschkyCNN, input_acc=ACC_ALL, input_gyr=GYR_ALL, input_vid=VID_ALL, result_dir=result_date+'/DorschkyCNN')
-    run(model=StetterMLP, input_acc=ACC_ALL, input_gyr=GYR_ALL, input_vid=VID_ALL, result_dir=result_date+'/StetterMLP')
-    run(model=ChaabanLinear, input_acc=ACC_ALL, input_gyr=GYR_ALL, input_vid=VID_ALL, result_dir=result_date+'/ChaabanLinear')
-    run(model=GradientBoostingRegressor, input_acc=ACC_ALL, input_gyr=GYR_ALL, input_vid=VID_ALL, result_dir=result_date+'/Xgboost')
+    result_date = time.strftime('%y%m%d_%H%M')
+    # run(model=lambda: LmfNet(acc_dim=24, gyr_dim=24), input_acc=ACC_ALL, input_gyr=GYR_ALL, input_vid=VID_ALL, result_dir=result_date + '/LmfNet')
+    # run(model=GradientBoostingRegressor, input_acc=ACC_ALL, input_gyr=GYR_ALL, input_vid=VID_ALL, result_dir=result_date + '/Xgboost')
+    # run(model=lambda: LmfImuOnlyNet(acc_dim=24, gyr_dim=24), input_acc=ACC_ALL, input_gyr=GYR_ALL, input_vid=NO_INPUT, result_dir=result_date + '/Lmf8Imu0Camera')
+    # run(model=LmfCameraOnlyNet, input_acc=NO_INPUT, input_gyr=NO_INPUT, input_vid=VID_ALL, result_dir=result_date + '/Lmf0Imu2Camera')
+    run(model=lambda: TfnNet(acc_dim=24, gyr_dim=24), input_acc=ACC_ALL, input_gyr=GYR_ALL, input_vid=VID_ALL, result_dir=result_date + '/TfnNet')
+    run(model=DorschkyCNN, input_acc=ACC_ALL, input_gyr=GYR_ALL, input_vid=VID_ALL, result_dir=result_date + '/DorschkyCNN')
+    run(model=StetterMLP, input_acc=ACC_ALL, input_gyr=GYR_ALL, input_vid=VID_ALL, result_dir=result_date + '/StetterMLP')
+    run(model=ChaabanLinear, input_acc=ACC_ALL, input_gyr=GYR_ALL, input_vid=VID_ALL, result_dir=result_date + '/ChaabanLinear')
+    run(model=lambda: LmfImuOnlyNet(acc_dim=9, gyr_dim=9), input_acc=ACC_3IMU, input_gyr=GYR_3IMU, input_vid=NO_INPUT, result_dir=result_date + '/Lmf3Imu0Camera')
+    run(model=lambda: LmfImuOnlyNet(acc_dim=3, gyr_dim=3), input_acc=ACC_1IMU, input_gyr=GYR_1IMU, input_vid=NO_INPUT, result_dir=result_date + '/Lmf1Imu0Camera')
+    run(model=lambda: LmfNet(acc_dim=9, gyr_dim=9), input_acc=ACC_3IMU, input_gyr=GYR_3IMU, input_vid=VID_ALL, result_dir=result_date + '/Lmf3Imu2Camera')
+    run(model=lambda: LmfNet(acc_dim=3, gyr_dim=3), input_acc=ACC_1IMU, input_gyr=GYR_1IMU, input_vid=VID_ALL, result_dir=result_date + '/Lmf1Imu2Camera')
+    run(model=MfnNet, input_acc=ACC_ALL, input_gyr=GYR_ALL, input_vid=VID_ALL, result_dir=result_date + '/MfnNet')
+

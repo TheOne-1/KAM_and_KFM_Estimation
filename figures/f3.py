@@ -5,7 +5,7 @@ from figures.PaperFigures import get_mean_std, format_axis
 from const import SUBJECTS
 import numpy as np
 from const import LINE_WIDTH, FONT_DICT_SMALL, FONT_SIZE, FONT_DICT, FONT_SIZE, FONT_DICT_LARGE
-from figures.f6 import save_fig
+from figures.PaperFigures import save_fig
 import matplotlib.gridspec as gridspec
 import matplotlib.pyplot as plt
 from matplotlib import rc
@@ -61,15 +61,12 @@ def draw_f3(mean_std_kam, mean_std_kfm):
 
 if __name__ == "__main__":
     first_fold_subjects = ['s004_ouyangjue', 's009_sunyubo', 's011_wuxingze']
-    with h5py.File('results/0326KAM/8IMU_2camera/results.h5', 'r') as hf:
-        kam_data_sel_sub = {subject: subject_data[:] for subject, subject_data in hf.items() if subject in first_fold_subjects}
-        kam_data_fields = json.loads(hf.attrs['columns'])
-    with h5py.File('results/0326KFM/8IMU_2camera/results.h5', 'r') as hf:
-        kfm_data_sel_sub = {subject: subject_data[:] for subject, subject_data in hf.items() if subject in first_fold_subjects}
-        kfm_data_fields = json.loads(hf.attrs['columns'])
+    with h5py.File('results/1028/TfnNet/results.h5', 'r') as hf:
+        data_sel_sub = {subject: subject_data[:] for subject, subject_data in hf.items() if subject in first_fold_subjects}
+        data_fields = json.loads(hf.attrs['columns'])
 
-    kam_mean_std = get_mean_std(np.concatenate(list(kam_data_sel_sub.values()), axis=0), kam_data_fields, 'main_output')
-    kfm_mean_std = get_mean_std(np.concatenate(list(kfm_data_sel_sub.values()), axis=0), kfm_data_fields, 'main_output')
-    kfm_mean_std['true_mean'], kfm_mean_std['pred_mean'] = -kfm_mean_std['true_mean'], -kfm_mean_std['pred_mean']
+    kam_mean_std = get_mean_std(np.concatenate(list(data_sel_sub.values()), axis=0), data_fields, 'EXT_KM_Y')
+    kfm_mean_std = get_mean_std(np.concatenate(list(data_sel_sub.values()), axis=0), data_fields, 'EXT_KM_X')
+    # kfm_mean_std['true_mean'], kfm_mean_std['pred_mean'] = kfm_mean_std['true_mean'], kfm_mean_std['pred_mean']
     draw_f3(kam_mean_std, kfm_mean_std)
     plt.show()

@@ -2,13 +2,16 @@ import wearable_toolkit
 import pandas as pd
 import numpy as np
 import os
+from multiprocessing.dummy import Pool as ThreadPool
 from const import SEGMENT_DEFINITIONS, SUBJECTS, STATIC_TRIALS, TRIALS, DATA_PATH, SUBJECT_HEIGHT, SUBJECT_WEIGHT, \
-    SUBJECT_ID, TRIAL_ID
+    SUBJECT_ID, TRIAL_ID, VIDEO_ORIGINAL_SAMPLE_RATE
+import matplotlib.pyplot as plt
 
 subject_infos = pd.read_csv(os.path.join(DATA_PATH, 'subject_info.csv'), index_col=0)
 
 
 def sync_and_crop_data_frame(subject, trial):
+    print("Subject {}, Trial {}".format(subject, trial))
     vicon_data_path = os.path.join(DATA_PATH, subject, 'vicon', trial + '.csv')
     vicon_calibrate_data_path = os.path.join(DATA_PATH, subject, 'vicon', 'calibrate' + '.csv')
     video_90_data_path = os.path.join(DATA_PATH, subject, 'raw_video_output', trial + '_90.csv')
@@ -29,8 +32,8 @@ def sync_and_crop_data_frame(subject, trial):
     # interpolate low probability data
     video_90_data.fill_low_probability_data()
     video_180_data.fill_low_probability_data()
-    video_90_data.low_pass_filtering(15, 100, 2)
-    video_180_data.low_pass_filtering(15, 100, 2)
+    video_90_data.low_pass_filtering(15, VIDEO_ORIGINAL_SAMPLE_RATE, 2)
+    video_180_data.low_pass_filtering(15, VIDEO_ORIGINAL_SAMPLE_RATE, 2)
     video_90_data.resample_to_100hz()
     video_180_data.resample_to_100hz()
 
@@ -40,21 +43,18 @@ def sync_and_crop_data_frame(subject, trial):
     # Synchronize Vicon and IMU data
     vicon_sync_data = vicon_data.get_angular_velocity_theta('R_SHANK', 1000)
     imu_sync_data = imu_data.get_norm('R_SHANK', 'Gyro')[0:1000]
-    print("vicon-imu synchronization")
     vicon_imu_sync_delay = wearable_toolkit.sync_via_correlation(vicon_sync_data, imu_sync_data, is_verbose)
 
     # Synchronize Vicon and Video data 90
     vicon_sync_data = np.pi / 2 - vicon_data.get_rshank_angle('X')[0:1500]
     vicon_sync_data[np.isnan(vicon_sync_data)] = 0
     video_90_sync_data = np.pi / 2 - video_90_data.get_rshank_angle()[0:1500]
-    print("vicon-video_90 synchronization")
     vicon_video_90_sync_delay = wearable_toolkit.sync_via_correlation(-vicon_sync_data, -video_90_sync_data, is_verbose)
 
     # Synchronize Vicon and Video data 180
     vicon_sync_data = np.pi / 2 - vicon_data.get_rshank_angle('Y')[0:1500]
     vicon_sync_data[np.isnan(vicon_sync_data)] = 0
     video_180_sync_data = np.pi / 2 - video_180_data.get_rshank_angle()[0:1500]
-    print("vicon-video_180 synchronization")
     vicon_video_180_sync_delay = wearable_toolkit.sync_via_correlation(-vicon_sync_data, -video_180_sync_data, is_verbose)
 
     # Prepare output data
@@ -90,10 +90,12 @@ def sync_and_crop_data_frame(subject, trial):
 
 
 def get_combined_data():
+    pool = ThreadPool(16)
     for subject in SUBJECTS[:]:
         for trial in TRIALS:
-            print("Subject {}, Trial {}".format(subject, trial))
-            sync_and_crop_data_frame(subject, trial)
+            pool.apply_async(sync_and_crop_data_frame, args=(subject, trial))
+    pool.close()
+    pool.join()
 
 
 def get_static_combined_data():
@@ -112,8 +114,8 @@ def get_static_combined_data():
             video_180_data = wearable_toolkit.VideoCsvReader(video_data_path_180)
             video_90_data.fill_low_probability_data()
             video_180_data.fill_low_probability_data()
-            video_90_data.low_pass_filtering(15, 100, 2)
-            video_180_data.low_pass_filtering(15, 100, 2)
+            video_90_data.low_pass_filtering(15, VIDEO_ORIGINAL_SAMPLE_RATE, 2)
+            video_180_data.low_pass_filtering(15, VIDEO_ORIGINAL_SAMPLE_RATE, 2)
             video_90_data.resample_to_100hz()
             video_180_data.resample_to_100hz()
             V3d_data = wearable_toolkit.Visual3dCsvReader(v3d_data_path)

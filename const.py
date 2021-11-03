@@ -85,10 +85,17 @@ LINE_WIDTH_THICK = 3
 
 SENSOR_COMBINATION = ['8IMU_2camera', '8IMU', '3IMU_2camera', '3IMU', '1IMU_2camera', '1IMU', '2camera']
 SENSOR_COMBINATION_SORTED = ['8IMU_2camera', '3IMU_2camera', '8IMU', '1IMU_2camera', '3IMU', '2camera', '1IMU']
-COMPARED_MODELS_FOR_PRINT = {'Xgboost': 'XGBoost', 'ChaabanLinear': 'Linear regression', 'StetterMLP': 'MLP',
-                             'DorschkyCNN': 'CNN', 'MfnNet': 'Our + MFN', 'TfnNet': 'Ours + TFN',
-                             'LmfNet': 'Ours + LMF'}
+COMPARED_MODELS_FOR_PRINT = {
+    'Xgboost': 'XGBoost', 'ChaabanLinear': 'Linear regression', 'StetterMLP': 'MLP', 'DorschkyCNN': 'CNN',
+    'MfnNet': 'Our + MFN', 'LmfNet': 'Ours + LMF', 'TfnNet': 'Ours + TFN',
+    # 'Lmf8Imu0Camera': 'Ours + LMF', 'Lmf0Imu2Camera': 'Ours + LMF',
+    # 'Lmf3Imu2Camera': 'Ours + LMF', 'Lmf3Imu0Camera': 'Ours + LMF',
+    # 'Lmf1Imu2Camera': 'Ours + LMF', 'Lmf1Imu0Camera': 'Ours + LMF',
+    # 'DirectNet': 'Ours + DirectNet'
+}
 COMPARED_MODELS = list(COMPARED_MODELS_FOR_PRINT.keys())
+TESTED_MODELS = ['Xgboost', 'ChaabanLinear', 'StetterMLP', 'DorschkyCNN', 'MfnNet', 'TfnNet', 'LmfNet', 'Lmf8Imu0Camera',
+                 'Lmf0Imu2Camera', 'Lmf3Imu2Camera', 'Lmf3Imu0Camera', 'Lmf1Imu2Camera', 'Lmf1Imu0Camera']
 
 EXAMPLE_DATA_FIELDS = [
     'body weight', 'body height', 'force_phase',

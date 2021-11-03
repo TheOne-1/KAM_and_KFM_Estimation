@@ -30,6 +30,7 @@ class BaseFramework:
         # log to file
         if result_dir is not None:
             self.result_dir = os.path.join(DATA_PATH, 'training_results', result_dir)
+            logging.info('Data saved to ' + result_dir)
         else:
             self.result_dir = os.path.join(DATA_PATH, 'training_results', str(datetime.datetime.now()))
         if evaluate_fields is None:
@@ -79,7 +80,7 @@ class BaseFramework:
         return test_results
 
     def cross_validation(self, sub_ids: List[str], test_set_sub_num=1):
-        sub_ids = shuffle(sub_ids, random_state=0)
+        sub_ids = shuffle(sub_ids, random_state=151)          # !!!
         logging.info('Cross validation with subject ids: {}'.format(sub_ids))
         folder_num = int(np.floor(len(sub_ids) / test_set_sub_num))  # the number of cross validation times
         results = []
@@ -139,6 +140,13 @@ class BaseFramework:
             validation_weight = self._get_raw_data_dict(validation_data, self._weights)
             x_validation, y_validation, validation_weight = self.preprocess_validation_test_data(x_validation, y_validation, validation_weight)
         model = self.train_model(x_train, y_train, x_validation, y_validation, validation_weight)
+        # try:
+        #     model = self.train_model(x_train, y_train, x_validation, y_validation, validation_weight)
+        # except RuntimeError as e:
+        #     logging.warning(str(e))
+        #     gc.collect()
+        #     torch.cuda.empty_cache()
+        #     model = self.preprocess_and_train(train_sub_ids, validate_sub_ids)
         return model
 
     def model_evaluation(self, model, test_sub_ids: List[str], save_results=True):

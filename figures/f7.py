@@ -22,9 +22,9 @@ def draw_sigifi_sign(mean_, std_, bar_locs, one_two=True, two_three=True, one_th
         if loc_0 == 0 and loc_1 == 2:
             lo_sign = -1
             if not one_two and not two_three:
-                top_line = y_top + 0.5
+                top_line = y_top + 0.7
             else:
-                top_line = y_top + 1.4
+                top_line = y_top + 1.7
             coe_0, coe_1 = 0.65, 0.35
         else:
             lo_sign = 1
@@ -50,9 +50,9 @@ def draw_f7_bar(_mean, _std, sigifi_sign_fun):
         ax.set_ylabel('Relative Root Mean Square Error (%)', fontdict=FONT_DICT_LARGE)
         ax.text(0.1, -1.8, 'IMU-Camera Fusion                          IMU Alone', fontdict=FONT_DICT_LARGE)
         ax.xaxis.set_label_coords(0.47, -0.08)
-        ax.set_ylim(0, 12.5)
-        ax.set_yticks(range(0, 13, 3))
-        ax.set_yticklabels(range(0, 13, 3), fontdict=FONT_DICT_LARGE)
+        ax.set_ylim(0, 15)
+        ax.set_yticks(range(0, 16, 3))
+        ax.set_yticklabels(range(0, 16, 3), fontdict=FONT_DICT_LARGE)
         ax.set_xlim(-1, 16)
         ax.set_xticks(x_locs)
         ax.set_xticklabels(['', 'KAM', '', '', 'KFM', '', '', 'KAM', '', '', 'KFM', ''], fontdict=FONT_DICT_LARGE)
@@ -67,8 +67,12 @@ def draw_f7_bar(_mean, _std, sigifi_sign_fun):
     for i_condition in range(4):
         bars.append(plt.bar(x_locs[i_condition*3:(i_condition+1)*3], _mean[i_condition*3:(i_condition+1)*3],
                             width=0.7, color=[color_0, color_1, color_2]))
+        # if i_condition is not -1:
         sigifi_sign_fun(_mean[i_condition * 3:(i_condition + 1) * 3], _std[i_condition * 3:(i_condition + 1) * 3],
                         x_locs[i_condition * 3:(i_condition + 1) * 3], one_two=False)
+        # else:
+        #     sigifi_sign_fun(_mean[i_condition * 3:(i_condition + 1) * 3], _std[i_condition * 3:(i_condition + 1) * 3],
+        #                     x_locs[i_condition * 3:(i_condition + 1) * 3], one_two=False, two_three=False)
 
     ebar, caplines, barlinecols = plt.errorbar(x_locs, _mean, _std,
                                                capsize=0, ecolor='black', fmt='none', lolims=True,
@@ -87,16 +91,16 @@ def draw_f7_bar(_mean, _std, sigifi_sign_fun):
 if __name__ == "__main__":
     target_matric = 'rRMSE_'
     combo_results = []
-    sensor_combos_dict = {'fusion': ['8IMU_2camera', '3IMU_2camera', '1IMU_2camera'], 'imu': ['8IMU', '3IMU', '1IMU']}
+    sensor_combos_dict = {'fusion': ['TfnNet', 'Lmf3Imu2Camera', 'Lmf1Imu2Camera'], 'imu': ['Lmf8Imu0Camera', 'Lmf3Imu0Camera', 'Lmf1Imu0Camera']}
     for condition in ['fusion', 'imu']:
         for i_moment, moment in enumerate(['KAM', 'KFM']):
             test_df = pd.read_csv(
-                'results/0326' + moment + '/estimation_result_individual.csv')
+                'results/1028' + '/estimation_result_individual.csv')
             test_df = test_df[test_df['trial'] == 'all']
 
             """ Figure showing results of 8, 3, and 1 IMU for discussion """
             for sensor_combo in sensor_combos_dict[condition]:
-                combo_result = test_df[target_matric + sensor_combo]
+                combo_result = test_df[target_matric + sensor_combo + '_' + moment]
                 combo_results.append(combo_result)
 
     print_anova_with_lsd(combo_results[0:3], ['8_fusion_KAM', '3_fusion_KAM', '1_fusion_KAM'])

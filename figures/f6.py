@@ -9,6 +9,7 @@ from statsmodels.stats.multicomp import pairwise_tukeyhsd
 import prettytable as pt
 import numpy as np
 import matplotlib.patches as patches
+from figures.PaperFigures import save_fig
 
 
 def format_errorbar_cap(caplines, size=15):
@@ -18,42 +19,14 @@ def format_errorbar_cap(caplines, size=15):
         caplines[i_cap].set_markeredgewidth(LINE_WIDTH)
 
 
-def draw_f6_various_imus(_mean, _std, title):
-    def format_ticks():
-        ax = plt.gca()
-        ax.set_ylabel('Relative Root Mean Square Error (\%)', fontdict=FONT_DICT_LARGE)
-        ax.set_ylim(0, 12)
-        ax.set_yticks(range(0, 13, 2))
-        ax.set_yticklabels(range(0, 13, 2), fontdict=FONT_DICT_LARGE)
-        ax.set_xlim(-1, 13)
-        ax.set_xticks(range(0, 13, 2))
-        ax.set_xticklabels(['8 IMUs &\n2 Cameras', '3 IMUs &\n2 Cameras', '8 IMUs', '1 IMU &\n2 Cameras',
-                            '3 IMUs', '2 Cameras', '1 IMU'], fontdict=FONT_DICT_LARGE)
-
-    rc('text', usetex=True)
-    fig = plt.figure(figsize=(13, 7))
-    format_axis()
-    format_ticks()
-    sel_locs = range(0, 13, 2)
-    for i_condition in range(7):
-        _bars = plt.bar(sel_locs[i_condition], _mean[i_condition], color=[0, 103, 137], width=0.6)
-    ebar, caplines, barlinecols = plt.errorbar(sel_locs, _mean, _std,
-                                               capsize=0, ecolor='black', fmt='none', lolims=True,
-                                               elinewidth=LINE_WIDTH)
-    format_errorbar_cap(caplines)
-    plt.tight_layout(rect=[0.01, 0.01, 0.99, 0.96], w_pad=2, h_pad=3)
-    plt.grid()
-    plt.title(title, fontsize=30)
-
-
 def draw_f6_kam_and_kfm(mean_, std_, sigifi_sign_fun):
     def format_ticks():
         ax = plt.gca()
         ax.set_ylabel('Relative Root Mean Square Error (%)', fontdict=FONT_DICT_LARGE)
         ax.set_xlabel('KAM Estimation                         KFM Estimation', fontdict=FONT_DICT_LARGE, labelpad=13)
-        ax.set_ylim(0, 12)
-        ax.set_yticks(range(0, 13, 3))
-        ax.set_yticklabels(range(0, 13, 3), fontdict=FONT_DICT_LARGE)
+        ax.set_ylim(0, 15)
+        ax.set_yticks(range(0, 16, 3))
+        ax.set_yticklabels(range(0, 16, 3), fontdict=FONT_DICT_LARGE)
         ax.set_xlim(-1, 11.5)
         ax.set_xticks([0, 2, 4, 6.5, 8.5, 10.5])
         ax.set_xticklabels(['IMUs &\nCameras', 'IMUs\nAlone', 'Cameras\nAlone', 'IMUs &\nCameras',
@@ -111,21 +84,22 @@ def draw_f6_for_ASB(mean_, std_, sigifi_sign_fun):
 
 def sigifi_sign_8(mean_, std_, bar_locs):
     x_offset = 0.3
-    # star_offset =
-    for i, lo in zip([0, 3], [(0.1, 0., 0.), (0.1, 0.1, 0.1)]):
+    for i, lo in zip([0, 3], [(0.1, 0.1, 0.1), (0.1, 0.1, 0.1)]):
         y_top = max([a + b for a, b in zip(mean_[i:i+3], std_[i:i+3])])
-        top_line_y0, top_line_y1 = y_top + 0.8, y_top + 1.8
+        top_line_y0, top_line_y1 = y_top + 0.6, y_top + 2.1
+        """between 1 and 3"""
         diff_line_0x = [bar_locs[i]+lo[0], bar_locs[i]+lo[0], bar_locs[i+1]-lo[1], bar_locs[i+1]-lo[1]]
         diff_line_0y = [mean_[i] + std_[i] + x_offset, top_line_y0, top_line_y0, mean_[i+1] + std_[i+1] + x_offset]
         plt.plot(diff_line_0x, diff_line_0y, 'black', linewidth=LINE_WIDTH)
         plt.text(bar_locs[i]*0.58 + bar_locs[i+1]*0.42, top_line_y0-0.23, '*', fontdict={'fontname': 'Times New Roman'}, color='black', size=40)
 
-        if i == 3:
-            diff_line_0x = [bar_locs[i+1]+lo[1], bar_locs[i+1]+lo[1], bar_locs[i+2]-lo[2], bar_locs[i+2]-lo[2]]
-            diff_line_0y = [mean_[i+1] + std_[i+1] + x_offset, top_line_y0, top_line_y0, mean_[i+2] + std_[i+2] + x_offset]
-            plt.plot(diff_line_0x, diff_line_0y, 'black', linewidth=LINE_WIDTH)
-            plt.text(bar_locs[i+1]*0.58 + bar_locs[i+2]*0.42, top_line_y0-0.23, '*', fontdict={'fontname': 'Times New Roman'}, color='black', size=40)
+        """between 2 and 3"""
+        diff_line_0x = [bar_locs[i+1]+lo[1], bar_locs[i+1]+lo[1], bar_locs[i+2]-lo[2], bar_locs[i+2]-lo[2]]
+        diff_line_0y = [mean_[i+1] + std_[i+1] + x_offset, top_line_y0, top_line_y0, mean_[i+2] + std_[i+2] + x_offset]
+        plt.plot(diff_line_0x, diff_line_0y, 'black', linewidth=LINE_WIDTH)
+        plt.text(bar_locs[i+1]*0.58 + bar_locs[i+2]*0.42, top_line_y0-0.23, '*', fontdict={'fontname': 'Times New Roman'}, color='black', size=40)
 
+        """between 1 and 3"""
         diff_line_1x = [bar_locs[i]-lo[0], bar_locs[i]-lo[0], bar_locs[i+2]+lo[2], bar_locs[i+2]+lo[2]]
         diff_line_1y = [mean_[i] + std_[i] + x_offset, top_line_y1, top_line_y1, mean_[i+2] + std_[i+2] + x_offset]
         plt.plot(diff_line_1x, diff_line_1y, 'black', linewidth=LINE_WIDTH)
@@ -189,21 +163,20 @@ def print_pairwise_tukeyhsd(combo_results, combo_names):
 
 def print_mean_rrmse(mean_values):
     for value in mean_values:
-        print('{:.1f} \%'.format(value))
+        print('{:.4f} \%'.format(value))
 
 
 if __name__ == "__main__":
-    test_name = '0326'
-    target_matric = 'RMSE_'
+    test_name = '1028'
+    target_matric = 'rRMSE_'
     mean_compare_, sem_compare_ = [], []
     combo_results_all = {}
+    result_df = pd.read_csv('results/' + test_name + '/estimation_result_individual.csv')
+    result_df = result_df[result_df['trial'] == 'all']
     for i_moment, moment in enumerate(['KAM', 'KFM']):
-        test_df = pd.read_csv('results/' + test_name + moment + '/estimation_result_individual.csv')
-        test_df = test_df[test_df['trial'] == 'all']
-
         combo_result_each_moment = []
-        for sensor_combo in ['8IMU_2camera', '8IMU', '2camera']:
-            combo_result = test_df[target_matric + sensor_combo]
+        for sensor_combo in ['TfnNet', 'Lmf8Imu0Camera', 'Lmf0Imu2Camera']:
+            combo_result = result_df[target_matric + sensor_combo + '_' + moment]
             mean_compare_.append(combo_result.mean())
             sem_compare_.append(combo_result.sem())
             combo_result_each_moment.append(combo_result)
@@ -213,7 +186,6 @@ if __name__ == "__main__":
     """ A KAM & KFM joint figure """
     pd.DataFrame(combo_results_all).to_csv('results/' + test_name + '_anova.csv', index=False)
     print_mean_rrmse(mean_compare_)
-    draw_f6_for_ASB(mean_compare_, sem_compare_, sigifi_sign_8_asb)
-    # draw_f6_kam_and_kfm(mean_compare_, sem_compare_, sigifi_sign_8)
+    draw_f6_kam_and_kfm(mean_compare_, sem_compare_, sigifi_sign_8)
     save_fig('f6', 600)
     plt.show()

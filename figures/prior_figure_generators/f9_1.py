@@ -36,7 +36,7 @@ def draw_sigifi_sign(mean_, std_, bar_locs, p_between_pattern, ylim):
 
 
 def format_errorbar_cap(caplines, size=15):
-    for i_cap in range(1):
+    for i_cap in range(2):
         caplines[i_cap].set_marker('_')
         caplines[i_cap].set_markersize(size)
         caplines[i_cap].set_markeredgewidth(LINE_WIDTH)
@@ -52,7 +52,7 @@ def sort_gait_cycles_according_to_param(param_config, sub_param, sub_data):
 
 def init_f9():
     rc('font', family='Arial')
-    fig = plt.figure(figsize=(16, 7))
+    fig = plt.figure(figsize=(16, 6))
     gs = gridspec.GridSpec(nrows=2, ncols=1, height_ratios=[5, 5])        # , width_ratios=[8, 1, 8]
     return fig, gs
 
@@ -89,20 +89,18 @@ def draw_f9_subplot(mean_, std_, p_between_pattern, ax, moment_name):
     bar_ = []
     for i_condition in range(len(bar_locs)):
         bar_.append(plt.bar(bar_locs[i_condition], mean_[i_condition], color=colors[i_condition], width=1))
-    ebar, caplines, barlinecols = plt.errorbar(bar_locs, mean_, std_,
-                                               capsize=0, ecolor='black', fmt='none', lolims=True,
-                                               elinewidth=LINE_WIDTH)
+    (_, caplines, _) = plt.errorbar(bar_locs, mean_, std_, capsize=1, fmt='none', ecolor='black', elinewidth=LINE_WIDTH)
     format_errorbar_cap(caplines, 20)
-    if moment_name == 'KAM':
-        ylim = format_kam_y_ticks()
-        plt.legend(bar_[0:2], ['Laboratory Force Plate & Optical Motion Capture', 'Portable IMUs & Smartphone Cameras (Proposed Fusion Model)'],
-            handlelength=3, bbox_to_anchor=(0.42, 1.08), ncol=1, fontsize=FONT_DICT_SMALL['fontsize'], frameon=False)
-    elif moment_name == 'KFM':
-        ylim = format_kfm_y_ticks()
-    for i_trial, trial_name in enumerate(['fpa', 'step_width', 'trunk_sway']):
-        draw_sigifi_sign(mean_[6*i_trial:6*i_trial+6], std_[6*i_trial:6*i_trial+6], bar_locs[6*i_trial:6*i_trial+6],
-                         p_between_pattern[trial_name], ylim)
-        plt.tight_layout(rect=[0., -0.01, 1, 1.01], w_pad=2, h_pad=1)
+    # if moment_name == 'KAM':
+    #     ylim = format_kam_y_ticks()
+    #     plt.legend(bar_[0:2], ['Laboratory Force Plate & Optical Motion Capture', 'Portable IMUs & Smartphone Cameras (Proposed Fusion Model)'],
+    #         handlelength=3, bbox_to_anchor=(0.42, 1.08), ncol=1, fontsize=FONT_DICT_SMALL['fontsize'], frameon=False)
+    # elif moment_name == 'KFM':
+    #     ylim = format_kfm_y_ticks()
+    # for i_trial, trial_name in enumerate(['fpa', 'step_width', 'trunk_sway']):
+    #     draw_sigifi_sign(mean_[6*i_trial:6*i_trial+6], std_[6*i_trial:6*i_trial+6], bar_locs[6*i_trial:6*i_trial+6],
+    #                      p_between_pattern[trial_name], ylim)
+    #     plt.tight_layout(rect=[0., -0.01, 1, 1.01], w_pad=2, h_pad=1)
 
 
 def finalize_f9(fig):
@@ -126,8 +124,8 @@ if __name__ == "__main__":
     bl_param = np.zeros([len(SUBJECTS), len(gait_param_fields)])
     for i_subject, subject in enumerate(SUBJECTS):
         sub_param = gait_param_all_sub[subject]
-        sub_bl_data = sub_param[sub_param[:, gait_param_fields.index('trial_id')] == 0, :]
-        bl_param[i_subject] = np.mean(sub_bl_data, axis=0)
+        sub_bl_param = sub_param[sub_param[:, gait_param_fields.index('trial_id')] == 0, :]
+        bl_param[i_subject] = np.mean(sub_bl_param, axis=0)
     bl_param_df = pd.DataFrame(bl_param, columns=gait_param_fields)
 
     fpa_config = {'trial_name': 'fpa', 'pattern_names': ('toe_in', 'normal_fpa', 'toe_out')}
@@ -140,6 +138,10 @@ if __name__ == "__main__":
         for moment_name in ['KAM', 'KFM']:
             for i_subject, subject in enumerate(SUBJECTS):
                 sub_param, sub_data = gait_param_all_sub[subject], data_all_sub[subject]
+                sub_bl_data = sub_data[sub_data[:, 0, data_fields.index('trial_id')] == 0, :, :]
+                true_peaks_bl, pred_peaks_bl = get_peak_of_each_gait_cycle(np.stack(sub_bl_data), data_fields, moment_name, 0.5)
+                true_peaks_bl_mean, pred_peaks_bl_mean = np.mean(true_peaks_bl), np.mean(pred_peaks_bl) 
+                
                 sub_trial_data_sorted, param_sorted = sort_gait_cycles_according_to_param(config, sub_param, sub_data)
                 small_steps, normal_steps, large_steps = np.array_split(sub_trial_data_sorted, 3)
                 small_param, normal_param, large_param = np.array_split(param_sorted, 3)
@@ -148,8 +150,8 @@ if __name__ == "__main__":
                     true_peak, pred_peak = get_peak_of_each_gait_cycle(np.stack(steps), data_fields, moment_name, 0.5)
                     peak_of_gait_df = peak_of_gait_df.append(
                         [[i_subject, config['trial_name'], pattern_name, moment_name, np.mean(param),
-                          bl_param_df[config['trial_name']][i_subject], np.mean(true_peak), np.mean(pred_peak)]])
-    peak_of_gait_df.columns = ['subject_id', 'trial_name', 'pattern', 'moment', 'param_mean', 'param_bl', 'true_peak', 'pred_peak']
+                          bl_param_df[config['trial_name']][i_subject], np.mean(true_peak)-true_peaks_bl_mean, np.mean(pred_peak)-pred_peaks_bl_mean]])
+    peak_of_gait_df.columns = ['subject_id', 'trial_name', 'pattern', 'moment', 'param_mean', 'param_bl', 'true_peak_change', 'pred_peak_change']
 
     # plot results
     for i_moment, moment_name in enumerate(['KAM', 'KFM']):
@@ -160,15 +162,15 @@ if __name__ == "__main__":
             config_df = peak_of_gait_df[(peak_of_gait_df['moment'] == moment_name) & (peak_of_gait_df['trial_name'] == config['trial_name'])]
             for pattern_name in config['pattern_names']:
                 pattern_df = config_df[config_df['pattern'] == pattern_name]
-                moment_average.extend([pattern_df['true_peak'].mean(), pattern_df['pred_peak'].mean()])
-                moment_std.extend([pattern_df['true_peak'].std(), pattern_df['pred_peak'].std()])
-                p_between_models = round(ttest_rel(pattern_df['true_peak'], pattern_df['pred_peak']).pvalue, 3)
+                moment_average.extend([pattern_df['true_peak_change'].mean(), pattern_df['pred_peak_change'].mean()])
+                moment_std.extend([pattern_df['true_peak_change'].std(), pattern_df['pred_peak_change'].std()])
+                p_between_models = round(ttest_rel(pattern_df['true_peak_change'], pattern_df['pred_peak_change']).pvalue, 3)
                 print(p_between_models)
             for i_pair, pattern_pair in enumerate([(0, 1), (1, 2), (0, 2)]):
                 pattern_0_results = config_df[config_df['pattern'] == config['pattern_names'][pattern_pair[0]]]
                 pattern_1_results = config_df[config_df['pattern'] == config['pattern_names'][pattern_pair[1]]]
-                p_true = ttest_rel(pattern_0_results['true_peak'].values, pattern_1_results['true_peak'].values).pvalue
-                p_pred = ttest_rel(pattern_0_results['pred_peak'].values, pattern_1_results['pred_peak'].values).pvalue
+                p_true = ttest_rel(pattern_0_results['true_peak_change'].values, pattern_1_results['true_peak_change'].values).pvalue
+                p_pred = ttest_rel(pattern_0_results['pred_peak_change'].values, pattern_1_results['pred_peak_change'].values).pvalue
                 print('P between {} and {} is {} (ground-truth) and {} (prediction)'.format(
                     config['pattern_names'][pattern_pair[0]], config['pattern_names'][pattern_pair[1]], round(p_true, 3), round(p_pred, 3)))
                 p_between_pattern[config['trial_name']][i_pair] = p_true < 0.05, p_pred < 0.05

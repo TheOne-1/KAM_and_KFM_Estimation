@@ -3,7 +3,7 @@ import json
 import pandas as pd
 import numpy as np
 from const import LINE_WIDTH, FONT_DICT_SMALL, SUBJECTS, TRIALS
-from figures.f6 import save_fig
+from figures.PaperFigures import save_fig
 from figures.PaperFigures import get_peak_of_each_gait_cycle, format_axis, get_mean_gait_cycle_then_find_peak
 import matplotlib.pyplot as plt
 from matplotlib import rc
@@ -25,11 +25,13 @@ def draw_sigifi_sign(mean_, std_, bar_locs, p_between_pattern, ylim):
             coe_0, coe_1 = 0.53, 0.47
         else:
             coe_0, coe_1 = 0.56, 0.44
-        if pair[0]:
+        if pair[0] and pair[1]:
             plt.plot([bar_locs[2*loc_0], bar_locs[2*loc_1]], [top_line, top_line], color=color_0, linewidth=LINE_WIDTH)
-        if pair[1]:
-            plt.plot([bar_locs[2*loc_0+1], bar_locs[2*loc_1+1]], [top_line-0.025*ylim, top_line-0.025*ylim],
-                     color=color_1, linewidth=LINE_WIDTH)
+            plt.plot([bar_locs[2*loc_0+1], bar_locs[2*loc_1+1]], [top_line-0.025*ylim, top_line-0.025*ylim], color=color_1, linewidth=LINE_WIDTH)
+        elif pair[0]:
+            plt.plot([bar_locs[2*loc_0], bar_locs[2*loc_1]], [top_line-0.0125*ylim, top_line-0.0125*ylim], color=color_0, linewidth=LINE_WIDTH)
+        elif pair[1]:
+            plt.plot([bar_locs[2*loc_0+1], bar_locs[2*loc_1+1]], [top_line-0.0125*ylim, top_line-0.0125*ylim], color=color_1, linewidth=LINE_WIDTH)
         plt.text(bar_locs[2*loc_0]*coe_0 + bar_locs[2 * loc_1 + 1] * coe_1, top_line - 0.097 * ylim, '*', fontdict={'fontname': 'Times New Roman'}, size=32, zorder=20)
         rect = patches.Rectangle((bar_locs[2*loc_0]*coe_0 + bar_locs[2 * loc_1 + 1] * coe_1, top_line - 0.097 * ylim), 0.4, 0.15*ylim, linewidth=0, color='white', zorder=10)
         ax.add_patch(rect)
@@ -68,10 +70,10 @@ def draw_f9_subplot(mean_, std_, p_between_pattern, ax, moment_name):
 
     def format_kfm_y_ticks():
         ax.set_ylabel('Peak KFM (%BW$\cdot$BH)', fontdict=FONT_DICT_SMALL)
-        ylim = 12
+        ylim = 15
         ax.set_ylim(0, ylim)
-        ax.set_yticks(range(0, ylim+1, 2))
-        ax.set_yticklabels(range(0, ylim+1, 2), fontdict=FONT_DICT_SMALL)
+        ax.set_yticks(range(0, ylim+1, 3))
+        ax.set_yticklabels(range(0, ylim+1, 3), fontdict=FONT_DICT_SMALL)
         return ylim
 
     def format_x_ticks():
@@ -115,13 +117,9 @@ def finalize_f9(fig):
 if __name__ == "__main__":
     data_path = 'J:\Projects\VideoIMUCombined\experiment_data\KAM\\'
     color_0, color_1 = np.array([90, 140, 20]) / 255, np.array([0, 103, 137]) / 255       # [255, 166, 0]
-    result_date = 'results/0326'
-    with h5py.File(result_date + 'KAM/8IMU_2camera/results.h5', 'r') as hf:
-        kam_data_all_sub = {subject: subject_data[:] for subject, subject_data in hf.items()}
-        kam_data_fields = json.loads(hf.attrs['columns'])
-    with h5py.File(result_date + 'KFM/8IMU_2camera/results.h5', 'r') as hf:
-        kfm_data_all_sub = {subject: subject_data[:] for subject, subject_data in hf.items()}
-        kfm_data_fields = json.loads(hf.attrs['columns'])
+    with h5py.File('results/1028/TfnNet/results.h5', 'r') as hf:
+        data_all_sub = {subject: subject_data[:] for subject, subject_data in hf.items()}
+        data_fields = json.loads(hf.attrs['columns'])
     with h5py.File(data_path + 'gait_parameters.h5', 'r') as hf:
         gait_param_all_sub = {subject: subject_data[:] for subject, subject_data in hf.items()}
         gait_param_fields = json.loads(hf.attrs['columns'])
@@ -141,15 +139,15 @@ if __name__ == "__main__":
     peak_of_gait_df = pd.DataFrame()
     # compute results
     for config in [fpa_config, ts_config, sw_config]:
-        for data, data_fields, sign, moment_name in zip([kam_data_all_sub, kfm_data_all_sub], [kam_data_fields, kfm_data_fields], [1, -1], ['KAM', 'KFM']):
+        for moment_name in ['KAM', 'KFM']:
             for i_subject, subject in enumerate(SUBJECTS):
-                sub_param, sub_data = gait_param_all_sub[subject], data[subject]
+                sub_param, sub_data = gait_param_all_sub[subject], data_all_sub[subject]
                 sub_trial_data_sorted, param_sorted = sort_gait_cycles_according_to_param(config, sub_param, sub_data)
                 small_steps, normal_steps, large_steps = np.array_split(sub_trial_data_sorted, 3)
                 small_param, normal_param, large_param = np.array_split(param_sorted, 3)
                 for steps, param, pattern_name in zip((small_steps, normal_steps, large_steps), (small_param, normal_param, large_param), config['pattern_names']):
                     # get_mean_gait_cycle_then_find_peak get_peak_of_each_gait_cycle
-                    true_peak, pred_peak = get_peak_of_each_gait_cycle(np.stack(steps) * sign, data_fields, 0.5)
+                    true_peak, pred_peak = get_peak_of_each_gait_cycle(np.stack(steps), data_fields, moment_name, 0.5)
                     peak_of_gait_df = peak_of_gait_df.append(
                         [[i_subject, config['trial_name'], pattern_name, moment_name, np.mean(param),
                           bl_param_df[config['trial_name']][i_subject], np.mean(true_peak), np.mean(pred_peak)]])
