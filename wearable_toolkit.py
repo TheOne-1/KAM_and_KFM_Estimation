@@ -18,9 +18,8 @@ import matplotlib.pyplot as plt
 from scipy import linalg
 from sklearn.preprocessing import MinMaxScaler
 from scipy.interpolate import interp1d
-
 from const import SENSOR_LIST, IMU_FIELDS, FORCE_DATA_FIELDS, EXT_KNEE_MOMENT, TARGETS_LIST, SUBJECT_HEIGHT, \
-    EVENT_COLUMN
+    EVENT_COLUMN, GRAVITY
 from const import SUBJECT_WEIGHT, STANCE, STANCE_SWING, STEP_TYPE, VIDEO_ORIGINAL_SAMPLE_RATE
 import wearable_math
 import copy
@@ -207,10 +206,10 @@ class ViconCsvReader:
                        self.data_frame[['RFLE_X', 'RFLE_Y', 'RFLE_Z']].values) / 2
         r = force_cop - knee_origin
         force_data = -self.data_frame[['plate_2_force_x', 'plate_2_force_y', 'plate_2_force_z']].values
-        knee_moment_np = np.cross(r, force_data)
+        knee_moment_np = np.cross(r / 1000, force_data)
         knee_moment_np[:, 0] = - knee_moment_np[:, 0]
         knee_moment = pd.DataFrame(knee_moment_np, columns=EXT_KNEE_MOMENT)
-        knee_moment /= (sub_height * sub_weight * 1000.)
+        knee_moment /= (sub_height * (sub_weight * GRAVITY) / 100)
         return knee_moment
 
     def get_angular_velocity_theta(self, segment, check_len):

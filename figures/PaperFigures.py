@@ -7,7 +7,6 @@ import h5py
 import json
 from sklearn.metrics import mean_squared_error as mse
 from scipy.stats import pearsonr
-from const import GRAVITY
 from scipy.signal import find_peaks
 
 
@@ -50,8 +49,8 @@ def get_mean_gait_cycle_then_find_peak(data, columns, moment_name, search_percen
     # plt.plot(pred_average_of_gait_cycles)
     # plt.show()
 
-    true_peak = np.max(true_average_of_gait_cycles[:search_sample]) / GRAVITY * 100
-    pred_peak = np.max(pred_average_of_gait_cycles[:search_sample]) / GRAVITY * 100
+    true_peak = np.max(true_average_of_gait_cycles[:search_sample])
+    pred_peak = np.max(pred_average_of_gait_cycles[:search_sample])
     return true_peak, pred_peak
 
 
@@ -90,8 +89,8 @@ def get_peak_of_each_gait_cycle(data, columns, moment_name, search_percent_from_
         # pred_peak = find_peak_max(data[i_step, :search_lens[i_step], pred_row], 0.1)
         # if pred_peak is None:
         #     pred_peak = np.max(data[i_step, :search_lens[i_step], pred_row])
-        true_peaks.append(true_peak / GRAVITY * 100)
-        pred_peaks.append(pred_peak / GRAVITY * 100)
+        true_peaks.append(true_peak)
+        pred_peaks.append(pred_peak)
     # print('Peaks of {:3.1f}% steps not found.'.format(peak_not_found/data.shape[0]*100))
     return true_peaks, pred_peaks
 
@@ -116,7 +115,7 @@ def hide_axis_add_grid():
     ax.tick_params(color='lightgray', width=1.5)
 
 
-def get_mean_std(data_array, data_fields, col_name, transfer_to_newton=True):
+def get_mean_std(data_array, data_fields, col_name):
     true_index, pred_index = data_fields.index(col_name), data_fields.index('pred_' + col_name)
     weight_index = data_fields.index(FORCE_PHASE)
 
@@ -124,8 +123,6 @@ def get_mean_std(data_array, data_fields, col_name, transfer_to_newton=True):
     pred_stance, _ = BaseFramework.keep_stance_then_resample(data_array[:, :, pred_index:pred_index + 1], data_array[:, :, weight_index:weight_index + 1], 101)
     true_mean, true_std = true_stance[:, :, 0].mean(axis=0), true_stance[:, :, 0].std(axis=0)
     pred_mean, pred_std = pred_stance[:, :, 0].mean(axis=0), pred_stance[:, :, 0].std(axis=0)
-    if transfer_to_newton:
-        true_mean, true_std, pred_mean, pred_std = true_mean / GRAVITY * 100, true_std / GRAVITY * 100, pred_mean / GRAVITY * 100, pred_std / GRAVITY * 100
     return {'true_mean': true_mean, 'true_std': true_std, 'pred_mean': pred_mean, 'pred_std': pred_std}
 
 
@@ -144,10 +141,10 @@ def get_score(arr_true, arr_pred, w):
     assert(len(arr_true.shape) == 1 and arr_true.shape == arr_pred.shape == w.shape)
     locs = np.where(w.ravel())[0]
     arr_true, arr_pred = arr_true.ravel()[locs], arr_pred.ravel()[locs]
-    mae = np.mean(np.abs(arr_true - arr_pred)) / GRAVITY * 100
+    mae = np.mean(np.abs(arr_true - arr_pred))
     r_rmse = np.sqrt(mse(arr_true, arr_pred)) / (arr_true.max() - arr_true.min()) * 100
     cor_value = pearsonr(arr_true, arr_pred)[0]
-    rmse = np.sqrt(mse(arr_true, arr_pred)) / GRAVITY * 100  # TODO: error-prone code here. Modify generate_combined_data to calculate external KAM.
+    rmse = np.sqrt(mse(arr_true, arr_pred))
     return {'MAE': mae, 'RMSE': rmse, 'rRMSE': r_rmse, 'r':  cor_value}
 
 

@@ -12,7 +12,7 @@ import time
 import json
 import h5py
 from const import IMU_FIELDS, SENSOR_LIST, DATA_PATH, VIDEO_LIST, SUBJECT_WEIGHT, FORCE_PHASE, RKNEE_MARKER_FIELDS, \
-    FORCE_DATA_FIELDS, STATIC_DATA, SEGMENT_MASS_PERCENT, SUBJECT_ID, TRIAL_ID, LEVER_ARM_FIELDS, TRIALS, \
+    FORCE_DATA_FIELDS, STATIC_DATA, SEGMENT_MASS_PERCENT, SUBJECT_ID, TRIAL_ID, GRAVITY, TRIALS, \
     SUBJECT_HEIGHT, USED_KEYPOINTS, HIGH_LEVEL_FEATURE
 from sklearn.preprocessing import MinMaxScaler, StandardScaler
 from types import SimpleNamespace
@@ -146,7 +146,7 @@ class OutNet(nn.Module):
         sequence = self.linear_2(sequence)
         weight = others[:, 0, WEIGHT].unsqueeze(1).unsqueeze(2)
         height = others[:, 0, HEIGHT].unsqueeze(1).unsqueeze(2)
-        sequence = torch.div(sequence, weight * height / 10)
+        sequence = torch.div(sequence, weight * GRAVITY * height / 100)
         return sequence
 
 
@@ -207,6 +207,13 @@ class TfnNet(nn.Module):
 
         sequence = self.out_net(sequence, others)
         return sequence
+
+
+class TfnNoBiomNet(TfnNet):
+    """ Implemented based on the paper "Efficient low-rank multimodal fusion with modality-specific factors" """
+    def __init__(self, acc_dim, gyr_dim):
+        super(TfnNoBiomNet, self).__init__(acc_dim, gyr_dim)
+        self.out_net = OutNet((self.fusion_dim+1)**3, [])
 
 
 class LmfNet(nn.Module):
@@ -805,10 +812,10 @@ GYR_1IMU = [field + '_' + sensor for sensor in ['WAIST'] for field in IMU_FIELDS
 if __name__ == "__main__":
     """ Use all the IMU channels """
     result_date = time.strftime('%y%m%d_%H%M')
-    # run(model=lambda: LmfNet(acc_dim=24, gyr_dim=24), input_acc=ACC_ALL, input_gyr=GYR_ALL, input_vid=VID_ALL, result_dir=result_date + '/LmfNet')
-    # run(model=GradientBoostingRegressor, input_acc=ACC_ALL, input_gyr=GYR_ALL, input_vid=VID_ALL, result_dir=result_date + '/Xgboost')
-    # run(model=lambda: LmfImuOnlyNet(acc_dim=24, gyr_dim=24), input_acc=ACC_ALL, input_gyr=GYR_ALL, input_vid=NO_INPUT, result_dir=result_date + '/Lmf8Imu0Camera')
-    # run(model=LmfCameraOnlyNet, input_acc=NO_INPUT, input_gyr=NO_INPUT, input_vid=VID_ALL, result_dir=result_date + '/Lmf0Imu2Camera')
+    run(model=lambda: LmfNet(acc_dim=24, gyr_dim=24), input_acc=ACC_ALL, input_gyr=GYR_ALL, input_vid=VID_ALL, result_dir=result_date + '/LmfNet')
+    run(model=GradientBoostingRegressor, input_acc=ACC_ALL, input_gyr=GYR_ALL, input_vid=VID_ALL, result_dir=result_date + '/Xgboost')
+    run(model=lambda: LmfImuOnlyNet(acc_dim=24, gyr_dim=24), input_acc=ACC_ALL, input_gyr=GYR_ALL, input_vid=NO_INPUT, result_dir=result_date + '/Lmf8Imu0Camera')
+    run(model=LmfCameraOnlyNet, input_acc=NO_INPUT, input_gyr=NO_INPUT, input_vid=VID_ALL, result_dir=result_date + '/Lmf0Imu2Camera')
     run(model=lambda: TfnNet(acc_dim=24, gyr_dim=24), input_acc=ACC_ALL, input_gyr=GYR_ALL, input_vid=VID_ALL, result_dir=result_date + '/TfnNet')
     run(model=DorschkyCNN, input_acc=ACC_ALL, input_gyr=GYR_ALL, input_vid=VID_ALL, result_dir=result_date + '/DorschkyCNN')
     run(model=StetterMLP, input_acc=ACC_ALL, input_gyr=GYR_ALL, input_vid=VID_ALL, result_dir=result_date + '/StetterMLP')
