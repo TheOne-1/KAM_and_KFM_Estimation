@@ -167,7 +167,7 @@ def print_mean_rrmse(mean_values):
 
 
 if __name__ == "__main__":
-    test_name = '1028'
+    test_name = '1108'
     target_matric = 'rRMSE_'
     mean_compare_, sem_compare_ = [], []
     combo_results_all = {}

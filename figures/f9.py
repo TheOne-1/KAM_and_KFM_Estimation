@@ -117,7 +117,7 @@ def finalize_f9(fig):
 if __name__ == "__main__":
     data_path = 'J:\Projects\VideoIMUCombined\experiment_data\KAM\\'
     color_0, color_1 = np.array([90, 140, 20]) / 255, np.array([0, 103, 137]) / 255       # [255, 166, 0]
-    with h5py.File('results/1028/TfnNet/results.h5', 'r') as hf:
+    with h5py.File('results/1108/TfnNet/results.h5', 'r') as hf:
         data_all_sub = {subject: subject_data[:] for subject, subject_data in hf.items()}
         data_fields = json.loads(hf.attrs['columns'])
     with h5py.File(data_path + 'gait_parameters.h5', 'r') as hf:
