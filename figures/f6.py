@@ -161,9 +161,18 @@ def print_pairwise_tukeyhsd(combo_results, combo_names):
     print(results)
 
 
-def print_mean_rrmse(mean_values):
-    for value in mean_values:
-        print('{:.4f} \%'.format(value))
+def print_mean_rrmse_decrease(mean_values):
+    # print('{:.4f} \%'.format(mean_values[1] - mean_values[0]))
+    # print('{:.4f} \%'.format(mean_values[2] - mean_values[0]))
+    # print('{:.4f} \%'.format(mean_values[4] - mean_values[3]))
+    # print('{:.4f} \%'.format(mean_values[5] - mean_values[3]))
+    kam_imu, kfm_imu = mean_values[1] - mean_values[0], mean_values[4] - mean_values[3]
+    kam_cam, kfm_cam = mean_values[2] - mean_values[0], mean_values[5] - mean_values[3]
+    print('{:.1f}\% and {:.1f}\% compared with IMUs alone, and by {:.1f}\% and {:.1f}\% compared with cameras alone.'
+        .format(kam_imu, kfm_imu, kam_cam, kfm_cam))
+
+    # for value in mean_values:
+    #     print('{:.4f} \%'.format(value))
 
 
 if __name__ == "__main__":
@@ -185,7 +194,7 @@ if __name__ == "__main__":
 
     """ A KAM & KFM joint figure """
     pd.DataFrame(combo_results_all).to_csv('results/' + test_name + '_anova.csv', index=False)
-    print_mean_rrmse(mean_compare_)
+    print_mean_rrmse_decrease(mean_compare_)
     draw_f6_kam_and_kfm(mean_compare_, sem_compare_, sigifi_sign_8)
     save_fig('f6', 600)
     plt.show()

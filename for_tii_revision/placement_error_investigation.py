@@ -11,7 +11,7 @@ from transforms3d.euler import euler2mat
 from wearable_toolkit import data_filter
 import h5py
 import json
-from alan_framework import TfnNet, InertialNet, OutNet, VideoNet, ACC_ALL, GYR_ALL, VID_ALL, BaseFramework
+from alan_framework import TfnNet, InertialNet, OutNet, VideoNet, LmfImuOnlyNet, ACC_ALL, GYR_ALL, VID_ALL, BaseFramework
 from const import STATIC_DATA, HIGH_LEVEL_FEATURE, FORCE_PHASE, USED_KEYPOINTS, SUBJECT_HEIGHT, VIDEO_LIST
 from figures.table_metrics import get_score, append_mean_results_in_the_end, get_metric_mean_std_result
 from a_load_model_and_predict import normalize_array_separately
@@ -48,22 +48,6 @@ def normalize_vid_by_size_of_subject_in_static_trial(sub_data, data_fields):
                        ['_x_', '_y_']]
         sub_data[:, :, vid_col_loc] = sub_data[:, :, vid_col_loc] / sub_height
     return sub_data
-
-
-# def get_virtual_marker_trajectory(virtual_marker_center_at_static_pose, segment_marker_during_walking,
-#                                   segment_marker_at_static_pose, R_static_pose_to_ground):
-#     segment_marker_num = segment_marker_at_static_pose.shape[0]
-#     segment_marker_during_walking = segment_marker_during_walking.as_matrix()
-#     data_len = segment_marker_during_walking.shape[0]
-#     virtual_marker = np.zeros([data_len, 3])
-#     R_IMU_transform = np.zeros([3, 3, data_len])
-#     for i_frame in range(data_len):
-#         current_marker_matrix = segment_marker_during_walking[i_frame, :].reshape([segment_marker_num, 3])
-#         [R_between_frames, t] = _rigid_transform_3D(segment_marker_at_static_pose, current_marker_matrix)
-#         virtual_marker[i_frame, :] = (np.dot(R_between_frames, virtual_marker_center_at_static_pose) + t)
-#         R_IMU_transform[:, :, i_frame] = np.matmul(R_static_pose_to_ground, R_between_frames.T)
-#     return virtual_marker, R_IMU_transform
-
 
 
 class Simulator:
@@ -249,7 +233,7 @@ def generate_combined_data_placement_error():
                 simulator = Simulator(static_marker_data, trial_marker_data, imu_data)
                 imu_e_ori_z = simulator.simulate_orientation_error(z_rad=np.deg2rad(-10))
                 imu_e_pos_x = simulator.simulate_position_error(imu_loc_during_static, R_i0_g=R_i0_g[segment], x_mm=100)
-                imu_e_pos_y = simulator.simulate_position_error(imu_loc_during_static, R_i0_g=R_i0_g[segment], y_mm=100)
+                imu_e_pos_y = simulator.simulate_position_error(imu_loc_during_static, R_i0_g=R_i0_g[segment], z_mm=100)
                 data_with_error.extend([imu_e_pos_x, imu_e_pos_y, imu_e_ori_z])
                 columns.extend([col + error_name for error_name in error_names for col in imu_cols])
             error_df = pd.DataFrame(np.concatenate(data_with_error, axis=1), columns=columns)
@@ -258,7 +242,7 @@ def generate_combined_data_placement_error():
 
 
 def generate_step_data_placement_error():
-    print(generate_step_data_placement_error)
+    print('generate_step_data_placement_error')
     data_path = DATA_PATH + '/40samples+stance.h5'
     with h5py.File(data_path, 'r') as hf:
         data_all_sub = {subject: subject_data[:] for subject, subject_data in hf.items()}
@@ -288,23 +272,22 @@ def generate_step_data_placement_error():
 
 def replace_data_and_pred(data_fields, imu_loc_error_free, imu_loc_with_error,
                           subject_data, subject_data_error, model, model_inputs):
+    if 'IMU only' in model.__str__():
+        vid_fields, i_high_level_start = [FORCE_PHASE], 2
+    else:
+        vid_fields, i_high_level_start = VID_ALL, 0
+
     subject_data = np.array(subject_data, copy=True)
     subject_data[:, :, imu_loc_error_free] = subject_data_error[:, :, imu_loc_with_error]
     antro_data = subject_data[:, :, [data_fields.index(field) for field in STATIC_DATA]]
     high_level_data = subject_data[:, :, [data_fields.index(field) for field in HIGH_LEVEL_FEATURE]]
     high_level_data = normalize_array_separately(high_level_data, model.scalars['high_level'], 'transform')
-    model_inputs['others'] = torch.from_numpy(np.concatenate([antro_data, high_level_data], axis=2)).float().cuda()
+    model_inputs['others'] = torch.from_numpy(np.concatenate([antro_data, high_level_data[:, :, i_high_level_start:]], axis=2)).float().cuda()
 
-    for name, fields in zip(['input_acc', 'input_gyr', 'input_vid'], [ACC_ALL, GYR_ALL, VID_ALL]):
+    for name, fields in zip(['input_acc', 'input_gyr', 'input_vid'], [ACC_ALL, GYR_ALL, vid_fields]):
         data = subject_data[:, :, [data_fields.index(field) for field in fields]]
         data = normalize_array_separately(data, model.scalars[name], 'transform')
         model_inputs[name] = torch.from_numpy(data).float().cuda()
-    # model_inputs['input_acc'] = torch.from_numpy(
-    #     subject_data[:, :, [data_fields.index(field) for field in ACC_ALL]]).float().cuda()
-    # model_inputs['input_gyr'] = torch.from_numpy(
-    #     subject_data[:, :, [data_fields.index(field) for field in GYR_ALL]]).float().cuda()
-    # model_inputs['input_vid'] = torch.from_numpy(
-    #     subject_data[:, :, [data_fields.index(field) for field in VID_ALL]]).float().cuda()
     predicted = model(model_inputs['input_acc'], model_inputs['input_gyr'], model_inputs['input_vid'],
                       model_inputs['others'], model_inputs['step_length']).cpu().detach().numpy()
     return predicted
@@ -333,7 +316,7 @@ def get_all_results(subject_data, data_fields, ground_truth_moment, predicted, w
 
 
 def replace_data_and_test():
-    print(replace_data_and_test)
+
     with h5py.File(DATA_PATH + '/40samples+stance.h5', 'r') as hf:
         data_all_sub = {subject: subject_data[:] for subject, subject_data in hf.items()}
         data_fields = json.loads(hf.attrs['columns'])
@@ -342,112 +325,55 @@ def replace_data_and_test():
         data_fields_error = json.loads(hf.attrs['columns'])
 
     all_trials = []
-    for subject in SUBJECTS:
-        model_path = os.path.join('..', 'figures', 'results', '1115', 'TfnNet', 'sub_models', subject, 'model.pth')
-        model = torch.load(model_path).cuda()
+    for model_name in model_names:
+        for subject in SUBJECTS:
+            print('replace_data_and_test, '+ model_name + ', ' + subject)
+            model_path = os.path.join('..', 'figures', 'results', '1115', model_name, 'sub_models', subject, 'model.pth')
+            model = torch.load(model_path).cuda()
 
-        subject_data, subject_data_error = data_all_sub[subject], data_all_sub_error[subject]
-        ground_truth_moment = subject_data[:, :, [data_fields.index(field) for field in ['EXT_KM_X', 'EXT_KM_Y']]]
-        # evaluate_fields = {'main_output': ['EXT_KM_X', 'EXT_KM_Y']}
-        weights = subject_data[:, :, [data_fields.index(FORCE_PHASE), data_fields.index(FORCE_PHASE)]]
-        model_inputs = {'step_length': torch.from_numpy(np.sum(~(subject_data[:, :, 0] == 0.), axis=1))}
-        subject_data = make_vid_relative_to_midhip(subject_data, data_fields)
-        subject_data = normalize_vid_by_size_of_subject_in_static_trial(subject_data, data_fields)
+            subject_data, subject_data_error = data_all_sub[subject], data_all_sub_error[subject]
+            ground_truth_moment = subject_data[:, :, [data_fields.index(field) for field in ['EXT_KM_X', 'EXT_KM_Y']]]
+            weights = subject_data[:, :, [data_fields.index(FORCE_PHASE), data_fields.index(FORCE_PHASE)]]
+            model_inputs = {'step_length': torch.from_numpy(np.sum(~(subject_data[:, :, 0] == 0.), axis=1))}
+            subject_data = make_vid_relative_to_midhip(subject_data, data_fields)
+            subject_data = normalize_vid_by_size_of_subject_in_static_trial(subject_data, data_fields)
 
-        """ No error """
-        predicted = replace_data_and_pred(data_fields, [], [], subject_data, subject_data_error, model, model_inputs)
-        param_to_log = {'subject': subject, 'error_type': 'no', 'error_segment': 'na', 'error_name': 'na'}
-        all_trials.extend(get_all_results(subject_data, data_fields, ground_truth_moment, predicted, weights, param_to_log))
+            """ No error """
+            predicted = replace_data_and_pred(data_fields, [], [], subject_data, subject_data_error, model, model_inputs)
+            param_to_log = {'subject': subject, 'model_name': model_name, 'error_type': 'no', 'error_segment': 'na', 'error_name': 'na'}
+            all_trials.extend(get_all_results(subject_data, data_fields, ground_truth_moment, predicted, weights, param_to_log))
 
-        """ Single IMU has error """
-        for error_name in error_names:
-            for sensor in SENSOR_LIST:
-                imu_loc_error_free = [data_fields.index(axis + '_' + sensor) for axis in IMU_FIELDS[:6]]
-                imu_loc_with_error = [data_fields_error.index(axis + '_' + sensor + error_name) for axis in IMU_FIELDS[:6]]
+            """ Single IMU has error """
+            for error_name in error_names:
+                for sensor in SENSOR_LIST:
+                    imu_loc_error_free = [data_fields.index(axis + '_' + sensor) for axis in IMU_FIELDS[:6]]
+                    imu_loc_with_error = [data_fields_error.index(axis + '_' + sensor + error_name) for axis in IMU_FIELDS[:6]]
+                    predicted = replace_data_and_pred(data_fields, imu_loc_error_free, imu_loc_with_error,
+                                                      subject_data, subject_data_error, model, model_inputs)
+                    param_to_log = {'subject': subject, 'model_name': model_name, 'error_type': 'single', 'error_segment': sensor, 'error_name': error_name}
+                    all_trials.extend(get_all_results(subject_data, data_fields, ground_truth_moment, predicted,
+                                                      weights, param_to_log))
+
+            """ Multiple simultaneous IMUs have error """
+            for error_name in error_names:
+                imu_loc_error_free = [data_fields.index(axis + '_' + sensor) for sensor in SENSOR_LIST for axis in IMU_FIELDS[:6]]
+                imu_loc_with_error = [data_fields_error.index(axis + '_' + sensor + error_name) for sensor in SENSOR_LIST for axis in IMU_FIELDS[:6]]
                 predicted = replace_data_and_pred(data_fields, imu_loc_error_free, imu_loc_with_error,
                                                   subject_data, subject_data_error, model, model_inputs)
-                param_to_log = {'subject': subject, 'error_type': 'single', 'error_segment': sensor, 'error_name': error_name}
+                param_to_log = {'subject': subject, 'model_name': model_name, 'error_type': 'multiple', 'error_segment': 'all', 'error_name': error_name}
                 all_trials.extend(get_all_results(subject_data, data_fields, ground_truth_moment, predicted,
                                                   weights, param_to_log))
-
-        """ Multiple simultaneous IMUs have error """
-        for error_name in error_names:
-            imu_loc_error_free = [data_fields.index(axis + '_' + sensor) for sensor in SENSOR_LIST for axis in IMU_FIELDS[:6]]
-            imu_loc_with_error = [data_fields_error.index(axis + '_' + sensor + error_name) for sensor in SENSOR_LIST for axis in IMU_FIELDS[:6]]
-            predicted = replace_data_and_pred(data_fields, imu_loc_error_free, imu_loc_with_error,
-                                              subject_data, subject_data_error, model, model_inputs)
-            param_to_log = {'subject': subject, 'error_type': 'multiple', 'error_segment': 'all', 'error_name': error_name}
-            all_trials.extend(get_all_results(subject_data, data_fields, ground_truth_moment, predicted,
-                                              weights, param_to_log))
 
     results_df = pd.DataFrame(all_trials)
     results_df.to_csv('placement_error_results.csv', index=False)
 
 
-def print_t_IV_report_increase_of_RMSE():
-    results_df = pd.read_csv('placement_error_results.csv')
-    metric_name = 'rRMSE_'
-    """ No error """
-    no_error_df = results_df[(results_df['trial'] == 'all') & (results_df['error_type'] == 'no')]
-
-    """ Single IMU position """
-    print('\multirow{2}{*}{Single IMU}\t& Position Errors', end='\t')
-    for target in ['KAM', 'KFM']:
-        mean_, sem_ = 0, 0
-        for error_name in error_names[:2]:
-            for sensor in SENSOR_LIST:
-                condition_df = results_df[(results_df['trial'] == 'all') & (results_df['error_segment'] == sensor) &
-                                          (results_df['error_name'] == error_name)]
-                increases_ = condition_df[metric_name + target].values - no_error_df[metric_name + target].values
-                if np.mean(increases_) > mean_:
-                    mean_, sem_ = np.mean(increases_), sem(increases_)
-        print('&{:6.2f} ({:3.2f})'.format(mean_, sem_), end='\t')
-    print('\\\\')
-
-    """ Single orientation """
-    print('& Orientation Errors ', end='\t')
-    for target in ['KAM', 'KFM']:
-        mean_, sem_ = 0, 0
-        for sensor in SENSOR_LIST:
-            condition_df = results_df[(results_df['trial'] == 'all') & (results_df['error_segment'] == sensor) &
-                                      (results_df['error_name'] == error_names[2])]
-            increases_ = condition_df[metric_name + target].values - no_error_df[metric_name + target].values
-            if np.mean(increases_) > mean_:
-                mean_, sem_ = np.mean(increases_), sem(increases_)
-        print('&{:6.2f} ({:3.2f})'.format(mean_, sem_), end='\t')
-    print('\\\\')
-    print('\cmidrule{1-4}')
-
-    """ Multiple simultaneous position """
-    print('\multirow{2}{*}{All IMUs}\t& Position Errors', end='\t')
-    for target in ['KAM', 'KFM']:
-        mean_, sem_ = 0, 0
-        for error_name in error_names[:2]:
-            condition_df = results_df[(results_df['trial'] == 'all') & (results_df['error_segment'] == 'all') &
-                                      (results_df['error_name'] == error_name)]
-            increases_ = condition_df[metric_name + target].values - no_error_df[metric_name + target].values
-            if np.mean(increases_) > mean_:
-                mean_, sem_ = np.mean(increases_), sem(increases_)
-        print('&{:6.2f} ({:3.2f})'.format(mean_, sem_), end='\t')
-    print('\\\\')
-
-    """ Multiple simultaneous orientation """
-    print('& Orientation Errors ', end='\t')
-    for target in ['KAM', 'KFM']:
-        condition_df = results_df[(results_df['trial'] == 'all') & (results_df['error_segment'] == 'all') &
-                                  (results_df['error_name'] == error_names[2])]
-        increases_ = condition_df[metric_name + target].values - no_error_df[metric_name + target].values
-        print('&{:6.2f} ({:3.2f})'.format(np.mean(increases_), sem(increases_)), end='\t')
-    print('\\\\')
-
-
-error_names = ['_e_pos_x', '_e_pos_y', '_e_ori_z']
-
+error_names = ['_e_pos_x', '_e_pos_z', '_e_ori_z']
+model_names = ['TfnNet', 'Lmf8Imu0Camera']
 if __name__ == "__main__":
-    # generate_combined_data_placement_error()
-    # generate_step_data_placement_error()
-    # replace_data_and_test()
-    # print_t_IV_report_absolute_RMSE()
-    print_t_IV_report_increase_of_RMSE()
+    generate_combined_data_placement_error()
+    generate_step_data_placement_error()
+    replace_data_and_test()
+    print_t_IV_report_absolute_RMSE()
 
 

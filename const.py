@@ -5,6 +5,7 @@ GRAVITY = 9.81
 VIDEO_PATH = os.environ.get('VIDEO_PATH')
 OPENPOSE_MODEL_PATH = os.environ.get('OPENPOSE_MODEL_PATH')
 VIDEO_ORIGINAL_SAMPLE_RATE = 119.99014859206962
+VICON_SAMPLE_RATE = 100
 DATA_PATH = os.environ.get('KAM_DATA_PATH')
 TRIALS = ['baseline', 'fpa', 'step_width', 'trunk_sway']
 TRIALS_PRINT = ['Baseline', 'Foot Progression Angle', 'Step Width', 'Trunk Sway Angle']
@@ -62,8 +63,8 @@ FORCE_DATA_FIELDS = ['plate_' + num + '_' + data_type + '_' + axis for num in ['
 
 STATIC_DATA = SUBJECT_WEIGHT, SUBJECT_HEIGHT = ['body weight', 'body height']
 HIGH_LEVEL_FEATURE = ['fpa_imu', 'step_trunk_sway_angle', 'strike_ankle_width']
-PHASE_LIST = [EVENT_COLUMN, KAM_PHASE, FORCE_PHASE, STEP_PHASE, SUBJECT_ID, TRIAL_ID] = [
-    'Event', 'kam_phase', 'force_phase', 'step_phase', 'subject_id', 'trial_id']
+PHASE_LIST = [SAMPLE_INDEX, EVENT_COLUMN, KAM_PHASE, FORCE_PHASE, STEP_PHASE, SUBJECT_ID, TRIAL_ID] = [
+    'sample_index', 'Event', 'kam_phase', 'force_phase', 'step_phase', 'subject_id', 'trial_id']
 # all the fields of combined data
 CONTINUOUS_FIELDS = TARGETS_LIST + EXT_KNEE_MOMENT + IMU_DATA_FIELDS + VIDEO_DATA_FIELDS + FORCE_DATA_FIELDS +\
                     JOINT_LIST + SEGMENT_DATA_FIELDS
@@ -86,15 +87,16 @@ LINE_WIDTH_THICK = 3
 SENSOR_COMBINATION = ['8IMU_2camera', '8IMU', '3IMU_2camera', '3IMU', '1IMU_2camera', '1IMU', '2camera']
 SENSOR_COMBINATION_SORTED = ['8IMU_2camera', '3IMU_2camera', '8IMU', '1IMU_2camera', '3IMU', '2camera', '1IMU']
 COMPARED_MODELS_FOR_PRINT = {
-    'Xgboost': 'XGBoost', 'ChaabanLinear': 'Linear regression', 'StetterMLP': 'MLP', 'DorschkyCNN': 'CNN',
-    'MfnNet': 'Our + MFN', 'LmfNet': 'Ours + LMF', 'TfnNet': 'Ours + TFN',
+    'Xgboost': 'XGBoost', 'ChaabanLinear': 'Linear regression', 'StetterMLP': 'Multilayer Perceptron',
+    'DorschkyCNN': 'Convolutional Neural Network', 'MfnNet': 'Our + Memory Fusion Network',
+    'LmfNet': 'Ours + Low-Rank Multimodal Fusion Network', 'TfnNet': 'Ours + Tensor Fusion Network',
     # 'Lmf8Imu0Camera': 'Ours + LMF', 'Lmf0Imu2Camera': 'Ours + LMF',
     # 'Lmf3Imu2Camera': 'Ours + LMF', 'Lmf3Imu0Camera': 'Ours + LMF',
     # 'Lmf1Imu2Camera': 'Ours + LMF', 'Lmf1Imu0Camera': 'Ours + LMF',
     # 'DirectNet': 'Ours + DirectNet'
 }
 COMPARED_MODELS = list(COMPARED_MODELS_FOR_PRINT.keys())
-TESTED_MODELS = ['Xgboost', 'ChaabanLinear', 'StetterMLP', 'DorschkyCNN', 'MfnNet', 'TfnNet', 'LmfNet', 'Lmf8Imu0Camera',
+TESTED_MODELS = ['TfnNet', 'Xgboost', 'ChaabanLinear', 'StetterMLP', 'DorschkyCNN', 'MfnNet', 'LmfNet', 'Lmf8Imu0Camera',
                  'Lmf0Imu2Camera', 'Lmf3Imu2Camera', 'Lmf3Imu0Camera', 'Lmf1Imu2Camera', 'Lmf1Imu0Camera']
 
 EXAMPLE_DATA_FIELDS = [

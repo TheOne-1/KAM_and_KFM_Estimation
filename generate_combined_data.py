@@ -90,7 +90,7 @@ def sync_and_crop_data_frame(subject, trial):
 
 
 def get_combined_data():
-    pool = ThreadPool(16)
+    pool = ThreadPool(7)
     for subject in SUBJECTS[:]:
         for trial in TRIALS:
             pool.apply_async(sync_and_crop_data_frame, args=(subject, trial))
@@ -124,8 +124,8 @@ def get_static_combined_data():
             video_180_data.data_frame.columns = [col + '_180' for col in video_180_data.data_frame.columns]
             imu_data = wearable_toolkit.SageCsvReader(imu_data_path)
             middle_data = pd.concat(
-                [imu_data.data_frame.loc[:450], video_90_data.data_frame.loc[:450], video_180_data.data_frame.loc[:450],
-                 V3d_data.data_frame.loc[:450], vicon_data.data_frame.loc[:450]], axis=1)
+                [imu_data.data_frame.loc[50:450], video_90_data.data_frame.loc[50:450], video_180_data.data_frame.loc[50:450],
+                 V3d_data.data_frame.loc[50:450], vicon_data.data_frame.loc[50:450]], axis=1)
             middle_data.to_csv(middle_data_path)
 
 

@@ -190,6 +190,9 @@ class TfnNet(nn.Module):
     def __str__(self):
         return 'TFN fusion net'
 
+    def set_scalars(self, scalars):
+        self.scalars = scalars
+
     def forward(self, acc_x, gyr_x, vid_x, others, lens):
         acc_h = self.linear_acc(self.acc_subnet(acc_x, lens))
         gyr_h = self.linear_gyr(self.gyr_subnet(gyr_x, lens))
@@ -243,6 +246,9 @@ class LmfNet(nn.Module):
 
     def __str__(self):
         return 'LMF fusion net'
+
+    def set_scalars(self, scalars):
+        self.scalars = scalars
 
     def forward(self, acc_x, gyr_x, vid_x, others, lens):
         acc_h = self.acc_subnet(acc_x, lens)
@@ -422,9 +428,33 @@ class AlanFramework(BaseFramework):
     def __init__(self,  *args, **kwargs):
         BaseFramework.__init__(self, *args, **kwargs)
         self.train_step_lens, self.validation_step_lens, self.test_step_lens = [None] * 3
+        # self.add_additional_columns()
         self.make_vid_relative_to_midhip()
         self.normalize_vid_by_size_of_subject_in_static_trial()
         # self.get_body_weighted_imu()
+
+    @staticmethod
+    def angle_between_vectors(v1, v2):
+        data_len = v1.shape[0]
+        v1, v2 = v1.reshape([-1, 2]), v2.reshape([-1, 2])
+        v1_u = v1 / np.linalg.norm(v1, axis=1)[:, np.newaxis]
+        v2_u = v2 / np.linalg.norm(v2, axis=1)[:, np.newaxis]
+        sign = np.sign(v1_u - v2_u)[:, 0]
+        angle = sign * np.arccos(np.clip(np.sum(v1_u * v2_u, axis=1), -1.0, 1.0))
+        return angle.reshape([data_len, -1, 1])
+
+    def add_additional_columns(self):
+        # vid_y_90_col_loc = [self._data_fields.index(marker + '_y_90') for marker in ["RHip", "RKnee", "RAnkle"]]
+        for sub_name, sub_data in self._data_all_sub.items():
+            angles = []
+            for vid in ['_90', '_180']:
+                hip_loc, knee_loc, ankle_loc = [[self._data_fields.index(marker + '_x' + vid), self._data_fields.index(marker + '_y' + vid)]
+                                                for marker in ["RHip", "RKnee", "RAnkle"]]
+                vector_r_shank = sub_data[:, :, knee_loc] - sub_data[:, :, ankle_loc]
+                vector_r_thigh = sub_data[:, :, hip_loc] - sub_data[:, :, knee_loc]
+                angles.append(self.angle_between_vectors(vector_r_shank, vector_r_thigh))
+            self._data_all_sub[sub_name] = np.concatenate([sub_data, angles[0], angles[1]], axis=2)
+        self._data_fields.extend(['r_knee_angle_90', 'r_knee_angle_180'])
 
     def vid_static_cali(self):
         vid_y_90_col_loc = [self._data_fields.index(marker + '_y_90') for marker in VIDEO_LIST]
@@ -571,7 +601,7 @@ class AlanFramework(BaseFramework):
 
         self.train_step_lens, self.validation_step_lens = self._get_step_len(x_train), self._get_step_len(x_validation)
         model = self.model().cuda()
-        # self.log_weight_bias_mean_std(model)
+        model.set_scalars(self._data_scalar)
 
         hyper_param = {'epoch': globals()['epoch'], 'batch_size': globals()['batch_size'], 'lr': globals()['lr'],
                        'use_ratio': 100, 'target_name': 'main_output', 'fields': ['EXT_KM_X', 'EXT_KM_Y']}

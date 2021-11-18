@@ -14,6 +14,7 @@ import matplotlib.gridspec as gridspec
 import matplotlib.patches as patches
 from sklearn.metrics import mean_squared_error as mse
 from scipy.stats import pearsonr
+from sklearn.metrics import r2_score
 
 
 def sort_gait_cycles_according_to_param(param_config, sub_param, sub_data):
@@ -74,10 +75,10 @@ def draw_f10_subplot(true_peak_, pred_peak_, subjects_, ax, moment_name_):
     # RMSE = np.sqrt(mse(np.array(all_dots_true), np.array(all_dots_pred)))
     # ax.text(0.6, 0.05, 'ρ = {:4.2f}\nRMSE = {:4.2f} (%BW·BH)'.format(correlation, RMSE),
     #         fontdict=FONT_DICT_SMALL, transform=ax.transAxes)
-    correlation = pearsonr(all_dots_true, all_dots_pred)[0]
-
-    plt.text(0.59, 0.04, 'ρ = {:4.2f}\ny = {:4.2f}x + {:4.2f}'.format(
-        correlation, coef[0], coef[1]), fontdict=FONT_DICT_SMALL, transform=ax.transAxes)
+    # correlation = pearsonr(all_dots_true, all_dots_pred)[0]
+    r2 = r2_score(all_dots_true, all_dots_pred)
+    plt.text(0.578, 0.11, '$R^2$ = {:4.2f}'.format(r2), fontdict=FONT_DICT_SMALL, transform=ax.transAxes)
+    plt.text(0.6, 0.04, '$y$ = {:4.2f}$x$ + {:4.2f}'.format(coef[0], coef[1]), fontdict=FONT_DICT_SMALL, transform=ax.transAxes)
     return dot_plot, black_line
 
 
@@ -113,7 +114,7 @@ if __name__ == "__main__":
     ts_config = {'trial_name': 'trunk_sway', 'pattern_names': ('small_ts', 'normal_ts', 'large_ts')}
     sw_config = {'trial_name': 'step_width', 'pattern_names': ('small_sw', 'normal_sw', 'large_sw')}
     fig, gs = init_f10()
-    true_peak_all, pred_peak_all = {}, {}
+    true_peak_subs, pred_peak_subs = {}, {}
     for i_moment, moment_name in enumerate(['KAM', 'KFM']):
         for i_subject, subject in enumerate(SUBJECTS):
             true_peak_sub, pred_peak_sub = [], []
@@ -128,16 +129,21 @@ if __name__ == "__main__":
             true_peak, pred_peak = get_peak_of_each_gait_cycle(np.stack(sub_three_trial_data), data_fields, moment_name, 0.5)
             true_peak_sub.extend([element - true_peaks_bl_mean for element in true_peak])
             pred_peak_sub.extend([element - pred_peaks_bl_mean for element in pred_peak])
-            true_peak_all[subject], pred_peak_all[subject] = true_peak_sub, pred_peak_sub
+            true_peak_subs[subject], pred_peak_subs[subject] = true_peak_sub, pred_peak_sub
         folder_1_subs = ['s011_wuxingze', 's004_ouyangjue', 's009_sunyubo']
         ax = fig.add_subplot(gs[i_moment])
-        dot_plot, black_line = draw_f10_subplot(true_peak_all, pred_peak_all, folder_1_subs, ax, moment_name)
+        dot_plot, black_line = draw_f10_subplot(true_peak_subs, pred_peak_subs, folder_1_subs, ax, moment_name)
+
+        r2_each_sub = []
+        true_dots_all, pred_dots_all = [], []
+        for subject in SUBJECTS:
+            r2_each_sub.append(r2_score(true_peak_subs[subject], pred_peak_subs[subject]))
+            true_dots_all.extend(true_peak_subs[subject])
+            pred_dots_all.extend(pred_peak_subs[subject])
+        print(np.mean(r2_each_sub))
+        print(r2_each_sub)
+        r2_all = r2_score(true_dots_all, pred_dots_all)
+        print(r2_all)
+
     finalize_f10(dot_plot, black_line)
-
-    rmse_all = []
-    for subject in SUBJECTS:
-        rmse_all.append(np.sqrt(mse(true_peak_all[subject], pred_peak_all[subject])))
-    print(rmse_all)
-    print('&{:6.1f} ({:3.1f})'.format(np.mean(rmse_all), np.std(rmse_all)), end='\t')
-
     plt.show()

@@ -343,9 +343,8 @@ class GaitParameterExtractor:
         trunk_angle_z = np.zeros(trunk_gyr_z.shape)
         for i_sample in range(len(trunk_gyr_z) - 1):
             trunk_angle_z[i_sample+1] = trunk_angle_z[i_sample] + delta_t * trunk_gyr_z[i_sample]
-
-            trunk_angle_z[i_sample + 1] = trunk_angle_z[i_sample+1] + base_correction_coeff * \
-                                          np.sign(vid_angle[i_sample+1] - trunk_angle_z[i_sample+1])
+            trunk_angle_z[i_sample + 1] = trunk_angle_z[i_sample + 1] + base_correction_coeff * \
+                                          np.sign(vid_angle[i_sample + 1] - trunk_angle_z[i_sample + 1])
         return trunk_angle_z
 
 

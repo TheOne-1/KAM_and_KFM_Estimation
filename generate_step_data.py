@@ -127,6 +127,7 @@ def generate_step_data(export_path, processes):
     # create training data and test data
     subject_trial_dict = {}
     for subject_trial, data in all_data_dict.items():
+        data = data.rename(columns={'Unnamed: 0': 'sample_index'})
         subject_trial_dict[subject_trial] = get_step_data(data)
         for f in processes:
             subject_trial_dict[subject_trial] = f(subject_trial_dict[subject_trial])

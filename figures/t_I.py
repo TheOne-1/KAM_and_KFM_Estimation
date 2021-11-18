@@ -13,7 +13,7 @@ if __name__ == '__main__':
     for model in COMPARED_MODELS:
         one_row = ''
         trial_df = result_df[result_df['trial'] == 'all']
-        one_row += '{:22}'.format(COMPARED_MODELS_FOR_PRINT[model])
+        one_row += '{:52}'.format(COMPARED_MODELS_FOR_PRINT[model])
         for moment_name in ['KAM', 'KFM']:
             for metric in metrics:
                 sensor_result = trial_df[metric + '_' + model + '_' + moment_name]
@@ -27,7 +27,7 @@ if __name__ == '__main__':
         to_print.append(one_row)
 
     """Bold the best ones"""
-    for start_index, sign in zip([100, 86, 71, 54, 40, 25], [-1, 1, 1, -1, 1, 1]):
+    for start_index, sign in zip([130, 116, 101, 84, 70, 55], [-1, 1, 1, -1, 1, 1]):
         numbers = []
         for one_row in to_print:
             numbers.append(sign*float(one_row[start_index:start_index+4]))

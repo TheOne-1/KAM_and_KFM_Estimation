@@ -12,6 +12,7 @@ from more_itertools import sort_together
 from scipy.stats import ttest_rel
 import matplotlib.gridspec as gridspec
 import matplotlib.patches as patches
+from sklearn.utils import shuffle
 
 
 def draw_sigifi_sign(mean_, std_, bar_locs, p_between_pattern, ylim):
@@ -152,6 +153,26 @@ if __name__ == "__main__":
                         [[i_subject, config['trial_name'], pattern_name, moment_name, np.mean(param),
                           bl_param_df[config['trial_name']][i_subject], np.mean(true_peak), np.mean(pred_peak)]])
     peak_of_gait_df.columns = ['subject_id', 'trial_name', 'pattern', 'moment', 'param_mean', 'param_bl', 'true_peak', 'pred_peak']
+
+    for moment_name in ['KAM', 'KFM']:
+        moment_df = peak_of_gait_df[peak_of_gait_df['moment'] == moment_name]
+        true_peak_sub = {}
+        for i_subject, subject in enumerate(SUBJECTS):
+            peak_of_subject_df = moment_df[moment_df['subject_id'] == i_subject]
+            true_peak_sub[subject] = np.mean(peak_of_subject_df['true_peak'])
+
+        sub_ids = shuffle(SUBJECTS, random_state=151)
+        test_set_sub_num = 3
+        train_test_diff = []
+        for i_folder in range(5):
+            if i_folder < 4:
+                test_sub_ids = sub_ids[test_set_sub_num * i_folder:test_set_sub_num * (i_folder + 1)]
+            else:
+                test_sub_ids = sub_ids[test_set_sub_num * i_folder:]    # make use of all the left subjects
+            train_sub_ids = list(np.setdiff1d(sub_ids, test_sub_ids))
+            train_test_diff.append(np.mean([true_peak_sub[sub] for sub in train_sub_ids]) - np.mean([true_peak_sub[sub] for sub in test_sub_ids]))
+        print('Difference between train GT and test GT {}: {:6.3f}'.format(moment_name, np.mean(train_test_diff)))
+        print('Difference between test GT and test estimate {}: {:6.3f}'.format(moment_name, np.mean(moment_df['true_peak'] - moment_df['pred_peak'])))
 
     # plot results
     for i_moment, moment_name in enumerate(['KAM', 'KFM']):
