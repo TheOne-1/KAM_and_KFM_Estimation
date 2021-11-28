@@ -61,7 +61,7 @@ def draw_f3(mean_std_kam, mean_std_kfm):
 
 if __name__ == "__main__":
     first_fold_subjects = ['s004_ouyangjue', 's009_sunyubo', 's011_wuxingze']
-    with h5py.File('results/1108/TfnNet/results.h5', 'r') as hf:
+    with h5py.File('results/1115/TfnNet/results.h5', 'r') as hf:
         data_sel_sub = {subject: subject_data[:] for subject, subject_data in hf.items() if subject in first_fold_subjects}
         data_fields = json.loads(hf.attrs['columns'])
 

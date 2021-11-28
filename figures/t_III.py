@@ -10,7 +10,7 @@ import json
 
 
 if __name__ == '__main__':
-    result_date = 'results/1108/'
+    result_date = 'results/1115/'
     overall_result_df = pd.read_csv(result_date + 'estimation_result_individual.csv')
 
     models = ['LmfNet', 'Lmf8Imu0Camera', 'Lmf0Imu2Camera']        # DirectNet LmfNet

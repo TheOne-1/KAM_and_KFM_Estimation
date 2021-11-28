@@ -231,9 +231,9 @@ def generate_combined_data_placement_error():
                 imu_cols = [axis + '_' + segment for axis in IMU_FIELDS[:6]]
                 imu_data = trial_data[imu_cols].values
                 simulator = Simulator(static_marker_data, trial_marker_data, imu_data)
-                imu_e_ori_z = simulator.simulate_orientation_error(z_rad=np.deg2rad(-10))
-                imu_e_pos_x = simulator.simulate_position_error(imu_loc_during_static, R_i0_g=R_i0_g[segment], x_mm=100)
-                imu_e_pos_y = simulator.simulate_position_error(imu_loc_during_static, R_i0_g=R_i0_g[segment], z_mm=100)
+                imu_e_ori_z = simulator.simulate_orientation_error(z_rad=np.deg2rad(15))
+                imu_e_pos_x = simulator.simulate_position_error(imu_loc_during_static, R_i0_g=R_i0_g[segment], x_mm=150)
+                imu_e_pos_y = simulator.simulate_position_error(imu_loc_during_static, R_i0_g=R_i0_g[segment], z_mm=150)
                 data_with_error.extend([imu_e_pos_x, imu_e_pos_y, imu_e_ori_z])
                 columns.extend([col + error_name for error_name in error_names for col in imu_cols])
             error_df = pd.DataFrame(np.concatenate(data_with_error, axis=1), columns=columns)

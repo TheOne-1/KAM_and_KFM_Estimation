@@ -95,7 +95,7 @@ if __name__ == "__main__":
     for condition in ['fusion', 'imu']:
         for i_moment, moment in enumerate(['KAM', 'KFM']):
             test_df = pd.read_csv(
-                'results/1108' + '/estimation_result_individual.csv')
+                'results/1115' + '/estimation_result_individual.csv')
             test_df = test_df[test_df['trial'] == 'all']
 
             """ Figure showing results of 8, 3, and 1 IMU for discussion """

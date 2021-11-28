@@ -176,7 +176,7 @@ def print_mean_rrmse_decrease(mean_values):
 
 
 if __name__ == "__main__":
-    test_name = '1108'
+    test_name = '1115'
     target_matric = 'rRMSE_'
     mean_compare_, sem_compare_ = [], []
     combo_results_all = {}
@@ -184,7 +184,7 @@ if __name__ == "__main__":
     result_df = result_df[result_df['trial'] == 'all']
     for i_moment, moment in enumerate(['KAM', 'KFM']):
         combo_result_each_moment = []
-        for sensor_combo in ['TfnNet', 'Lmf8Imu0Camera', 'Lmf0Imu2Camera']:
+        for sensor_combo in ['LmfNet', 'Lmf8Imu0Camera', 'Lmf0Imu2Camera']:
             combo_result = result_df[target_matric + sensor_combo + '_' + moment]
             mean_compare_.append(combo_result.mean())
             sem_compare_.append(combo_result.sem())

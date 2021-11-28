@@ -6,7 +6,7 @@ from scipy.stats import ttest_1samp, ttest_rel
 
 
 if __name__ == '__main__':
-    result_date = 'results/1108'
+    result_date = 'results/1115'
     model_name = ['TfnNet', 'Lmf8Imu0Camera', 'Lmf0Imu2Camera']
     metric_incre = 'rRMSE_'
     result_df = pd.read_csv(result_date + '/estimation_result_individual.csv')

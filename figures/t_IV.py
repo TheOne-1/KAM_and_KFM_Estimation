@@ -9,16 +9,16 @@ def print_t_IV_report_increase_of_RMSE():
     metric_name = 'RMSE_'
     """ No error """
 
-    config_single_pos = {'start_str': '\multirow{2}{*}{One of Eight}\t& Position & 100 mm',
+    config_single_pos = {'start_str': '\multirow{2}{*}{One of Eight}\t& Position & 150 mm',
                          'error_to_loop': error_names[:1],
                          'sensor_to_loop': SENSOR_LIST}
-    config_single_ori = {'start_str': '& Orientation & 10 deg',
+    config_single_ori = {'start_str': '& Orientation & 15 deg',
                          'error_to_loop': error_names[2:],
                          'sensor_to_loop': SENSOR_LIST}
-    config_multiple_pos = {'start_str': '\multirow{2}{*}{All Eight}\t& Position & 100 mm',
+    config_multiple_pos = {'start_str': '\multirow{2}{*}{All Eight}\t& Position & 150 mm',
                            'error_to_loop': error_names[:1],
                            'sensor_to_loop': ['all']}
-    config_multiple_ori = {'start_str': '& Orientation & 10 deg',
+    config_multiple_ori = {'start_str': '& Orientation & 15 deg',
                            'error_to_loop': error_names[2:],
                            'sensor_to_loop': ['all']}
 

@@ -53,7 +53,7 @@ def get_all_results(test_folder_dir, moment_name):
 
 
 if __name__ == '__main__':
-    result_date = 'results/1108/'
+    result_date = 'results/1115/'
     kam_result = {model: get_all_results(result_date + model, 'KAM') for model in TESTED_MODELS}
     kfm_result = {model: get_all_results(result_date + model, 'KFM') for model in TESTED_MODELS}
     result_df_all_models = pd.DataFrame(kam_result[TESTED_MODELS[0]])[['subject', 'trial']]
