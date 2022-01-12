@@ -71,6 +71,9 @@ class BaseFramework:
 
     def preprocess_train_evaluation(self, train_sub_ids: List[str], validate_sub_ids: List[str],
                                     test_sub_ids: List[str]):
+        hyper_vali_sub_ids = random.sample(train_sub_ids, len(test_sub_ids))
+        hyper_train_sub_ids = list(np.setdiff1d(train_sub_ids, hyper_vali_sub_ids))
+        self.hyperparam_tuning(hyper_train_sub_ids, hyper_vali_sub_ids)
         logging.debug('Train the model with subject ids: {}'.format(train_sub_ids))
         logging.debug('Test the model with subject ids: {}'.format(test_sub_ids))
         logging.debug('Validate the model with subject ids: {}'.format(validate_sub_ids))

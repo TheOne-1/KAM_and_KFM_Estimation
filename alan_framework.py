@@ -295,7 +295,7 @@ class LmfImuOnlyNet(LmfNet):
 
         fusion_acc = torch.matmul(_acc_h, self.acc_factor)
         fusion_gyr = torch.matmul(_gyr_h, self.gyr_factor)
-        fusion_vid = torch.full_like(fusion_acc, 1e4)      # !!!
+        fusion_vid = torch.full_like(fusion_acc, 1)
         fusion_zy = fusion_acc * fusion_gyr * fusion_vid
         # permute to make batch first
         sequence = torch.matmul(self.fusion_weights, fusion_zy.permute(1, 2, 0, 3)).squeeze(dim=2) + self.fusion_bias
