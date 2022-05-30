@@ -74,6 +74,12 @@ ALL_FIELDS = DISCRETE_FIELDS + CONTINUOUS_FIELDS
 RKNEE_MARKER_FIELDS = [marker + axis for marker in ['RFME', 'RFLE'] for axis in ['_X', '_Y', '_Z']]
 LEVER_ARM_FIELDS = ['r_x', 'r_y', 'r_z']
 
+R_FOOT_ORIENTATION_ERROR = {'s002_wangdianxin': -3, 's004_ouyangjue': -3, 's005_tangansheng': 4, 's006_xusen': 1,
+                            's007_zuogangao': -6, 's008_liyu': 2, 's009_sunyubo': 2, 's010_handai': 5,
+                            's011_wuxingze': -9, 's012_likaixiang': -4, 's013_zhangxiaohan': 0, 's014_maqichao': -5,
+                            's015_weihuan': -1, 's017_tantian': 1, 's018_wangmian': -9, 's019_chenhongyuan': -6,
+                            's020_houjikang': -2}
+
 FONT_SIZE_LARGE = 24
 FONT_SIZE = 20
 FONT_SIZE_SMALL = 18
@@ -96,8 +102,9 @@ COMPARED_MODELS_FOR_PRINT = {
     # 'DirectNet': 'Ours + DirectNet'
 }
 COMPARED_MODELS = list(COMPARED_MODELS_FOR_PRINT.keys())
-TESTED_MODELS = ['TfnNet', 'Xgboost', 'ChaabanLinear', 'StetterMLP', 'DorschkyCNN', 'MfnNet', 'LmfNet', 'Lmf8Imu0Camera',
-                 'Lmf0Imu2Camera', 'Lmf3Imu2Camera', 'Lmf3Imu0Camera', 'Lmf1Imu2Camera', 'Lmf1Imu0Camera']
+TESTED_MODELS = ['TfnNet', 'Xgboost', 'ChaabanLinear', 'StetterMLP', 'DorschkyCNN', 'MfnNet', 'LmfNet', 'LmfMagNet',
+                 'Lmf8Imu0Camera', 'Lmf0Imu2Camera', 'Lmf3Imu2Camera', 'Lmf3Imu0Camera', 'Lmf1Imu2Camera',
+                 'Lmf1Imu0Camera']
 
 EXAMPLE_DATA_FIELDS = [
     'body weight', 'body height', 'force_phase',
@@ -141,7 +148,7 @@ EXAMPLE_DATA_FIELDS = [
     'RTAM_Z', 'RFAL_Z', 'RSK_Z', 'RTT_Z', 'LFME_Z', 'LFLE_Z', 'LTH_Z', 'LFT_Z', 'RFME_Z', 'RFLE_Z', 'RTH_Z', 'RFT_Z',
     'LIPS_Z', 'RIPS_Z', 'LIAS_Z', 'RIAS_Z', 'MAI_Z', 'SXS_Z', 'SJN_Z', 'CV7_Z', 'LAC_Z', 'RAC_Z']
 
-CAMERA_CALI_DATA_PATH = 'J:\Projects\VideoIMUCombined\experiment_data\camera cali'
+CAMERA_CALI_DATA_PATH = 'D:\OneDrive - sjtu.edu.cn\MyProjects\\2021_VideoIMUCombined\experiment_data\camera cali'
 IMSHOW_OFFSET = 1300
 
 

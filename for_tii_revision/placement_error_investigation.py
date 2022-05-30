@@ -77,7 +77,7 @@ class Simulator:
         t = - np.dot(R, centroid_A.T) + centroid_B.T
         return R, t
 
-    def __simulate_virtual_marker_trajectory(self, imu_loc_during_static):
+    def _simulate_virtual_marker_trajectory(self, imu_loc_during_static):
         def apply_fun(current_marker):
             current_marker_matrix = current_marker.reshape([segment_marker_num, 3])
             [R_between_frames, t] = Simulator._rigid_transform_3D(
@@ -113,15 +113,14 @@ class Simulator:
 
     def simulate_position_error(self, imu_loc_during_static, R_i0_g=np.array([[1, 0, 0], [0, 1, 0], [0, 0, 1]]), x_mm=0., y_mm=0., z_mm=0.):
         """
-        :param r_imu_earth:
         :param x_mm: float, position error over x axis in mm at sample 0
         :param y_mm: float, position error over y axis in mm at sample 0
         :param z_mm: float, position error over z axis in mm at sample 0
         :return: imu_data_with_position_error
         """
-        R_relative_to_static, imu_trajectory = self.__simulate_virtual_marker_trajectory(imu_loc_during_static)
-        _, imu_trajectory_with_position_error = self.__simulate_virtual_marker_trajectory(imu_loc_during_static + np.array([x_mm, y_mm, z_mm]))
-        delta_acc = self.__get_delta_acc_in_earth_frame(imu_trajectory, imu_trajectory_with_position_error)
+        R_relative_to_static, imu_trajectory = self._simulate_virtual_marker_trajectory(imu_loc_during_static)
+        _, imu_trajectory_with_position_error = self._simulate_virtual_marker_trajectory(imu_loc_during_static + np.array([x_mm, y_mm, z_mm], dtype=np.float32))
+        delta_acc = self._get_delta_acc_in_earth_frame(imu_trajectory, imu_trajectory_with_position_error)
         simulated_data = np.array(self.imu_data, copy=True)
         data_len = R_relative_to_static.shape[0]
         for i_sample in range(data_len):
@@ -131,7 +130,7 @@ class Simulator:
         return simulated_data
 
     @staticmethod
-    def __get_delta_acc_in_earth_frame(imu_trajectory, imu_trajectory_with_position_error):
+    def _get_delta_acc_in_earth_frame(imu_trajectory, imu_trajectory_with_position_error):
         imu_trajectory, imu_trajectory_with_position_error = imu_trajectory * 1e-3, imu_trajectory_with_position_error * 1e-3
         data_len = imu_trajectory.shape[0]
         step_marker = np.arange(0, data_len / VICON_SAMPLE_RATE - 1e-12, 1 / VICON_SAMPLE_RATE)
@@ -141,7 +140,7 @@ class Simulator:
         acc_with_placement_error = np.column_stack(interpo.splev(step_marker, tck, der=2))
         delta_acc = acc_center - acc_with_placement_error
         delta_acc_filtered = data_filter(delta_acc, 15, VICON_SAMPLE_RATE)
-        return delta_acc_filtered
+        return np.float32(delta_acc_filtered)
 
 
 def get_imu_loc_during_static(static_data, segment):

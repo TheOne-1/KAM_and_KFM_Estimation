@@ -670,7 +670,7 @@ class SageCsvReader:
         return steps, stance_phase_flag
 
     @staticmethod
-    def get_FPA_via_max_acc(acc_IMU_rotated, steps, start_percent, end_percent, span=29):
+    def get_FPA_via_max_acc(acc_IMU_rotated, steps, start_percent, end_percent, span=40):
         """Use the ratio of axis acceleration at the peak norm acc"""
         data_len = acc_IMU_rotated.shape[0]
         FPA_tnsre = np.zeros([data_len])

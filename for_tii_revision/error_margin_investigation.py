@@ -189,14 +189,6 @@ def generate_step_data_placement_error():
             hf.create_dataset(subject, data=step_placement_error_data, dtype='float32')
         hf.attrs['columns'] = json.dumps(list(placement_error_cols))
 
-    # placement_error_data_all_sub = {}
-    #     placement_error_data_all_sub[subject] = step_placement_error_data
-    #
-    # with h5py.File(DATA_PATH + '/imu_with_placement_error.h5', 'w') as hf:
-    #     for subject, sub_data in placement_error_data_all_sub.items():
-    #         hf.create_dataset(subject, data=sub_data, dtype='float32')
-    #     hf.attrs['columns'] = json.dumps(list(placement_error_cols))
-
 
 def replace_data_or_add_delta_and_pred(is_replace, data_fields, loc_error_free, loc_with_error,
                                        subject_data, subject_data_error, model, model_inputs):
@@ -368,10 +360,10 @@ def plot_result_lines():
 
 
 def plot_result_boxes():
-    ylims_all = {'KAM': {'IMU': {'_e_pos_y': [0.48, 0.6, 0.03], '_e_ori_z': [0.45, 0.7, 0.05]},
+    ylims_all = {'KAM': {'IMU': {'_e_pos_y': [0.49, 0.53, 0.01], '_e_ori_z': [0.45, 0.7, 0.05]},
                          'camera': {'_e_pos': [0.49, 0.55, 0.02], '_e_ori': [0.47, 0.715, 0.06]}},
-                 'KFM': {'IMU': {'_e_pos_y': [0.63, 0.87, 0.06], '_e_ori_z': [0.63, 0.91, 0.07]},
-                         'camera': {'_e_pos': [0.65, 0.7, 0.01], '_e_ori': [0.6, 1.42, 0.2]}}}
+                 'KFM': {'IMU': {'_e_pos_y': [0.64, 0.73, 0.03], '_e_ori_z': [0.63, 0.91, 0.07]},
+                         'camera': {'_e_pos': [0.65, 0.71, 0.02], '_e_ori': [0.6, 1.42, 0.2]}}}
     def save_fig(name, dpi=300):
         plt.savefig('../figures/exports/' + name + '.png', dpi=dpi)
 
@@ -439,14 +431,14 @@ def plot_result_boxes():
 
 num_of_repeated_test = 10
 no_err_accuracy = {'KAM': 0.4935584345953873, 'KFM': 0.6591598856509528}
-imu_error_magnitudes = {'_e_pos_y': [50, 100, 150, 200], '_e_ori_z': [5, 10, 15, 20]}
+imu_error_magnitudes = {'_e_pos_y': [25, 50, 75, 100], '_e_ori_z': [5, 10, 15, 20]}
 imu_error_names = list(imu_error_magnitudes.keys())
 camera_error_magnitudes = {'_e_pos': [100, 200, 300, 400], '_e_ori': [5, 10, 15, 20]}
 camera_error_names = list(camera_error_magnitudes.keys())
 
 if __name__ == "__main__":
-    # generate_combined_data_placement_error()
-    # generate_step_data_placement_error()
-    # replace_data_and_test()
+    generate_combined_data_placement_error()
+    generate_step_data_placement_error()
+    replace_data_and_test()
     plot_result_boxes()
 
