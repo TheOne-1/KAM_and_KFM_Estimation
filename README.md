@@ -64,6 +64,7 @@ The first dimension is walking steps. The second dimension is
 time step from heel-strike - 20 samples to toe-off + 20 samples. Both heel-strike and toe-off are detected using right
 foot IMU data. Its length is 152, which is the lenghth of the longest step. Zeros were appended in the end of shorter
 steps. The third dimension contains 256 data fields, which are described in the following section.
+All 17 subjects' data are available on SimTK.org [https://simtk.org/projects/imukinetics](https://simtk.org/projects/imukinetics).
 
 [example_data.h5](./trained_models_and_example_data/example_data.h5) is a correctly formatted example data file
 containing 10 walking step of 2 subjects. The dimension of each subject's data is: 10 steps * 152 samples * 256 data fields.
@@ -127,20 +128,15 @@ Markers' field names are in the form of "MarkerName_Axis".
 ### Trained models
 Five types of models are provided:
 
-(1) a fusion model based on eight IMUs and cameras
-([KAM](./trained_models_and_example_data/8IMU_camera_KAM.pth), [KFM](./trained_models_and_example_data/8IMU_camera_KFM.pth))
+(1) [a fusion model based on eight IMUs and cameras](./trained_models_and_example_data/8IMU_camera.pth)
 
-(2) a fusion model based on three IMUs (pelvis and feet) and cameras
-([KAM](./trained_models_and_example_data/3IMU_camera_KAM.pth), [KFM](./trained_models_and_example_data/3IMU_camera_KFM.pth))
+(2) [a fusion model based on three IMUs (pelvis and feet) and cameras](./trained_models_and_example_data/3IMU_camera.pth)
 
-(3) an eight-IMU-based model
-([KAM](./trained_models_and_example_data/8IMU_KAM.pth), [KFM](./trained_models_and_example_data/8IMU_KFM.pth))
+(3) [an eight-IMU-based model](./trained_models_and_example_data/8IMU.pth)
 
-(4) a three-IMU-based model (pelvis and feet)
-([KAM](./trained_models_and_example_data/3IMU_KAM.pth), [KFM](./trained_models_and_example_data/3IMU_KFM.pth))
+(4) [a three-IMU-based model](./trained_models_and_example_data/3IMU.pth)
 
-(5) a camera-based model.
-([KAM](./trained_models_and_example_data/camera_KAM.pth), [KFM](./trained_models_and_example_data/camera_KFM.pth))
+(5) [a camera-based model](./trained_models_and_example_data/camera.pth)
 
 ### Running example code
 An implementation ([a_load_model_and_predict.py](a_load_model_and_predict.py)) is provided
