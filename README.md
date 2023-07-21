@@ -2,7 +2,8 @@
 By Tian Tan and Dianxin Wang
 
 ## Exclusive Summary
-This repository includes the code and models for a journal paper that is currently under review.
+This repository includes the code and models for an IEEE Transactions on Industrial Informatics publication. 
+[See the paper](https://ieeexplore.ieee.org/abstract/document/9826418)
 When implementing our models, please place the cameras and IMUs according to [Hardware](#hardware)
 and store the data according to [Data Format](#data-format).
 An [example implementation](#running-example-code) is provided.
@@ -65,6 +66,8 @@ time step from heel-strike - 20 samples to toe-off + 20 samples. Both heel-strik
 foot IMU data. Its length is 152, which is the lenghth of the longest step. Zeros were appended in the end of shorter
 steps. The third dimension contains 256 data fields, which are described in the following section.
 All 17 subjects' data are available on SimTK.org [https://simtk.org/projects/imukinetics](https://simtk.org/projects/imukinetics).
+Also, marker and force data have been processed by AddBiomechanics and is available in
+[https://dev.addbiomechanics.org/data/e013a4d2-683d-48b9-bfe5-83a0305caf87/Tan2022_Formatted/](https://dev.addbiomechanics.org/data/e013a4d2-683d-48b9-bfe5-83a0305caf87/Tan2022_Formatted/)
 
 [example_data.h5](./trained_models_and_example_data/example_data.h5) is a correctly formatted example data file
 containing 10 walking step of 2 subjects. The dimension of each subject's data is: 10 steps * 152 samples * 256 data fields.

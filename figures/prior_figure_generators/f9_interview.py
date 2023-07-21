@@ -11,6 +11,7 @@ import matplotlib.patches as patches
 from more_itertools import sort_together
 from scipy.stats import ttest_rel
 import matplotlib.gridspec as gridspec
+from matplotlib.lines import Line2D
 
 
 def draw_sigifi_sign(mean_, std_, bar_locs, p_between_pattern, ylim):
