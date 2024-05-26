@@ -67,7 +67,7 @@ foot IMU data. Its length is 152, which is the lenghth of the longest step. Zero
 steps. The third dimension contains 256 data fields, which are described in the following section.
 All 17 subjects' data are available on SimTK.org [https://simtk.org/projects/imukinetics](https://simtk.org/projects/imukinetics).
 Also, marker and force data have been processed by AddBiomechanics and is available in
-[https://dev.addbiomechanics.org/data/e013a4d2-683d-48b9-bfe5-83a0305caf87/Tan2022_Formatted/](https://dev.addbiomechanics.org/data/e013a4d2-683d-48b9-bfe5-83a0305caf87/Tan2022_Formatted/)
+[https://addbiomechanics.org/download_data.html](https://addbiomechanics.org/download_data.html)
 
 [example_data.h5](./trained_models_and_example_data/example_data.h5) is a correctly formatted example data file
 containing 10 walking step of 2 subjects. The dimension of each subject's data is: 10 steps * 152 samples * 256 data fields.
